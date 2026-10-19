@@ -16,7 +16,7 @@ The default local preview uses clearly labeled synthetic examples. To use a priv
 
 ## Supabase setup
 
-1. The configured project is **Mesaintelligence** in **Ravi Org**, reference `wlxvemtseidmxvmnfoao`. Its schema and private file bucket are installed. Select the intended target explicitly before applying migrations elsewhere.
+1. The configured project is **Mesaintelligence** in **Ravi Org**, reference `wlxvemtseidmxvmnfoao`. Its base dashboard schema and private file bucket are installed. New Drive sync migrations remain local until explicitly applied. Select the intended target explicitly before applying migrations elsewhere.
 2. Copy the project URL and publishable key into the local environment and the Vercel project's environment variables.
 3. Link the CLI to the selected project and apply the migration:
 
@@ -30,7 +30,7 @@ The default local preview uses clearly labeled synthetic examples. To use a priv
 5. Configure the Auth Site URL and callback using the minimal production configuration in `deploy/supabase/config.toml`. Other project properties are left unchanged. The Mesa production URL and callback have already been configured.
 6. Keep the `course-files` bucket private. The migration creates it with a 20 MB limit and verified-workspace-member policies.
 
-The migrations enable RLS on every application table and restrict records/files to verified, explicitly invited workspace accounts. Both approved accounts have equal access to the same records. Child records retain their course/assessment owner's ID so contributions from the second account preserve foreign-key integrity. The invitation lookup runs in a private schema with a fixed search path and reads verified Auth email addresses, never editable user metadata. No service-role key is used in the app. The separate “Ravi Project” has not been modified.
+The migrations enable RLS on every application table and restrict records/files to verified, explicitly invited workspace accounts. Both approved accounts have equal access to the same records. The user has confirmed both dashboard logins work; their addresses are not tracked in this repository. Child records retain their course/assessment owner's ID so contributions from the second account preserve foreign-key integrity. The invitation lookup runs in a private schema with a fixed search path and reads verified Auth email addresses, never editable user metadata. Interactive data access uses the publishable key and session RLS. Background Drive sync requires the server-only `SUPABASE_SECRET_KEY`; it never reaches browser code or generated scripts. The separate “Ravi Project” has not been modified.
 
 ## Vercel deployment
 
@@ -60,6 +60,26 @@ AI rubric drafting and evaluation are disabled by default. The optional `AI_API_
 - Record evidence-linked SWOT entries, review descriptive official-mark averages by format, run a local phrase-match resume helper, and perform local structure/arithmetic checks.
 
 Evaluation reports are cached against the exact submission, official feedback, rubric, and selected role profile so unchanged work does not trigger a repeat provider call. The quality checker and resume phrase helper run in the browser and do not save or transmit pasted drafts. Their limitations are shown in the UI. Synthetic preview data is explicitly labeled. Professional scoring remains unavailable until a user-supplied role profile is selected.
+
+## Selected Drive folders through Apps Script
+
+The local `/drive-sync` integration is implemented and tested. **Real Google authorisation, imports, and automatic triggers are not yet verified.** The LMS remains a separate source; this workflow imports supported Drive materials without inventing official marks, rubrics, or assessment links.
+
+Before enabling it, apply the reviewed Drive migrations to the selected app project and configure server-only `SUPABASE_SECRET_KEY`. Set `APP_BASE_URL` to the canonical HTTPS dashboard origin; Vercel's `VERCEL_PROJECT_PRODUCTION_URL` is the fallback. Never use a public environment prefix for the secret key. Missing server setup or demo mode cannot create live connectors.
+
+1. Sign in and open **Drive sync**. Add a source account label and 1–20 Google folder links (including any `resourcekey` parameter). Map each root to one course, optionally an existing course, or to a collection whose immediate subfolders become courses. Name a root course explicitly for files directly under a collection.
+2. Download the private `Code.gs` and `appsscript.json` files immediately. Their pairing code is single-use and expires after 15 minutes; it is kept only in page memory and the downloaded installer, never URLs, browser storage, or logs. Keep downloads private and delete them after installation. Re-pair to replace an expired installer; this immediately revokes the old connector.
+3. In the Google account that can read the folders, create a standalone Apps Script project. Paste `Code.gs`; enable **Show appsscript.json manifest file in editor** in Project Settings, then paste the supplied manifest.
+4. The manifest declares Drive API v3. The default Apps Script Cloud project enables the API when the advanced service is added. A standard Cloud project also requires Google Drive API to be enabled manually. Run `install()` and approve Google's read-only Drive, external-request, and trigger-management consent. Institutional policies can prevent authorisation.
+5. Installation stores the connector token in private Script Properties, creates exactly one daily trigger, and starts the first import. Google OAuth tokens stay in Google requests. A separate installation is needed only for a source account whose materials cannot be accessed by another installed account.
+
+Read-only Drive consent covers the account's Drive; the importer processes only configured roots. Google controls the daily trigger window. Large initial imports resume automatically within execution and daily budgets and may take multiple days. Folder edits are picked up on the next run without reinstalling. Disable revokes connector access while retaining existing material and history. After enabling a disabled connector, re-pair it.
+
+The status page polls stored metadata every 30 seconds without triggering imports. It shows pairing/scan states, latest scan activity, imported/unchanged counts, extraction status, unsupported files, source availability, and parse failures. Three repeated non-transient parse failures stop automatic retries for that version; **Retry source** resets that pause for the next scheduled scan. An incomplete or failed root never establishes that unseen sources were deleted. Source inventory and extraction success are separate.
+
+PDF/PPTX files import directly; native Google Docs export to PDF and Slides to PPTX. The stored-file limit remains 20 MB; Google's export limit is 10 MB. Sheets, DOCX, legacy PPT, recordings, and other types appear as unsupported. Empty text and meaningful visuals require review; no OCR or automatic diagram interpretation is claimed. Current versions feed retrieval while historical evidence links remain valid. Uploaded official rubric files are source documents until their actual criteria are recorded.
+
+Deployment, real folder links, user Google consent, a real indexed import visible to both members, an unchanged re-scan, and a subsequent automatic trigger must be verified before scheduled Drive sync is described as live. No Google installation or production change is made by local tests.
 
 ## Validation
 

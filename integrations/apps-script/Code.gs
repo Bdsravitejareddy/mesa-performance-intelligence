@@ -95,7 +95,12 @@ function driveRun() {
     session.mappings.forEach(function(mapping) {
       if (!driveString(mapping.id) || !driveString(mapping.driveFolderId) || !driveString(mapping.rootCourseTitle) || ["course", "collection"].indexOf(mapping.mode) < 0) throw driveError("Invalid folder mapping", true);
       if (!Object.prototype.hasOwnProperty.call(DRIVE_RUN.checkpoint.roots, mapping.id)) {
-        DRIVE_RUN.checkpoint.roots[mapping.id] = { pendingFolders: [{ id: mapping.driveFolderId, courseFolderId: mapping.driveFolderId, courseFolderTitle: mapping.rootCourseTitle }], visitedFolderIds: [], completed: false, failed: false };
+        var rootFolder = { id: mapping.driveFolderId, courseFolderId: mapping.driveFolderId, courseFolderTitle: mapping.rootCourseTitle };
+        if (mapping.resourceKey !== null && mapping.resourceKey !== undefined) {
+          if (typeof mapping.resourceKey !== "string" || !/^[A-Za-z0-9_-]{1,200}$/.test(mapping.resourceKey)) throw driveError("Invalid folder resource key", true);
+          rootFolder.resourceKey = mapping.resourceKey;
+        }
+        DRIVE_RUN.checkpoint.roots[mapping.id] = { pendingFolders: [rootFolder], visitedFolderIds: [], completed: false, failed: false };
       }
     });
     driveCheckpoint();

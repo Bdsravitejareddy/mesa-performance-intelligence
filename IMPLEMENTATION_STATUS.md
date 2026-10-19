@@ -1,6 +1,6 @@
 # Implementation status
 
-**Status:** The user-selected Mesaintelligence project in Ravi Org is provisioned for the dashboard. Supabase schema, private Storage, shared workspace invitations, Auth callback URLs, and Vercel production connection variables are configured. The code supports both approved emails with equal access to one workspace. Actual LMS records have not been imported; database provisioning does not create student data.
+**Status:** The user-selected Mesaintelligence project in Ravi Org is provisioned for the dashboard. Supabase schema, private Storage, shared workspace invitations, Auth callback URLs, and Vercel production connection variables are configured. The code supports both approved emails with equal access to one workspace, and the user confirmed both dashboard logins work. Their actual addresses are not recorded here. Actual LMS records have not been imported; database provisioning does not create student data.
 
 ## Workspace and original brief recovery
 
@@ -50,11 +50,28 @@
 - Live deployment testing caught an unregistered auth proxy: Next.js requires it beside `src/app`. It is now at `src/proxy.ts`; the production build registers it. `node scripts/check-private-access.mjs <base-url>` checks that anonymous page/API requests redirect to login. The probe reproduced the failure before the fix and passed against the corrected local production build.
 - `npm audit --audit-level=high`: zero vulnerabilities across production and development dependencies.
 - Live database checks confirm 18 app tables with RLS, 18 shared workspace policies, four file-access policies, a private 20 MB bucket, and two private invitations. Auth Site URL and callback point to the deployed Mesa site. The security advisor has no warnings/errors; its one informational item notes the intentionally denied private invitation table has no direct-user policy. Its table grants deny direct application-user access, which is covered by tests.
-- No actual LMS data was imported, and no sign-in emails were sent as part of testing. The first real sign-in still requires the user to request and open their email link.
+- No actual LMS data was imported, and no sign-in emails were sent as part of testing. The user has since confirmed both approved dashboard logins work.
 
 ## GitHub/Vercel release
 
 - Source is pushed to the private repository `https://github.com/Bdsravitejareddy/mesa-performance-intelligence` on branch `work/mesa-performance-dashboard`, as requested by the user. Initial code commit: `5ab36bb` (`Build Mesa performance intelligence MVP`). The earlier account's repository remains available through the local `previous-account` remote; `origin` now targets Bdsravitejareddy.
 - The deployed Vercel project is `prj_Ptsr54VdyhyxMCIbUKrmyl9P6GLH` in the user's `rav-98b9` account/team. Five production variables now configure Supabase URL/publishable key, both approved login emails, demo mode false, and AI processing false. No secret/service-role API key was requested or used. A source push triggers the user's existing deployment integration; no separate CLI production deployment was created.
 - No credentials, LMS data, `.env.local`, `node_modules`, build output, or generated PDF worker are committed.
-- Shared-account connection code was pushed as `e4eed61`; Vercel's existing GitHub integration built it successfully. A follow-up corrects proxy registration and includes a read-only HTTP regression probe. Email delivery and the user's first real sign-in remain unverified; no test emails were sent.
+- Shared-account connection code was pushed as `e4eed61`; Vercel's existing GitHub integration built it successfully. A follow-up corrects proxy registration and includes a read-only HTTP regression probe. The user subsequently confirmed both approved dashboard logins work; no test emails were sent by this implementation.
+
+## Apps Script Drive sync — local implementation
+
+- Tasks 1–5 implement shared connector management, single-use 15-minute pairing, revocable hashed connector credentials, transactional reservations/publication, direct private Storage uploads, bounded parsing, current-version retrieval, and preserved historical citations.
+- The standalone script exports Docs/Slides, imports PDF/PPTX, inventories unsupported files, follows permitted shortcuts/shared-drive pagination, handles retries/quotas, resumes checkpoints, and manages one daily trigger plus one bounded continuation. Root link resource keys are preserved end-to-end. Local VM tests simulate Google; they do not prove real account authorisation.
+- `/drive-sync` provides source account labels, course/collection roots, existing-course links, private code/manifest downloads and install instructions, re-pair/disable, inventory/extraction/source states, and a reset for three-failure source pauses. Both invited members share these records. Status polling reads stored metadata without starting an import. Missing server configuration/demo mode disables live management.
+- Installers use canonical server-configured dashboard/Supabase origins. Pairing source exists only in transient browser memory and explicit private downloads until expiry/clearing. No persistent Google or database credential reaches generated source or browser storage. The installed connector token lives in Google Script Properties; only its hash is stored server-side.
+- New Drive migrations remain local and are **not applied to production**. The Drive server secret has **not been configured by this task**. No push, deployment, Google consent, actual folder configuration, real import, unchanged re-scan, or automatic trigger has been performed/verified. Scheduled Drive imports must not be described as live.
+- PDF/PPTX stored-file limit is 20 MB; Google's export limit is 10 MB. Sheets/DOCX/PPT/recordings are unsupported inventory. Empty text and visuals require review; OCR/automatic interpretation remain unimplemented. Official marks/rubrics/assessment links are not inferred, AI remains disabled, and daily LMS ingestion remains pending.
+- Both approved dashboard logins are confirmed working by the user; no raw login addresses are tracked. Original A–H gaps, recovered daily marks/SWOT/correlations/resume/quality scope, and all Module I requirements remain preserved.
+
+### Task 5 verification (local only)
+
+- `npm test`: 25 files, 222 tests passed, including real PGlite transactions, Apps Script VM checks, shared-member/RLS regressions, management routes, rendering, folder edits, installer expiry, retry reset, and read-only polling.
+- `npm run lint`, production `npm run build`, and `git diff --check`: passed. The build registers the auth proxy and dynamic Drive page/routes. Installer source/manifest are included in both management route deployment traces.
+- The local production HTTP probe verifies private dashboard/Drive management redirects, missing pairing-code rejection, and missing/malformed bearer-token rejection on all five authenticated agent endpoints. It uses synthetic environment settings and sends no sign-in emails.
+- Browser build assets contain no synthetic server-secret sentinel, server secret setting, connector-token runtime, or persisted credential hashes. No remote operation or production change was used for this verification.

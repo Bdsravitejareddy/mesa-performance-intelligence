@@ -65,6 +65,15 @@ describe("Drive Apps Script runtime",()=>{
     expect(Object.keys(h.properties).sort()).toEqual(["connectionId","connectorToken","runtimeDay","runtimeMs"]);
   });
 
+  it("uses a configured root resource key on the first listing and persists it in checkpoints",async()=>{
+    const h=await harness({installed:true});
+    Object.assign(h.mapping,{resourceKey:'0-root_KEY'});
+    vm.runInContext('syncDrive()',h.context);
+    const listing=h.requests.find(r=>r.url.startsWith('https://www.googleapis.com/drive/v3/files?'))!;
+    expect(listing.headers?.['X-Goog-Drive-Resource-Keys']).toBe('root/0-root_KEY');
+    expect(h.checkpoints[0]).toMatchObject({checkpoint:{roots:{mapping:{pendingFolders:[{id:"root",resourceKey:"0-root_KEY"}]}}}});
+  });
+
   it("exports Docs as PDF, Slides as PPTX and transfers binary bytes without bearer credentials",async()=>{
     const h=await harness({installed:true,pages:{"root:":{files:[{...pdf("doc"),mimeType:"application/vnd.google-apps.document"},{...pdf("slides"),mimeType:"application/vnd.google-apps.presentation"},pdf("binary")]}}});
     vm.runInContext("syncDrive()",h.context);

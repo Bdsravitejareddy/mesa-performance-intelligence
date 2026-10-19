@@ -1,4 +1,5 @@
-import { issuePairing, requireWorkspaceMember } from "@/lib/drive-sync/auth";
+import { issueInstallation, requireInstallationConfig } from "@/lib/drive-sync/installation";
+import { requireWorkspaceMember } from "@/lib/drive-sync/auth";
 import { jsonError, jsonResponse, readJsonBody } from "@/lib/drive-sync/http";
 import { DriveSyncStore } from "@/lib/drive-sync/store";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -16,11 +17,12 @@ export async function POST(request: Request) {
   try {
     const { userId } = await requireWorkspaceMember();
     requireConfigured();
+    requireInstallationConfig();
     const body = await readJsonBody(request);
     onlyKeys(body, ["label", "mappings"]);
     const title = label(body.label);
     const folders = await mappings(body.mappings);
     const connection = await new DriveSyncStore(createAdminClient()).configure(userId, null, folders, title, true);
-    return jsonResponse({ connection: safeConnection(connection), ...await issuePairing(connection.id) }, 201);
+    return jsonResponse({ connection: safeConnection(connection), ...await issueInstallation(connection.id) }, 201);
   } catch (error) { return jsonError(error); }
 }

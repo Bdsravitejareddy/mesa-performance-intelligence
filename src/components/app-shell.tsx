@@ -12,6 +12,7 @@ import {
   CircleHelp,
   FileCheck2,
   GraduationCap,
+  CloudDownload,
   LayoutDashboard,
   MessageSquareText,
   Search,
@@ -26,6 +27,7 @@ const groups = [
     links: [
       { href: "/", label: "Overview", icon: LayoutDashboard },
       { href: "/courses", label: "Courses & content", icon: BookOpen },
+      { href: "/drive-sync", label: "Drive sync", icon: CloudDownload },
       { href: "/assessments", label: "Assessments", icon: FileCheck2 },
       { href: "/marks", label: "Marks & feedback", icon: MessageSquareText },
     ],

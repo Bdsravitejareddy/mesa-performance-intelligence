@@ -1,4 +1,5 @@
-import { issuePairing, requireWorkspaceMember } from "@/lib/drive-sync/auth";
+import { issueInstallation } from "@/lib/drive-sync/installation";
+import { requireWorkspaceMember } from "@/lib/drive-sync/auth";
 import { HttpError, jsonError, jsonResponse, readJsonBody } from "@/lib/drive-sync/http";
 import { accessibleConnection, onlyKeys, requireConfigured } from "../../management";
 
@@ -10,6 +11,6 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const connection = await accessibleConnection(id);
     if (!connection.enabled) throw new HttpError(409, "Enable the connection before pairing.");
     onlyKeys(await readJsonBody(request), []);
-    return jsonResponse(await issuePairing(id));
+    return jsonResponse(await issueInstallation(id));
   } catch (error) { return jsonError(error); }
 }

@@ -25,6 +25,15 @@
 - Never commit passwords, cookies, access tokens, refresh tokens, or other secrets. Use a secure OS credential store or deployment secret manager once the supported auth mechanism is confirmed.
 - Request only the minimum data required for the requested student and features. Keep private student data out of logs and examples.
 
+## Apps Script Drive sync
+
+- `/drive-sync` manages shared source-account labels, course/collection roots, private expiring installers, re-pair/disable, and inventory status. Both approved dashboard logins have been confirmed working; never add their actual email addresses to tracked docs or fixtures.
+- Selected roots are the import boundary; Google read-only Drive consent covers the installing account. Preserve link resource keys through mapping validation, storage, first root checkpoint, and Drive requests. Routine folder edits require no reinstall.
+- Connector and pairing secrets are hashed server-side. Only Script Properties hold the installed token; do not persist setup credentials in browser storage, URLs, caches, logs, or tracked files. Generate installers only from canonical deployment origins (`APP_BASE_URL`, or Vercel's production-origin variable), never request Host headers.
+- Background work needs server-only `SUPABASE_SECRET_KEY`. Interactive management must authenticate membership and resolve connection access through session RLS before privileged reads/writes. Status polling is read-only and must not call agent session/import endpoints.
+- Preserve current and historical material versions; failed/partial roots never establish deletion. Unsupported inventory, unavailable sources, empty extraction, visuals, size/export limits, and parse failures must be reported honestly. Resetting a three-failure source enables its next scheduled retry; it does not execute an import.
+- Keep local implementation, released schema/secrets, Google authorisation, initial import, unchanged re-scan, shared visibility, and later automatic trigger as distinct acceptance stages. Do not claim live Drive scheduling before actual user consent and trigger observation. AI and LMS ingestion gates stay intact.
+
 ## Course documents and retrieval
 
 - Preserve filenames, versions, document references, and page/slide numbers through parsing and evaluation.

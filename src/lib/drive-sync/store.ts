@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ExtractedPage } from "../documents";
-import type { DriveConnection, FolderMapping, FolderMappingInput, ImportDecision, ScanCheckpoint, SourceFile } from "./contracts";
+import type { DriveConnection, DriveOperationalStatus, FolderMapping, FolderMappingInput, ImportDecision, ScanCheckpoint, SourceFile } from "./contracts";
 
 type Identity = { connectionId: string; userId: string };
 
@@ -19,6 +19,9 @@ export class DriveSyncStore {
     return expectedMappingRevision === undefined
       ? this.call("configure", args)
       : this.call("configure_if_current", { ...args, p_expected_mapping_revision: expectedMappingRevision });
+  }
+  status(connectionIds: string[]): Promise<DriveOperationalStatus[]> {
+    return this.call("status", { p_connection_ids: connectionIds });
   }
   checkPairingBudget(callerHash: string, codeHash: string): Promise<boolean> {
     return this.call("attempt_pairing_scoped", { p_caller_hash: callerHash, p_code_hash: codeHash });
