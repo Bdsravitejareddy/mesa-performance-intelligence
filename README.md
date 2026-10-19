@@ -16,7 +16,7 @@ The default local preview uses clearly labeled synthetic examples. To use a priv
 
 ## Supabase setup
 
-1. The configured project is **Mesaintelligence** in **Ravi Org**, reference `wlxvemtseidmxvmnfoao`. Its base dashboard schema and private file bucket are installed. New Drive sync migrations remain local until explicitly applied. Select the intended target explicitly before applying migrations elsewhere.
+1. The configured project is **Mesaintelligence** in **Ravi Org**, reference `wlxvemtseidmxvmnfoao`. Its base dashboard schema, private file bucket, and reviewed Drive sync migrations are installed. Select the intended target explicitly before applying migrations elsewhere.
 2. Copy the project URL and publishable key into the local environment and the Vercel project's environment variables.
 3. Link the CLI to the selected project and apply the migration:
 
@@ -65,7 +65,7 @@ Evaluation reports are cached against the exact submission, official feedback, r
 
 The local `/drive-sync` integration is implemented and tested. **Real Google authorisation, imports, and automatic triggers are not yet verified.** The LMS remains a separate source; this workflow imports supported Drive materials without inventing official marks, rubrics, or assessment links.
 
-Before enabling it, apply the reviewed Drive migrations to the selected app project and configure server-only `SUPABASE_SECRET_KEY`. Set `APP_BASE_URL` to the canonical HTTPS dashboard origin; Vercel's `VERCEL_PROJECT_PRODUCTION_URL` is the fallback. Never use a public environment prefix for the secret key. Missing server setup or demo mode cannot create live connectors.
+Before enabling it, configure server-only `SUPABASE_SECRET_KEY` in Vercel and deploy the pushed branch. Set `APP_BASE_URL` to the canonical HTTPS dashboard origin; Vercel's `VERCEL_PROJECT_PRODUCTION_URL` is the fallback. Never use a public environment prefix for the secret key. Missing server setup or demo mode cannot create live connectors.
 
 1. Sign in and open **Drive sync**. Add a source account label and 1–20 Google folder links (including any `resourcekey` parameter). Map each root to one course, optionally an existing course, or to a collection whose immediate subfolders become courses. Name a root course explicitly for files directly under a collection.
 2. Download the private `Code.gs` and `appsscript.json` files immediately. Their pairing code is single-use and expires after 15 minutes; it is kept only in page memory and the downloaded installer, never URLs, browser storage, or logs. Keep downloads private and delete them after installation. Re-pair to replace an expired installer; this immediately revokes the old connector.

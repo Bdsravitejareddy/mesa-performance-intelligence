@@ -10,7 +10,7 @@
 - Recovered legacy feature names: daily marks ingestion, SWOT, correlations, resume gap analysis, and an objective quality checker. Their detailed original behavior remains unknown and has not been invented.
 - User-selected reconstruction stack: Next.js/TypeScript, Vercel deployment by the user, GitHub source, Supabase Auth/Postgres/private Storage. Official grading remains 0–100.
 - A new private GitHub repository was created for this reconstruction. Initial implementation commit `5ab36bb` was pushed to `work/mesa-performance-dashboard`.
-- Selected Supabase target: Mesaintelligence (`wlxvemtseidmxvmnfoao`) in Ravi Org. Two migrations are applied, with local filenames matching the recorded remote versions. The unrelated “Ravi Project” is unchanged.
+- Selected Supabase target: Mesaintelligence (`wlxvemtseidmxvmnfoao`) in Ravi Org. The base dashboard schema, private file bucket, and six reviewed Drive sync migrations are applied. The unrelated “Ravi Project” is unchanged.
 
 ## LMS discovery and synchronization
 
@@ -65,20 +65,20 @@
 - The standalone script exports Docs/Slides, imports PDF/PPTX, inventories unsupported files, follows permitted shortcuts/shared-drive pagination, handles retries/quotas, resumes checkpoints, and manages one daily trigger plus one bounded continuation. Root link resource keys are preserved end-to-end. Local VM tests simulate Google; they do not prove real account authorisation.
 - `/drive-sync` provides source account labels, course/collection roots, existing-course links, private code/manifest downloads and install instructions, re-pair/disable, inventory/extraction/source states, and a reset for three-failure source pauses. Both invited members share these records. Status polling reads stored metadata without starting an import. Missing server configuration/demo mode disables live management.
 - Installers use canonical server-configured dashboard/Supabase origins. Pairing source exists only in transient browser memory and explicit private downloads until expiry/clearing. No persistent Google or database credential reaches generated source or browser storage. The installed connector token lives in Google Script Properties; only its hash is stored server-side.
-- New Drive migrations remain local and are **not applied to production**. The Drive server secret has **not been configured by this task**. No push, deployment, Google consent, actual folder configuration, real import, unchanged re-scan, or automatic trigger has been performed/verified. Scheduled Drive imports must not be described as live.
+- Reviewed Drive sync migrations are applied to Mesaintelligence. `SUPABASE_SECRET_KEY` is **not yet configured in Vercel**: the local Supabase CLI has no access token, and no secret API key was exposed or copied into the repository. The feature branch is pushed to GitHub; the user deploys manually. Google consent, actual folder configuration, real import, unchanged re-scan, and automatic trigger have not been performed/verified. Scheduled Drive imports must not be described as live.
 - PDF/PPTX stored-file limit is 20 MB; Google's export limit is 10 MB. Sheets/DOCX/PPT/recordings are unsupported inventory. Empty text and visuals require review; OCR/automatic interpretation remain unimplemented. Official marks/rubrics/assessment links are not inferred, AI remains disabled, and daily LMS ingestion remains pending.
 - Both approved dashboard logins are confirmed working by the user; no raw login addresses are tracked. Original A–H gaps, recovered daily marks/SWOT/correlations/resume/quality scope, and all Module I requirements remain preserved.
 
-### Task 5 verification (local only)
+### Task 5 verification
 
 - `npm test`: 25 files, 222 tests passed, including real PGlite transactions, Apps Script VM checks, shared-member/RLS regressions, management routes, rendering, folder edits, installer expiry, retry reset, and read-only polling.
 - `npm run lint`, production `npm run build`, and `git diff --check`: passed. The build registers the auth proxy and dynamic Drive page/routes. Installer source/manifest are included in both management route deployment traces.
 - The local production HTTP probe verifies private dashboard/Drive management redirects, missing pairing-code rejection, and missing/malformed bearer-token rejection on all five authenticated agent endpoints. It uses synthetic environment settings and sends no sign-in emails.
 - Browser build assets contain no synthetic server-secret sentinel, server secret setting, connector-token runtime, or persisted credential hashes. No remote operation or production change was used for this verification.
 
-### Task 5 review follow-up (local only)
+### Task 5 review follow-up
 
 - A new additive migration filters source inventory and all related totals by the course owner's current verified invitation, including imported and unchanged scan counts. Revoking an invitation or verification removes those sources from connector status without deleting historical records.
 - Unchanged counts exclude current-scan import attempts, active leases from any scan, parse failures/retry gates, unavailable sources, and new pending imports. A previous good material version alone is not proof that the current source is unchanged.
 - Scan errors persist across checkpoints. Only a fully completed scan without root, file, or source errors clears an older connection error; running/failed/error-bearing scans retain it. Already-running scans with an existing error are handled conservatively and require a subsequent clean scan to clear that error.
-- New database regressions reproduced the findings before the fixes. Focused setup/store/importer/recovery tests pass (63 tests); the full suite passes (26 files, 229 tests). Lint, production build, and diff checks pass. No migration was applied remotely and no source was pushed.
+- New database regressions reproduced the findings before the fixes. Focused setup/store/importer/recovery tests pass (63 tests); the full suite passes (26 files, 229 tests). Lint, production build, and diff checks pass. The migration is applied remotely and reviewed source is pushed to `work/mesa-performance-dashboard`.
