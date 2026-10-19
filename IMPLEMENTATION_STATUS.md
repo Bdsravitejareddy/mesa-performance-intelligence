@@ -5,7 +5,7 @@
 ## Workspace and original brief recovery
 
 - Initial working directory: `/Users/raviteja`. It was not a Git repository and had no Mesa product files.
-- Reconstructed project root: `/Users/raviteja/mesa-performance-intelligence`, branch `work/mesa-performance-dashboard`, remote `https://github.com/ravibussareddy-stack/mesa-performance-intelligence`.
+- Reconstructed project root: `/Users/raviteja/mesa-performance-intelligence`, branch `work/mesa-performance-dashboard`, primary remote `https://github.com/Bdsravitejareddy/mesa-performance-intelligence`.
 - `PRODUCT_BRIEF.md`, `AGENTS.md`, and this file were created in the project root. The original A–H product requirements, acceptance criteria, analytical integrity rules, repository URL, and technical architecture were not available in the inspected workspace or conversation.
 - Recovered legacy feature names: daily marks ingestion, SWOT, correlations, resume gap analysis, and an objective quality checker. Their detailed original behavior remains unknown and has not been invented.
 - User-selected reconstruction stack: Next.js/TypeScript, Vercel deployment by the user, GitHub source, Supabase Auth/Postgres/private Storage. Official grading remains 0–100.
@@ -52,6 +52,6 @@
 
 ## GitHub/Vercel release
 
-- Source is pushed to `https://github.com/ravibussareddy-stack/mesa-performance-intelligence` on branch `work/mesa-performance-dashboard`. Initial code commit: `5ab36bb` (`Build Mesa performance intelligence MVP`).
+- Source is pushed to the private repository `https://github.com/Bdsravitejareddy/mesa-performance-intelligence` on branch `work/mesa-performance-dashboard`, as requested by the user. Initial code commit: `5ab36bb` (`Build Mesa performance intelligence MVP`). The earlier account's repository remains available through the local `previous-account` remote; `origin` now targets Bdsravitejareddy.
 - No Vercel deployment has been created; the user will connect the private repository and deploy manually.
 - No credentials, LMS data, `.env.local`, `node_modules`, build output, or generated PDF worker are committed.
