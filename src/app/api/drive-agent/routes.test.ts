@@ -1,0 +1,20 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { HttpError } from '@/lib/drive-sync/http';
+const f = vi.hoisted(() => ({ auth: vi.fn(), admin: vi.fn() }));
+vi.mock('@/lib/drive-sync/auth', () => ({ requireConnector: f.auth }));
+vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: f.admin }));
+import { POST as session } from './session/route';
+import { POST as inventory } from './inventory/route';
+import { POST as upload } from './upload/route';
+import { POST as finalize } from './finalize/route';
+import { POST as checkpoint } from './checkpoint/route';
+const request = (body: unknown) => new Request('https://dashboard.example/api/drive-agent/session', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+beforeEach(() => { vi.resetAllMocks(); f.auth.mockResolvedValue({ connectionId: '11111111-1111-4111-8111-111111111111', userId: '22222222-2222-4222-8222-222222222222' }); });
+describe('machine import routes', () => {
+    it.each([session, inventory, upload, finalize, checkpoint])('requires bearer authorization and returns JSON without a redirect', async (handler) => { f.auth.mockRejectedValue(new HttpError(401, 'Credentials required.')); const r = await handler(request({})); expect(r.status).toBe(401); expect(await r.json()).toEqual({ error: 'Credentials required.' }); expect(r.headers.get('location')).toBeNull(); });
+    it('returns the session contract and no-store response', async () => { f.admin.mockReturnValue({ rpc: async () => ({ data: { scanId: 'scan', checkpoint: { roots: {} }, mappings: [] }, error: null }) }); const r = await session(request({})); expect(r.status).toBe(200); expect(await r.json()).toEqual({ scanId: 'scan', checkpoint: { roots: {} }, mappings: [] }); expect(r.headers.get('cache-control')).toBe('no-store'); });
+    it('rejects body-supplied ownership, excessive batches and malformed checkpoints', async () => { expect((await session(request({ userId: 'forged' }))).status).toBe(400); expect((await inventory(request({ scanId: '11111111-1111-4111-8111-111111111111', files: Array(101).fill({}) }))).status).toBe(400); expect((await checkpoint(request({ scanId: '11111111-1111-4111-8111-111111111111', checkpoint: { roots: { x: { failed: false } } }, completedRootIds: [] }))).status).toBe(400); });
+    it('does not disclose raw database errors', async () => { f.admin.mockReturnValue({ rpc: async () => ({ data: null, error: { message: 'private server detail' } }) }); const r = await session(request({})); expect(r.status).toBe(503); expect(JSON.stringify(await r.json())).not.toContain('private server detail'); });
+    it('returns action decisions without exposing storage paths in inventory', async () => { f.admin.mockReturnValue({ rpc: async () => ({ data: { decision: 'upload', itemId: 'reserved', storagePath: 'owner/course/private.pdf', exportFormat: 'pdf' }, error: null }) }); const response = await inventory(request({ scanId: '11111111-1111-4111-8111-111111111111', files: [{ driveFileId: 'file', name: 'notes.pdf', mimeType: 'application/pdf', parentId: 'root', sourceUrl: 'https://drive.google.com/file/d/file/view', fingerprint: 'v1', folderMappingId: '22222222-2222-4222-8222-222222222222', courseFolderId: 'root', courseFolderTitle: 'Finance' }] })); expect(await response.json()).toEqual({ decisions: [{ driveFileId: 'file', action: 'upload', itemId: 'reserved' }] }); });
+    it('rejects oversized checkpoints explicitly so the agent can preserve traversal progress', async () => { const root = '11111111-1111-4111-8111-111111111111'; const response = await checkpoint(request({ scanId: root, checkpoint: { roots: { [root]: { pendingFolders: [], visitedFolderIds: ['x'.repeat(270000)], failed: false, completed: false } } }, completedRootIds: [] })); expect(response.status).toBe(413); expect((await response.json()).error).toContain('256 KiB'); });
+});
