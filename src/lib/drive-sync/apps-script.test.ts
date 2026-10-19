@@ -9,7 +9,7 @@ const pdf = (id: string): File => ({ id, name: `${id}.pdf`, mimeType: "applicati
 const folder = (id: string): File => ({ id, name: id, mimeType: "application/vnd.google-apps.folder" });
 const clone = <T>(value:T):T => JSON.parse(JSON.stringify(value));
 
-async function harness(options: {pages?:Record<string,{files:File[];nextPageToken?:string;incompleteSearch?:boolean}>; metadata?:Record<string,File>; checkpoint?:State; installed?:boolean; lockAvailable?:boolean; hook?:(request:Request)=>{status:number;body?:unknown;headers?:Record<string,string>}|undefined} = {}) {
+async function harness(options: {pages?:Record<string,{files:File[];nextPageToken?:string;incompleteSearch?:boolean}>; metadata?:Record<string,File>; checkpoint?:State; installed?:boolean; lockAvailable?:boolean; downloadBytes?:Uint8Array; hook?:(request:Request)=>{status:number;body?:unknown;headers?:Record<string,string>}|undefined} = {}) {
   const rendered = await renderDriveScript({baseUrl:"https://dashboard.example",storageOrigin:"https://project.supabase.co",pairingCode:"one-time-code"});
   let now = Date.parse("2026-10-19T00:00:00Z");
   const properties:Record<string,string> = options.installed ? {connectorToken:"connector-secret",connectionId:"connection"} : {};
@@ -17,7 +17,7 @@ async function harness(options: {pages?:Record<string,{files:File[];nextPageToke
   const triggers:{handler:string;interval?:number;delay?:number;getHandlerFunction:()=>string}[] = [];
   let state:State | null = options.checkpoint ?? null;
   const mapping = {id:"mapping",driveFolderId:"root",mode:"course",courseId:"course",rootCourseTitle:"Economics"};
-  const response = (status:number,body:unknown = {},headers:Record<string,string> = {}) => ({ getResponseCode:()=>status, getContentText:()=>typeof body === "string" ? body : JSON.stringify(body), getAllHeaders:()=>headers, getBlob:()=>({getBytes:()=>[0,255,10]}) });
+  const response = (status:number,body:unknown = {},headers:Record<string,string> = {}) => ({ getResponseCode:()=>status, getContentText:()=>typeof body === "string" ? body : JSON.stringify(body), getAllHeaders:()=>headers, getBlob:()=>({getBytes:()=>options.downloadBytes ?? [0,255,10]}) });
   const context = vm.createContext({
     Date: class extends Date { static now(){return now;} constructor(value?:string|number){super(value ?? now);} },
     PropertiesService:{getScriptProperties:()=>({getProperty:(key:string)=>properties[key] ?? null,setProperty:(key:string,value:string)=>{properties[key]=value;},deleteProperty:(key:string)=>{delete properties[key];}})},
@@ -241,10 +241,75 @@ describe("Drive Apps Script runtime",()=>{
     const h=await harness({installed:true,lockAvailable:false});vm.runInContext("syncDrive(); install(); uninstallTriggers()",h.context);expect(h.requests).toHaveLength(0);expect(h.triggers).toHaveLength(0);
   });
 
-  it("reserves execution budget before the first network request",async()=>{
+  it("reserves the six-minute platform maximum before the first network request",async()=>{
     let reserved=0;
     const h:Awaited<ReturnType<typeof harness>>=await harness({installed:true,hook:r=>{if(r.url.endsWith("/session"))reserved=Number(h.properties.runtimeMs);return undefined;}});
-    vm.runInContext("syncDrive()",h.context);expect(reserved).toBe(240000);
+    vm.runInContext("syncDrive()",h.context);expect(reserved).toBe(360000);
+  });
+
+  it("skips a file over 20 MiB before download and continues the acknowledged page",async()=>{
+    const h=await harness({installed:true,pages:{"root:":{files:[{...pdf("large"),size:"20971521"},{...pdf("allowed"),size:"20971520"}]}}});
+    vm.runInContext("syncDrive()",h.context);
+    expect(h.requests.some(r=>r.url.includes("/files/large?") || r.url.endsWith("/upload") && JSON.parse(String(r.payload)).itemId==="item-large")).toBe(false);
+    expect(h.finalized).toEqual(["item-allowed"]);
+    expect(h.checkpoints.some(c=>(c as {errors?:{driveFileId:string;itemId?:string;message:string}[]}).errors?.some(e=>e.driveFileId==="large" && e.itemId==="item-large" && e.message.includes("20 MiB")))).toBe(true);
+    expect(h.state?.roots.mapping.completed).toBe(true);expect(h.triggers).toEqual([]);
+  });
+
+  it("records a permanent UrlFetch size failure once and continues other files",async()=>{
+    const h=await harness({installed:true,pages:{"root:":{files:[pdf("large"),pdf("good")]}},hook:r=>{if(r.url.includes("/files/large?") && r.url.includes("alt=media"))throw new Error("Limit exceeded: URL Fetch response size. google-secret");return undefined;}});
+    vm.runInContext("syncDrive()",h.context);
+    expect(h.requests.filter(r=>r.url.includes("/files/large?") && r.url.includes("alt=media"))).toHaveLength(1);
+    expect(h.finalized).toEqual(["item-good"]);expect(h.sleeps).toEqual([]);
+    expect(JSON.stringify(h.checkpoints)).not.toContain("google-secret");expect(h.state?.roots.mapping.completed).toBe(true);
+  });
+
+  it("still retries temporary UrlFetch transport failures",async()=>{
+    let failures=0;
+    const h=await harness({installed:true,pages:{"root:":{files:[pdf("a")]}},hook:r=>{if(r.url.includes("alt=media") && failures++<3)throw new Error("Temporary DNS failure");return undefined;}});
+    vm.runInContext("syncDrive()",h.context);expect(h.sleeps).toEqual([1000,2000,4000]);expect(h.finalized).toEqual(["item-a"]);
+  });
+
+  it("rejects oversized downloaded bytes when metadata did not provide a size",async()=>{
+    const h=await harness({installed:true,pages:{"root:":{files:[pdf("a")]}},downloadBytes:new Uint8Array(20971521)});
+    vm.runInContext("syncDrive()",h.context);expect(h.uploads).toHaveLength(0);expect(h.finalized).toEqual([]);
+    expect(h.checkpoints.some(c=>(c as {errors?:{itemId?:string;message:string}[]}).errors?.some(e=>e.itemId==="item-a" && e.message.includes("20 MiB")))).toBe(true);expect(h.state?.roots.mapping.completed).toBe(true);
+  });
+
+  it("records invalid UrlFetch requests as permanent rather than blocking later files",async()=>{
+    const h=await harness({installed:true,pages:{"root:":{files:[pdf("bad"),pdf("good")]}},hook:r=>{if(r.url.includes("/files/bad?") && r.url.includes("alt=media"))throw new Error("Invalid argument: header google-secret");return undefined;}});
+    vm.runInContext("syncDrive()",h.context);expect(h.finalized).toEqual(["item-good"]);expect(h.sleeps).toEqual([]);expect(JSON.stringify(h.checkpoints)).not.toContain("google-secret");
+  });
+
+  it("retains worst-case reservations when the platform forcibly terminates five runs",async()=>{
+    const h=await harness({installed:true});
+    vm.runInContext("var blockedCalls = 0; UrlFetchApp.fetch = function() { blockedCalls++; while (true) {} };",h.context);
+    for(let run=1;run<=5;run++){
+      // VM timeouts terminate JavaScript without running its catch/finally,
+      // matching Apps Script's forced execution limit rather than throwing an
+      // ordinary catchable fetch error. A fresh invocation resets global state.
+      expect(()=>vm.runInContext("DRIVE_RUN = null; syncDrive()",h.context,{timeout:15})).toThrow("Script execution timed out");
+      expect(h.properties.runtimeMs).toBe(String(run*360000));h.advance(360000);
+    }
+    expect(()=>vm.runInContext("DRIVE_RUN = null; syncDrive()",h.context,{timeout:50})).not.toThrow();
+    expect(vm.runInContext("blockedCalls",h.context)).toBe(5);expect(h.properties.runtimeMs).toBe("1800000");
+  });
+
+  it("does not start another fetch when less than one platform execution remains in the daily budget",async()=>{
+    const h=await harness({installed:true});h.properties.runtimeDay="2026-10-19";h.properties.runtimeMs="1500000";
+    vm.runInContext("syncDrive()",h.context);expect(h.requests).toEqual([]);expect(h.properties.runtimeMs).toBe("1500000");expect(h.triggers).toEqual([]);
+  });
+
+  it("defers during the last six minutes of a day so hard termination cannot spill across days",async()=>{
+    const h=await harness({installed:true});h.setDay("2026-10-19T23:55:00Z");
+    vm.runInContext("syncDrive()",h.context);expect(h.requests).toEqual([]);expect(h.triggers.map(t=>t.handler)).toEqual(["resumeDrive"]);
+    h.advance(360000);vm.runInContext("resumeDrive()",h.context);expect(h.properties.runtimeDay).toBe("2026-10-20");expect(h.requests.some(r=>r.url.endsWith("/session"))).toBe(true);
+  });
+
+  it("refunds the platform reservation after normal completion but keeps it after a paused failure",async()=>{
+    const completed=await harness({installed:true});vm.runInContext("syncDrive()",completed.context);expect(completed.properties.runtimeMs).toBe("0");
+    const paused=await harness({installed:true,hook:r=>r.url.endsWith("/session")?{status:503}:undefined});
+    expect(()=>vm.runInContext("syncDrive()",paused.context)).toThrow();expect(paused.properties.runtimeMs).toBe("360000");
   });
 
   it("preserves a page when source version metadata is missing",async()=>{

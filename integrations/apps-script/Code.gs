@@ -10,6 +10,8 @@ var DRIVE_AGENT_CONFIG = /*__DRIVE_AGENT_CONFIG__*/null;
 var DRIVE_FIELDS = "id,name,mimeType,version,modifiedTime,size,resourceKey,shortcutDetails(targetId,targetMimeType,targetResourceKey)";
 var DRIVE_FOLDER = "application/vnd.google-apps.folder";
 var DRIVE_SHORTCUT = "application/vnd.google-apps.shortcut";
+var DRIVE_MAX_BYTES = 20971520;
+var DRIVE_PLATFORM_MS = 360000;
 var DRIVE_RUN = null;
 
 function install() {
@@ -54,7 +56,9 @@ function driveRemoveTriggers(handler) {
 function driveContinue() {
   driveRemoveTriggers("resumeDrive");
   var properties = PropertiesService.getScriptProperties();
-  if (Number(properties.getProperty("runtimeMs") || 0) < 1800000) {
+  var day = new Date(Date.now()).toISOString().slice(0, 10);
+  var used = properties.getProperty("runtimeDay") === day ? Number(properties.getProperty("runtimeMs") || 0) : 0;
+  if (used >= 0 && used + DRIVE_PLATFORM_MS <= 1800000) {
     ScriptApp.newTrigger("resumeDrive").timeBased().after(60000).create();
   }
 }
@@ -67,16 +71,19 @@ function driveRun() {
   var used = properties.getProperty("runtimeDay") === day ? Number(properties.getProperty("runtimeMs") || 0) : 0;
   if (!isFinite(used) || used < 0) used = 1800000;
   var dayRemaining = Date.parse(day + "T00:00:00.000Z") + 86400000 - start;
-  var allowance = Math.min(240000, 1800000 - used, dayRemaining);
+  var allowance = 240000;
   var pending = false, failure = null;
   try {
     driveRemoveTriggers("resumeDrive");
-    if (allowance <= 15000) { pending = allowance > 0 && dayRemaining <= 15000; return; }
+    if (used + DRIVE_PLATFORM_MS > 1800000) return;
+    // A blocking UrlFetch can run beyond our cooperative work deadline. Do not
+    // start unless its entire platform lifetime fits this UTC day's allowance.
+    if (dayRemaining <= DRIVE_PLATFORM_MS) { pending = true; return; }
     if (!properties.getProperty("connectorToken")) throw driveError("Run install before syncing", false);
     properties.setProperty("runtimeDay", day);
-    // Reserve the entire window before work: abrupt platform termination cannot
-    // evade the daily budget. Normal completion refunds the unused reservation.
-    properties.setProperty("runtimeMs", String(used + allowance));
+    // The platform can terminate a six-minute invocation without executing
+    // finally. Reserve that worst case, not just the four-minute work deadline.
+    properties.setProperty("runtimeMs", String(used + DRIVE_PLATFORM_MS));
     DRIVE_RUN = { deadline: start + allowance, scanId: null, checkpoint: null };
     pending = true;
     var session = driveApi("session", {});
@@ -122,7 +129,7 @@ function driveRun() {
     failure = driveError(error && error.message === "Checkpoint capacity exceeded; previous state preserved" ? error.message : "Drive sync paused; saved progress will be retried", true);
   } finally {
     if (DRIVE_RUN) {
-      properties.setProperty("runtimeMs", String(Math.min(1800000, used + Math.max(0, Date.now() - start))));
+      if (!failure) properties.setProperty("runtimeMs", String(Math.min(1800000, used + Math.max(0, Date.now() - start))));
       DRIVE_RUN = null;
     }
     try { if (pending) driveContinue(); } finally { lock.releaseLock(); }
@@ -222,7 +229,7 @@ function driveProcessFiles(root) {
       try { driveTransfer(file, decision.itemId); }
       catch (error) {
         if (error.retryable) throw error;
-        errors.push({ driveFileId: file.driveFileId, itemId: decision.itemId, message: "File transfer failed; review connector errors" });
+        errors.push({ driveFileId: file.driveFileId, itemId: decision.itemId, message: error.fileSize ? "File exceeds the 20 MiB import limit" : "File transfer failed; review connector errors" });
       }
     }
     root.pendingFiles.shift();
@@ -231,6 +238,7 @@ function driveProcessFiles(root) {
 }
 
 function driveTransfer(file, itemId) {
+  if (typeof file.size === "number" && file.size > DRIVE_MAX_BYTES) throw driveSizeError();
   var destination = driveApi("upload", { itemId: itemId });
   if (destination.storageOrigin !== DRIVE_AGENT_CONFIG.storageOrigin || !driveStorageUrl(destination.signedUrl)) throw driveError("Unsafe upload destination", false);
   var contentType = file.mimeType, parameters = {}, suffix = "files/" + encodeURIComponent(file.driveFileId);
@@ -240,9 +248,17 @@ function driveTransfer(file, itemId) {
   var keyMatch = /[?&]resourcekey=([^&#]*)/.exec(file.sourceUrl), key = keyMatch ? decodeURIComponent(keyMatch[1]) : undefined;
   var download = driveGoogle(suffix, parameters, file.driveFileId, key);
   // Byte[] is sent directly as the request body, never base64 or JSON.
-  driveFetch(destination.signedUrl, { method: "put", contentType: contentType, payload: download.getBlob().getBytes() }, true);
+  var bytes = download.getBlob().getBytes();
+  if (bytes.length > DRIVE_MAX_BYTES) throw driveSizeError();
+  driveFetch(destination.signedUrl, { method: "put", contentType: contentType, payload: bytes }, true);
   var final = driveApi("finalize", { itemId: itemId });
   if (!driveString(final.materialId) || typeof final.version !== "number" || !driveString(final.status)) throw driveError("Invalid finalize response", true);
+}
+
+function driveSizeError() {
+  var error = driveError("File exceeds the 20 MiB import limit", false);
+  error.fileSize = true;
+  return error;
 }
 
 function driveStorageUrl(value) {
@@ -280,7 +296,14 @@ function driveFetch(url, options, acceptConflict, checkpointWrite) {
     if (DRIVE_RUN && Date.now() + (checkpointWrite ? 1000 : 15000) >= DRIVE_RUN.deadline) throw driveError("Execution budget reached", true);
     var response, status = 0, transient = true;
     try { response = UrlFetchApp.fetch(url, options); status = response.getResponseCode(); }
-    catch (_) { /* Sanitize UrlFetch errors: they can contain signed URLs. */ }
+    catch (fetchError) {
+      // These deterministic request/response failures cannot succeed on retry.
+      // Inspect only their category; never retain external text or signed URLs.
+      var message = fetchError && typeof fetchError.message === "string" ? fetchError.message : "";
+      if (/URL Fetch (?:response|request|POST) size|(?:response|request|argument) too large|response size.*exceed/i.test(message)) throw driveSizeError();
+      if (/invalid (?:argument|url|header)|malformed (?:url|header)|unsupported (?:protocol|content type)/i.test(message)) throw driveError("Invalid network request", false);
+      // Unknown transport failures stay retryable, with sanitized status zero.
+    }
     if (status >= 200 && status < 300 || acceptConflict && status === 409) return response;
     transient = status === 0 || status === 408 || status === 429 || status >= 500;
     if (status === 403 && response) transient = /rateLimitExceeded|userRateLimitExceeded/.test(response.getContentText());
