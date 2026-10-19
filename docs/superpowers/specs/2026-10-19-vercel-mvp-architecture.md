@@ -13,7 +13,7 @@ The authenticated Mesa LMS remains the intended primary data source. The observe
 - **Uploaded files:** Private Supabase Storage bucket for course materials and submissions. Store metadata and provenance in Postgres. Enforce user-folder ownership in Storage policies; use short-lived signed URLs only when needed.
 - **Evaluation:** A server-side model-provider adapter creates drafts only when a model provider is configured. The provider is not selected or provisioned yet. Keep evaluation disabled until the user configures a provider and agrees that relevant submission/course excerpts may be sent to it. Always retrieve only relevant excerpts. Deterministic TypeScript checks verify supported calculations. Inferred rubrics require review and approval; all three evaluations stay separate.
 - **Scheduled work:** Vercel Cron can trigger a daily protected route. Keep it disabled until the LMS connector is verified. Once enabled, implement idempotent incremental sync, failure status, and manual recovery; retain prior source records on incomplete sync.
-- **Source control:** Create a new private GitHub repository under the authenticated account after local verification. The user asked for a push and will deploy manually. Do not reuse an unrelated repository or deploy the production site.
+- **Source control:** Source is pushed to a new private GitHub repository at `https://github.com/ravibussareddy-stack/mesa-performance-intelligence` on branch `work/mesa-performance-dashboard`. The user asked for a push and will deploy manually. Do not reuse an unrelated repository or deploy the production site.
 
 The first workflow is course creation → material upload and extraction/indexing → assessment linkage → rubric draft → submission evaluation → evidence-linked feedback/dashboard. Include entry points for daily marks, SWOT, correlations, resume gap analysis, and objective quality checking. Preserve recovered behaviors only; detailed A–H behavior remains an explicit gap.
 
@@ -33,10 +33,10 @@ Professional-role benchmarks must be selected and grounded in a user-supplied or
 
 ## Limitations and acceptance boundary
 
-This architecture decision does not recover A–H, prove LMS API permission, choose an identity provider, choose a hosted model provider, or establish institutional data-retention/region policy. No production service, database, storage bucket, repository, or deployment has been created. These gaps remain explicit. Daily automated LMS ingestion remains unaccepted until an authorized stable source contract is obtained.
+This architecture decision does not recover A–H, prove LMS API permission, establish institutional data-retention/region policy, or choose/provision the hosted model provider. The GitHub repository exists, but no production database, storage bucket, or Vercel deployment has been created. These gaps remain explicit. Daily automated LMS ingestion remains unaccepted until an authorized stable source contract is obtained.
 
 The original acceptance criteria remain authoritative, including PDF/PPTX upload, extraction, source references, rubric generation, deterministic numeric checks, three separate evaluations, mark reconciliation, honest handling of missing evidence, and topic mastery. Deployment itself is not proof that those behaviors or the daily sync are complete.
 
 ## Approval status
 
-Updated 2026-10-19 to reflect the user's preference for a Vercel-hosted dashboard, GitHub source code, and Supabase storage. The design uses Next.js, Supabase Postgres/Auth/private Storage, and a configurable server-side model adapter. The user will deploy manually on Vercel; code must include migrations, RLS and storage policies, and environment setup guidance. No Supabase project has been modified and no external repository/deployment has been created.
+Updated 2026-10-19 to reflect the user's preference for a Vercel-hosted dashboard, GitHub source code, and Supabase storage. The implementation uses Next.js, Supabase Postgres/Auth/private Storage, and a configurable, disabled-by-default server-side model adapter. The user will deploy manually on Vercel; migrations, RLS/storage policies, and setup guidance are included. No Supabase project has been modified and no Vercel deployment has been created.
