@@ -7,6 +7,19 @@ export function jsonResponse(value: unknown, status = 200): Response {
 }
 
 export function jsonError(error: unknown): Response {
+  if (!(error instanceof HttpError)) {
+    const diagnostic = error instanceof Error ? error : new Error("Unknown non-Error failure");
+    const code = "code" in diagnostic && (typeof diagnostic.code === "string" || typeof diagnostic.code === "number")
+      ? String(diagnostic.code).slice(0, 40)
+      : undefined;
+    const message = diagnostic.message
+      .slice(0, 500)
+      .replace(/\b(sb_(?:secret|publishable|service_role)_[A-Za-z0-9_-]+)\b/gi, "[redacted-key]")
+      .replace(/\bBearer\s+\S+/gi, "Bearer [redacted]")
+      .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, "[redacted-token]")
+      .replace(/([?&]resourcekey=)[^&\s]+/gi, "$1[redacted]");
+    console.error("[drive-sync] unexpected API error", { name: diagnostic.name, code, message });
+  }
   return error instanceof HttpError
     ? jsonResponse({ error: error.message }, error.status)
     : jsonResponse({ error: "Drive sync is temporarily unavailable." }, 503);
