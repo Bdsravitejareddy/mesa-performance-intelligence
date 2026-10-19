@@ -1,0 +1,53 @@
+# Project guidance for agents
+
+## Preserve product requirements
+
+- Treat `PRODUCT_BRIEF.md` as the product source of truth.
+- The original A–H specification is not present. Preserve all recovered requirements and do not claim the missing details have been reconstructed. Ask for the original source when a change depends on an unknown rule.
+- Keep daily marks ingestion, SWOT, correlations, resume gap analysis, and the objective quality checker in scope while building Module I.
+- Course-grounded evaluation is P0. The minimum workflow is course upload, extraction, assessment linkage, rubric generation, submission evaluation, evidence-linked feedback, and dashboard.
+
+## Data integrity and evaluation
+
+- Distinguish official faculty criteria from AI-inferred rubrics. Preserve official criteria, weights, and maximum marks.
+- Keep Mesa academic, objective analytical, and professional readiness evaluations independent; never average them automatically.
+- Do not claim official marks are wrong because an AI score differs. Show the criterion, source evidence, and reason for a discrepancy.
+- Cite course material by document, version, and page/slide reference. Label reconstructed examples as illustrative.
+- Do not penalize a valid alternative method unless the assessment explicitly requires a particular approach.
+- Use deterministic calculations where possible. State when missing data or assumptions prevent verification. Do not infer causality from correlations.
+- Weight mastery evidence by coverage and quality; one weak assessment is not proof of lack of mastery.
+- Course marks and grading use a 0–100 scale. Preserve the official score out of 100 and its provenance; do not apply extra normalization. Preserve official rubric weights/maxima independently if their internal total differs, and show that rubric result separately.
+
+## LMS sync and security
+
+- Treat the authenticated Mesa LMS as the primary source for course and assessment data. Use documented or permitted interfaces; do not bypass authentication, access controls, or rate limits.
+- Run synchronization once daily, make it idempotent, record source/version/timestamps, and surface errors for review.
+- Never commit passwords, cookies, access tokens, refresh tokens, or other secrets. Use a secure OS credential store or deployment secret manager once the supported auth mechanism is confirmed.
+- Request only the minimum data required for the requested student and features. Keep private student data out of logs and examples.
+
+## Course documents and retrieval
+
+- Preserve filenames, versions, document references, and page/slide numbers through parsing and evaluation.
+- Extract useful tables and provide visual interpretation for meaningful diagrams, charts, and images.
+- Use local parsing and lightweight indexed retrieval (SQLite FTS is the MVP default). Retrieve relevant excerpts rather than full course documents for an evaluation.
+- Cache parsed material, embeddings if used, and evaluation results. Do not add a paid vector database without demonstrated need.
+
+## Repository and implementation
+
+- The original repository and stack were not found. Do not imply the reconstructed workspace is the original implementation.
+- Before selecting a runtime, database deployment model, or UI framework, recover the source repository or document and review the decision in the implementation plan.
+- Keep product requirements, implementation status, and discovered LMS integration contracts synchronized with code changes.
+- Do not put LMS credentials or session data in source files, fixtures, screenshots, or committed logs.
+- The user prefers a Next.js dashboard for manual deployment on Vercel, source in GitHub, and Supabase for database/file storage. Keep student and course data private by default and enforce RLS/ownership on every data and file operation.
+- Never expose model, database, storage, auth, or LMS credentials to browser code. Keep AI evaluation disabled until a server-side provider is configured and excerpt handling is approved.
+- Do not modify an existing Supabase project unless the user identifies it as this app's project. Do not deploy production; the user will deploy manually. Push source to a private GitHub repository only after local implementation is reviewable; never push secrets or student data.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+## This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

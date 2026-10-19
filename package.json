@@ -1,0 +1,47 @@
+{
+  "name": "mesa-performance-intelligence",
+  "version": "1.0.0",
+  "description": "Course-grounded academic and professional performance intelligence dashboard.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "predev": "node scripts/copy-pdf-worker.mjs",
+    "dev": "next dev",
+    "prebuild": "node scripts/copy-pdf-worker.mjs",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "UNLICENSED",
+  "type": "module",
+  "engines": { "node": ">=22.13.0" },
+  "dependencies": {
+    "@supabase/ssr": "0.12.7",
+    "@supabase/supabase-js": "2.118.0",
+    "fast-xml-parser": "5.11.2",
+    "jszip": "3.10.2",
+    "lucide-react": "1.59.0",
+    "next": "16.4.2",
+    "pdfjs-dist": "6.4.299",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.10",
+    "@types/node": "26.6.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "eslint": "9.39.5",
+    "jsdom": "30.1.3",
+    "pdf-lib": "1.17.1",
+    "supabase": "2.121.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.56.0",
+    "vitest": "5.0.5"
+  }
+}
