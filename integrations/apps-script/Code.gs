@@ -238,7 +238,8 @@ function driveProcessFiles(root) {
 }
 
 function driveTransfer(file, itemId) {
-  if (typeof file.size === "number" && file.size > DRIVE_MAX_BYTES) throw driveSizeError();
+  var binarySource = file.mimeType === "application/pdf" || file.mimeType === "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+  if (binarySource && typeof file.size === "number" && file.size > DRIVE_MAX_BYTES) throw driveSizeError();
   var destination = driveApi("upload", { itemId: itemId });
   if (destination.storageOrigin !== DRIVE_AGENT_CONFIG.storageOrigin || !driveStorageUrl(destination.signedUrl)) throw driveError("Unsafe upload destination", false);
   var contentType = file.mimeType, parameters = {}, suffix = "files/" + encodeURIComponent(file.driveFileId);

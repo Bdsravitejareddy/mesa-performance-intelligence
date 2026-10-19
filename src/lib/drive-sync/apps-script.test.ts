@@ -256,6 +256,14 @@ describe("Drive Apps Script runtime",()=>{
     expect(h.state?.roots.mapping.completed).toBe(true);expect(h.triggers).toEqual([]);
   });
 
+  it.each(["application/vnd.google-apps.document","application/vnd.google-apps.presentation"])("accepts a native source over 20 MiB when its export fits: %s",async mimeType=>{
+    const h=await harness({installed:true,pages:{"root:":{files:[{...pdf("native"),mimeType,size:"20971521"}]}}});
+    vm.runInContext("syncDrive()",h.context);
+    expect(h.requests.filter(r=>r.url.includes("/files/native/export?"))).toHaveLength(1);
+    expect(h.uploads).toHaveLength(1);expect(h.finalized).toEqual(["item-native"]);expect(h.state?.roots.mapping.completed).toBe(true);
+    expect(h.checkpoints.some(c=>(c as {errors?:unknown[]}).errors?.length)).toBe(false);
+  });
+
   it("records a permanent UrlFetch size failure once and continues other files",async()=>{
     const h=await harness({installed:true,pages:{"root:":{files:[pdf("large"),pdf("good")]}},hook:r=>{if(r.url.includes("/files/large?") && r.url.includes("alt=media"))throw new Error("Limit exceeded: URL Fetch response size. google-secret");return undefined;}});
     vm.runInContext("syncDrive()",h.context);
