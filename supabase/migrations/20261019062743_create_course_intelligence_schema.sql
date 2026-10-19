@@ -307,7 +307,8 @@ on conflict (id) do update set
   file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;
 
-alter table storage.objects enable row level security;
+-- Supabase manages storage.objects and already enables RLS on it.
+-- The migration role must not alter that managed table's definition.
 
 create policy "course files owner select" on storage.objects
 for select to authenticated

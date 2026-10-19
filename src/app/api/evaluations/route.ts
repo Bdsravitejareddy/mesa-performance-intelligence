@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
   const { data: claimsData } = await supabase.auth.getClaims();
   const userId = claimsData?.claims?.sub;
   if (typeof userId !== "string") return NextResponse.json({ error: "Sign in before requesting an evaluation." }, { status: 401 });
-  const { data: submission } = await supabase.from("submissions").select("id, assessment_id, answer_text, official_mark, official_feedback").eq("id", body.submissionId).maybeSingle();
+  const { data: submission } = await supabase.from("submissions").select("id, user_id, assessment_id, answer_text, official_mark, official_feedback").eq("id", body.submissionId).maybeSingle();
   if (!submission) return NextResponse.json({ error: "Submission was not found in this workspace." }, { status: 404 });
   const { data: assessment } = await supabase.from("assessments").select("id, course_id, title, assessment_format").eq("id", submission.assessment_id).maybeSingle();
   if (!assessment) return NextResponse.json({ error: "The linked assessment is unavailable." }, { status: 404 });
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
   if (!result || (!roleProfile && result.professional.score !== null) || result.mesaAcademic.score === null || result.analytical.score === null || !result.mesaAcademic.findings.some((item) => item.sourceRefs.length) || !result.analytical.findings.some((item) => item.sourceRefs.length) || (result.professional.score !== null && !result.professional.findings.some((item) => item.sourceRefs.length))) return NextResponse.json({ error: "The provider response was incomplete, uncited, or outside the evaluation contract. No score was saved." }, { status: 422 });
 
   const { data: report, error: reportError } = await supabase.from("evaluation_reports").insert({
-    user_id: userId,
+    user_id: submission.user_id,
     submission_id: submission.id,
     mesa_academic_score: result.mesaAcademic.score,
     analytical_score: result.analytical.score,
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
   for (const key of cited) {
     const ref = refs.find((item) => item.key === key);
     if (!ref) continue;
-    const { data: savedRef } = await supabase.from("material_references").insert({ user_id: userId, material_page_id: ref.pageId, reference_label: ref.label, excerpt: ref.excerpt.slice(0, 1000) }).select("id").single();
+    const { data: savedRef } = await supabase.from("material_references").insert({ user_id: submission.user_id, material_page_id: ref.pageId, reference_label: ref.label, excerpt: ref.excerpt.slice(0, 1000) }).select("id").single();
     if (savedRef) referenceIds.set(key, savedRef.id);
   }
   if (referenceIds.size !== cited.length) {
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
     ...result.analytical.findings.map((item) => ({ ...item, layer: "analytical" as const })),
     ...result.professional.findings.map((item) => ({ ...item, layer: "professional" as const })),
   ];
-  const evidenceRows = findings.flatMap((item) => (item.sourceRefs.length ? item.sourceRefs.map((key) => ({ user_id: userId, evaluation_id: report.id, material_reference_id: referenceIds.get(key) ?? null, layer: item.layer, criterion: item.criterion, finding: item.finding, submission_quote: item.quote, confidence: item.confidence })) : [{ user_id: userId, evaluation_id: report.id, material_reference_id: null, layer: item.layer, criterion: item.criterion, finding: item.finding, submission_quote: item.quote, confidence: item.confidence }]));
+  const evidenceRows = findings.flatMap((item) => (item.sourceRefs.length ? item.sourceRefs.map((key) => ({ user_id: submission.user_id, evaluation_id: report.id, material_reference_id: referenceIds.get(key) ?? null, layer: item.layer, criterion: item.criterion, finding: item.finding, submission_quote: item.quote, confidence: item.confidence })) : [{ user_id: submission.user_id, evaluation_id: report.id, material_reference_id: null, layer: item.layer, criterion: item.criterion, finding: item.finding, submission_quote: item.quote, confidence: item.confidence }]));
   if (evidenceRows.length) {
     const { error: evidenceError } = await supabase.from("evaluation_evidence").insert(evidenceRows);
     if (evidenceError) {

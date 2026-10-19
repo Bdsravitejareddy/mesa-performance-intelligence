@@ -13,7 +13,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const { data: claimsData } = await supabase.auth.getClaims();
   const userId = claimsData?.claims?.sub;
   if (typeof userId !== "string") return NextResponse.json({ error: "Sign in before reviewing a rubric." }, { status: 401 });
-  const { data: rubric } = await supabase.from("rubrics").select("id, source_kind, maximum_marks").eq("id", id).maybeSingle();
+  const { data: rubric } = await supabase.from("rubrics").select("id, user_id, source_kind, maximum_marks").eq("id", id).maybeSingle();
   if (!rubric) return NextResponse.json({ error: "Rubric was not found in this workspace." }, { status: 404 });
   if (rubric.source_kind !== "inferred") return NextResponse.json({ error: "Official rubrics are preserved and cannot be overwritten here." }, { status: 409 });
   const criteria = body.criteria;
@@ -32,7 +32,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       if (error) return NextResponse.json({ error: "Could not update rubric criteria." }, { status: 400 });
       keptIds.push(item.id);
     } else {
-      const { data, error } = await supabase.from("rubric_criteria").insert({ ...row, user_id: userId, rubric_id: id }).select("id").single();
+      const { data, error } = await supabase.from("rubric_criteria").insert({ ...row, user_id: rubric.user_id, rubric_id: id }).select("id").single();
       if (error || !data) return NextResponse.json({ error: "Could not add a rubric criterion." }, { status: 400 });
       keptIds.push(data.id);
     }

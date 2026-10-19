@@ -1,0 +1,6 @@
+project_id = "mesa-performance-intelligence"
+
+# Minimal production Auth configuration. Other remote settings are left unchanged.
+[auth]
+site_url = "https://mesa-performance-intelligence.vercel.app"
+additional_redirect_urls = ["https://mesa-performance-intelligence.vercel.app/auth/callback"]

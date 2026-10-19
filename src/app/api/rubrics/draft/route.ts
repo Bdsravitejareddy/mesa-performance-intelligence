@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
   const userId = claimsData?.claims?.sub;
   if (typeof userId !== "string") return NextResponse.json({ error: "Sign in before drafting a rubric." }, { status: 401 });
 
-  const { data: assessment } = await supabase.from("assessments").select("id, course_id, title, assessment_format, official_max_mark").eq("id", body.assessmentId).maybeSingle();
+  const { data: assessment } = await supabase.from("assessments").select("id, user_id, course_id, title, assessment_format, official_max_mark").eq("id", body.assessmentId).maybeSingle();
   if (!assessment) return NextResponse.json({ error: "Assessment was not found in this workspace." }, { status: 404 });
   const { data: official } = await supabase.from("rubrics").select("id").eq("assessment_id", assessment.id).eq("source_kind", "official").limit(1).maybeSingle();
   if (official) return NextResponse.json({ error: "An official rubric is already recorded. Preserve and use its criteria instead of drafting a replacement." }, { status: 409 });
@@ -38,9 +38,9 @@ export async function POST(request: NextRequest) {
 
   const materialIds = new Map(refs.map((ref) => [ref.key, ref.materialId]));
   const sourceMaterialId = refs[0]?.materialId ?? (linkedMaterials ?? [])[0]?.id ?? null;
-  const { data: rubric, error: rubricError } = await supabase.from("rubrics").insert({ user_id: userId, assessment_id: assessment.id, source_kind: "inferred", approval_status: "pending_review", maximum_marks: assessment.official_max_mark, source_material_id: sourceMaterialId }).select("id").single();
+  const { data: rubric, error: rubricError } = await supabase.from("rubrics").insert({ user_id: assessment.user_id, assessment_id: assessment.id, source_kind: "inferred", approval_status: "pending_review", maximum_marks: assessment.official_max_mark, source_material_id: sourceMaterialId }).select("id").single();
   if (rubricError || !rubric) return NextResponse.json({ error: "Could not save the inferred rubric draft." }, { status: 400 });
-  const criteria = draft.criteria.map((item) => ({ user_id: userId, rubric_id: rubric.id, title: item.title, description: item.description, weight: item.weight, maximum_marks: item.maximumMarks, source_reference: item.sourceRefs.map((key) => `${key}: ${refs.find((ref) => ref.key === key)?.label ?? "source unavailable"} [material ${materialIds.get(key)}]`).join("; ") }));
+  const criteria = draft.criteria.map((item) => ({ user_id: assessment.user_id, rubric_id: rubric.id, title: item.title, description: item.description, weight: item.weight, maximum_marks: item.maximumMarks, source_reference: item.sourceRefs.map((key) => `${key}: ${refs.find((ref) => ref.key === key)?.label ?? "source unavailable"} [material ${materialIds.get(key)}]`).join("; ") }));
   const { error: criteriaError } = await supabase.from("rubric_criteria").insert(criteria);
   if (criteriaError) {
     await supabase.from("rubrics").delete().eq("id", rubric.id);

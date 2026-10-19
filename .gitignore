@@ -10,4 +10,4 @@ coverage/
 !.env.example
 *.log
 .DS_Store
-supabase/.temp/
+**/supabase/.temp/

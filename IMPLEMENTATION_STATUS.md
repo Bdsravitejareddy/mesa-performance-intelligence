@@ -1,6 +1,6 @@
 # Implementation status
 
-**Status:** A reconstructed MVP is pushed to a private GitHub repository. The user deployed it at `https://mesa-performance-intelligence.vercel.app/`. A live check confirmed the deployment responds successfully but has missing Supabase configuration and no imported Mesa records. The dashboard now explicitly explains missing setup instead of returning zero metrics for a missing database connection.
+**Status:** The user-selected Mesaintelligence project in Ravi Org is provisioned for the dashboard. Supabase schema, private Storage, shared workspace invitations, Auth callback URLs, and Vercel production connection variables are configured. The code supports both approved emails with equal access to one workspace. Actual LMS records have not been imported; database provisioning does not create student data.
 
 ## Workspace and original brief recovery
 
@@ -10,7 +10,7 @@
 - Recovered legacy feature names: daily marks ingestion, SWOT, correlations, resume gap analysis, and an objective quality checker. Their detailed original behavior remains unknown and has not been invented.
 - User-selected reconstruction stack: Next.js/TypeScript, Vercel deployment by the user, GitHub source, Supabase Auth/Postgres/private Storage. Official grading remains 0–100.
 - A new private GitHub repository was created for this reconstruction. Initial implementation commit `5ab36bb` was pushed to `work/mesa-performance-dashboard`.
-- An existing Supabase project is visible in the account, but it is not designated for this app. No remote database, bucket, auth configuration, or Supabase project has been modified.
+- Selected Supabase target: Mesaintelligence (`wlxvemtseidmxvmnfoao`) in Ravi Org. Two migrations are applied, with local filenames matching the recorded remote versions. The unrelated “Ravi Project” is unchanged.
 
 ## LMS discovery and synchronization
 
@@ -21,8 +21,8 @@
 ## Implemented locally
 
 - Responsive dashboard shell and synthetic, explicitly labeled preview data.
-- Private sign-in flow using Supabase Auth magic links, an owner-email allowlist, request-scoped SSR client, and authenticated owner checks.
-- Supabase migration for courses, modules, learning objectives, assessments, uploaded material metadata, indexed material pages, rubrics/criteria, submissions/official feedback, independent evaluation layers, evidence references, topic competencies, SWOT, role profiles, resume gaps, quality checks, sync runs, and owner-scoped RLS. It also defines a private 20 MB PDF/PPTX bucket with owner-folder policies.
+- Private sign-in using an explicit multi-email allowlist and request-scoped Supabase sessions. Initial magic-link requests can create the invited account. Shared RLS checks require an invited, verified Auth email and do not trust user metadata. Both approved accounts see the same course and assessment records and uploaded files.
+- Supabase migrations for courses, modules, learning objectives, assessments, uploaded material metadata, indexed pages, rubrics/criteria, submissions/official feedback, evaluation layers/references, topic competencies, SWOT, role profiles, resume gaps, quality checks, and sync runs. The initial owner policies are upgraded to shared verified-member RLS for both approved accounts; the private PDF/PPTX bucket retains its 20 MB limit.
 - Course and assessment creation, private PDF/PPTX upload, PDF text extraction, PPTX text/table extraction, page/slide provenance, basic Postgres full-text indexing, assessment linkage, and visual-note review for slides flagged with diagrams/images.
 - Manual submission/answer, official mark (0–100), and evaluator-feedback entry.
 - Exact manual recording of official rubric criteria and weights; a course-grounded inferred rubric flow that preserves inferred status, requires review/edit/approval, and does not overwrite an official rubric.
@@ -44,14 +44,15 @@
 
 ## Validation run
 
-- `npm test`: 7 test files, 17 tests passing. Coverage includes missing-configuration handling, explicit demo isolation, arithmetic and 100-point mark validation, PDF/PPTX extraction references, database RLS isolation, local quality checks, provider privacy gating, and strict AI response contracts.
+- `npm test`: 10 test files, 22 tests passing. Coverage includes shared record/file access for both verified accounts, denial for outsiders and unverified accounts, parent ownership for cross-account contributions, multi-email onboarding, missing configuration, arithmetic, document extraction, and AI privacy/response contracts.
 - `npm run lint`: passing.
 - `npm run build`: passing with Next.js production build.
 - `npm audit --audit-level=high`: zero vulnerabilities across production and development dependencies.
-- No live Supabase integration test has run because no app project is configured. No actual LMS data was imported.
+- Live database checks confirm 18 app tables with RLS, 18 shared workspace policies, four file-access policies, a private 20 MB bucket, and two private invitations. Auth Site URL and callback point to the deployed Mesa site. The security advisor has no warnings/errors; its one informational item notes the intentionally denied private invitation table has no direct-user policy. Its table grants deny direct application-user access, which is covered by tests.
+- No actual LMS data was imported, and no sign-in emails were sent as part of testing. The first real sign-in still requires the user to request and open their email link.
 
 ## GitHub/Vercel release
 
 - Source is pushed to the private repository `https://github.com/Bdsravitejareddy/mesa-performance-intelligence` on branch `work/mesa-performance-dashboard`, as requested by the user. Initial code commit: `5ab36bb` (`Build Mesa performance intelligence MVP`). The earlier account's repository remains available through the local `previous-account` remote; `origin` now targets Bdsravitejareddy.
-- The user deployed `https://mesa-performance-intelligence.vercel.app/`. Configure the production Supabase variables, apply the migration to the user-designated project, configure owner sign-in, and import records before expecting actual data. The only visible Supabase project is “Ravi Project”; its designation for Mesa is awaiting the user's answer, and no remote schema has been modified.
+- The deployed Vercel project is `prj_Ptsr54VdyhyxMCIbUKrmyl9P6GLH` in the user's `rav-98b9` account/team. Five production variables now configure Supabase URL/publishable key, both approved login emails, demo mode false, and AI processing false. No secret/service-role API key was requested or used. A source push triggers the user's existing deployment integration; no separate CLI production deployment was created.
 - No credentials, LMS data, `.env.local`, `node_modules`, build output, or generated PDF worker are committed.

@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
   const { data: claimsData } = await supabase.auth.getClaims();
   const userId = claimsData?.claims?.sub;
   if (typeof userId !== "string") return NextResponse.json({ error: "Sign in to record a rubric." }, { status: 401 });
-  const { data: assessment } = await supabase.from("assessments").select("id, course_id").eq("id", body.assessmentId).maybeSingle();
+  const { data: assessment } = await supabase.from("assessments").select("id, user_id, course_id").eq("id", body.assessmentId).maybeSingle();
   if (!assessment) return NextResponse.json({ error: "Assessment was not found in this workspace." }, { status: 404 });
   const { data: existing } = await supabase.from("rubrics").select("id").eq("assessment_id", assessment.id).eq("source_kind", "official").limit(1).maybeSingle();
   if (existing) return NextResponse.json({ error: "An official rubric is already recorded. Edit that record through the established faculty source instead." }, { status: 409 });
@@ -24,9 +24,9 @@ export async function POST(request: NextRequest) {
     const { data: source } = await supabase.from("course_materials").select("id").eq("id", body.sourceMaterialId).eq("course_id", assessment.course_id).maybeSingle();
     if (!source) return NextResponse.json({ error: "Selected source material is not part of this course." }, { status: 400 });
   }
-  const { data: rubric, error } = await supabase.from("rubrics").insert({ user_id: userId, assessment_id: assessment.id, source_kind: "official", approval_status: "approved", maximum_marks: body.maximumMarks, source_material_id: body.sourceMaterialId || null, approved_at: new Date().toISOString() }).select("id").single();
+  const { data: rubric, error } = await supabase.from("rubrics").insert({ user_id: assessment.user_id, assessment_id: assessment.id, source_kind: "official", approval_status: "approved", maximum_marks: body.maximumMarks, source_material_id: body.sourceMaterialId || null, approved_at: new Date().toISOString() }).select("id").single();
   if (error || !rubric) return NextResponse.json({ error: "Could not save the official rubric record." }, { status: 400 });
-  const { error: criteriaError } = await supabase.from("rubric_criteria").insert(body.criteria.map((item) => ({ user_id: userId, rubric_id: rubric.id, title: item.title!.trim().slice(0, 180), description: item.description?.slice(0, 3000) ?? "", weight: item.weight, maximum_marks: item.maximumMarks, source_reference: item.sourceReference?.slice(0, 1000) ?? "" })));
+  const { error: criteriaError } = await supabase.from("rubric_criteria").insert(body.criteria.map((item) => ({ user_id: assessment.user_id, rubric_id: rubric.id, title: item.title!.trim().slice(0, 180), description: item.description?.slice(0, 3000) ?? "", weight: item.weight, maximum_marks: item.maximumMarks, source_reference: item.sourceReference?.slice(0, 1000) ?? "" })));
   if (criteriaError) {
     await supabase.from("rubrics").delete().eq("id", rubric.id);
     return NextResponse.json({ error: "Rubric criteria could not be saved; the partial rubric record was removed." }, { status: 400 });

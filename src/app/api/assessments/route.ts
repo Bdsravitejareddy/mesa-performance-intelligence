@@ -13,9 +13,11 @@ export async function POST(request: NextRequest) {
   const { data: claimsData } = await supabase.auth.getClaims();
   const userId = claimsData?.claims?.sub;
   if (typeof userId !== "string") return NextResponse.json({ error: "Sign in before creating an assessment." }, { status: 401 });
+  const { data: course } = await supabase.from("courses").select("id, user_id").eq("id", body.courseId).maybeSingle();
+  if (!course) return NextResponse.json({ error: "Course was not found in this workspace." }, { status: 404 });
 
   const { data, error } = await supabase.from("assessments").insert({
-    user_id: userId,
+    user_id: course.user_id,
     course_id: body.courseId,
     title: body.title.trim().slice(0, 180),
     assessment_format: assessmentFormat,

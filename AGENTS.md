@@ -39,6 +39,8 @@
 - Keep product requirements, implementation status, and discovered LMS integration contracts synchronized with code changes.
 - Do not put LMS credentials or session data in source files, fixtures, screenshots, or committed logs.
 - The user prefers a Next.js dashboard for manual deployment on Vercel, source in GitHub, and Supabase for database/file storage. Keep student and course data private by default and enforce RLS/ownership on every data and file operation.
+- The user selected **Mesaintelligence** in **Ravi Org** (`wlxvemtseidmxvmnfoao`). Its migrations are applied; do not touch the unrelated “Ravi Project.” Two approved email addresses have equal access to one shared workspace. Keep the app's `APP_ALLOWED_EMAILS` and the private database invitation list aligned; never authorize using editable user metadata.
+- Workspace RLS grants access only to verified invited Auth users. Course-dependent inserts must inherit the parent record's `user_id`, preserving composite foreign keys when either approved account contributes. Keep invitation addresses and credentials out of source control.
 - Never expose model, database, storage, auth, or LMS credentials to browser code. Keep AI evaluation disabled until a server-side provider is configured and excerpt handling is approved.
 - Do not modify an existing Supabase project unless the user identifies it as this app's project. Do not deploy production; the user will deploy manually. Push source to a private GitHub repository only after local implementation is reviewable; never push secrets or student data.
 

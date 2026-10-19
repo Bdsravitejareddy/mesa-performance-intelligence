@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 
 const migrationPath = fileURLToPath(
-  new URL("../../supabase/migrations/20261019054132_create_course_intelligence_schema.sql", import.meta.url),
+  new URL("../../supabase/migrations/20261019062743_create_course_intelligence_schema.sql", import.meta.url),
 );
 
 describe("Supabase migration access boundaries", () => {
@@ -32,6 +32,7 @@ describe("Supabase migration access boundaries", () => {
         file_size_limit bigint, allowed_mime_types text[]
       );
       create table storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text not null, name text not null);
+      alter table storage.objects enable row level security;
       create function storage.foldername(object_name text) returns text[] language sql immutable as
         $$ select regexp_split_to_array(object_name, '/') $$;
       grant usage on schema storage to authenticated;

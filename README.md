@@ -16,7 +16,7 @@ The default local preview uses clearly labeled synthetic examples. To use a priv
 
 ## Supabase setup
 
-1. Create a new Supabase project for this app, or explicitly choose the intended project. No project has been provisioned or modified by this repository.
+1. The configured project is **Mesaintelligence** in **Ravi Org**, reference `wlxvemtseidmxvmnfoao`. Its schema and private file bucket are installed. Select the intended target explicitly before applying migrations elsewhere.
 2. Copy the project URL and publishable key into the local environment and the Vercel project's environment variables.
 3. Link the CLI to the selected project and apply the migration:
 
@@ -26,10 +26,11 @@ The default local preview uses clearly labeled synthetic examples. To use a priv
    npx supabase db push
    ```
 
-4. Add the owner email to Supabase Auth, configure its Site URL and `/auth/callback` redirect, and set `APP_ALLOWED_EMAIL` to that same address.
-5. Keep the `course-files` bucket private. The migration creates it with a 20 MB limit and owner-folder policies.
+4. Set `APP_ALLOWED_EMAILS` to the comma-separated approved login emails. The legacy singular `APP_ALLOWED_EMAIL` remains supported. Add the same normalized emails to `private.workspace_access` using trusted database administration; this invitation table is not readable or writable by application users. The first requested magic link creates an account, and a verified invited account can share all workspace records with the other invited account.
+5. Configure the Auth Site URL and callback using the minimal production configuration in `deploy/supabase/config.toml`. Other project properties are left unchanged. The Mesa production URL and callback have already been configured.
+6. Keep the `course-files` bucket private. The migration creates it with a 20 MB limit and verified-workspace-member policies.
 
-The migration enables RLS on every application table and restricts records/files to the signed-in owner. It does not add a service-role key to the browser. Do not link or migrate the unrelated existing Supabase project by accident.
+The migrations enable RLS on every application table and restrict records/files to verified, explicitly invited workspace accounts. Both approved accounts have equal access to the same records. Child records retain their course/assessment owner's ID so contributions from the second account preserve foreign-key integrity. The invitation lookup runs in a private schema with a fixed search path and reads verified Auth email addresses, never editable user metadata. No service-role key is used in the app. The separate “Ravi Project” has not been modified.
 
 ## Vercel deployment
 
@@ -40,7 +41,7 @@ Required for a private workspace:
 - `NEXT_PUBLIC_DEMO_MODE=false`
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
-- `APP_ALLOWED_EMAIL`
+- `APP_ALLOWED_EMAILS`
 
 If the deployed site has no data, first check these variables in the Vercel environment used by its production deployment and redeploy after saving them. Applying the Supabase migration creates the schema, not student records. Course materials and official assessment records must then be added or imported. A Chrome LMS session is not available to Vercel, and automated LMS sync is not connected. Do not enable demo mode to represent real student results.
 

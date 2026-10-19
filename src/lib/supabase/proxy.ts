@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { hasSupabaseConfig, isDemoMode } from "./config";
+import { getAllowedEmails, hasSupabaseConfig, isAllowedEmail, isDemoMode } from "./config";
 
 const publicPaths = ["/login", "/setup", "/unauthorized", "/auth/callback", "/api/auth/magic-link"];
 
@@ -35,11 +35,11 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  const allowedEmail = process.env.APP_ALLOWED_EMAIL?.trim().toLowerCase();
+  const allowlistConfigured = getAllowedEmails().length > 0;
   const claimEmail = typeof claims?.email === "string" ? claims.email.toLowerCase() : "";
-  if (claims && (!allowedEmail || !claimEmail || claimEmail !== allowedEmail) && !isPublic) {
+  if (claims && (!allowlistConfigured || !isAllowedEmail(claimEmail)) && !isPublic) {
     const deniedUrl = request.nextUrl.clone();
-    deniedUrl.pathname = allowedEmail ? "/unauthorized" : "/setup";
+    deniedUrl.pathname = allowlistConfigured ? "/unauthorized" : "/setup";
     deniedUrl.search = "";
     return NextResponse.redirect(deniedUrl);
   }

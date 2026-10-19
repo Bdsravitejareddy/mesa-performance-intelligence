@@ -28,6 +28,8 @@ export async function POST(request: NextRequest) {
   const userId = claimsData?.claims?.sub;
   if (typeof userId !== "string") return NextResponse.json({ error: "Sign in before indexing course materials." }, { status: 401 });
   if (!body.storagePath.startsWith(`${userId}/${body.courseId}/`)) return NextResponse.json({ error: "The uploaded file is outside the signed-in user's workspace." }, { status: 403 });
+  const { data: course } = await supabase.from("courses").select("id, user_id").eq("id", body.courseId).maybeSingle();
+  if (!course) return NextResponse.json({ error: "Course was not found in this workspace." }, { status: 404 });
   if (body.assessmentId) {
     const { data: linkedAssessment } = await supabase.from("assessments").select("id").eq("id", body.assessmentId).eq("course_id", body.courseId).maybeSingle();
     if (!linkedAssessment) return NextResponse.json({ error: "The selected assessment does not belong to this course." }, { status: 400 });
@@ -52,7 +54,7 @@ export async function POST(request: NextRequest) {
     const status = pages.some((page) => page.hasVisuals) && !visualNotes ? "needs_visual_review" : "complete";
 
     const { data: material, error: materialError } = await supabase.from("course_materials").insert({
-      user_id: userId,
+      user_id: course.user_id,
       course_id: body.courseId,
       assessment_id: body.assessmentId || null,
       name: body.fileName.slice(0, 240),
@@ -65,7 +67,7 @@ export async function POST(request: NextRequest) {
     if (materialError || !material) throw new Error("The file was parsed, but material metadata could not be saved.");
 
     const pageRecords = pages.map((page) => ({
-      user_id: userId,
+      user_id: course.user_id,
       material_id: material.id,
       page_number: page.pageNumber,
       extracted_text: page.text,
