@@ -120,6 +120,10 @@ begin perform private.drive_connection(p_connection_id);
  if p_hash is null or p_hash !~ '^[a-f0-9]{64}$' or p_expires_at is null or p_expires_at<=now() or p_expires_at>now()+interval '15 minutes' then raise exception 'Pairing expiry must be within 15 minutes'; end if;
  insert into private.drive_credentials(connection_id,pairing_hash,pairing_expires_at) values(p_connection_id,p_hash,p_expires_at)
  on conflict(connection_id) do update set pairing_hash=excluded.pairing_hash,pairing_expires_at=excluded.pairing_expires_at,token_hash=null;
+ -- Fence requests authorized before rotation, including already reserved imports.
+ update public.drive_connections set mapping_revision=mapping_revision+1 where id=p_connection_id;
+ update public.drive_scans set status='superseded' where connection_id=p_connection_id and status='running';
+ update public.drive_import_items set status='expired' where connection_id=p_connection_id and status='leased';
 end $$;
 create function public.drive_sync_consume_pairing(p_pairing_hash text,p_token_hash text) returns jsonb language plpgsql security invoker set search_path='' as $$
 declare cid uuid; c public.drive_connections; begin
@@ -174,7 +178,13 @@ declare c public.drive_connections; s public.drive_scans; m public.drive_folder_
   update public.drive_sources set available=true where id=src.id;
   return jsonb_build_object('decision','unchanged'); end if;
  update public.drive_import_items set status='expired' where source_id=src.id and status='leased' and lease_expires_at<=now();
- if exists(select 1 from public.drive_import_items where source_id=src.id and status='leased') then return jsonb_build_object('decision','retry_later'); end if;
+ select * into item from public.drive_import_items where source_id=src.id and status='leased';
+ if found then
+  if item.connection_id=c.id and item.scan_id=s.id and item.mapping_revision=c.mapping_revision and item.source_snapshot->>'fingerprint'=p_source->>'fingerprint' then
+   return jsonb_build_object('decision','upload','itemId',item.id,'storagePath',item.storage_path,'exportFormat',fmt);
+  end if;
+  return jsonb_build_object('decision','retry_later');
+ end if;
  insert into public.drive_import_items(id,user_id,connection_id,source_id,scan_id,mapping_revision,source_snapshot,storage_path)
  values(iid,c.user_id,c.id,src.id,s.id,c.mapping_revision,p_source,src.course_user_id::text||'/'||src.course_id::text||'/drive/'||iid::text||'.'||fmt) returning * into item;
  return jsonb_build_object('decision','upload','itemId',item.id,'storagePath',item.storage_path,'exportFormat',fmt);

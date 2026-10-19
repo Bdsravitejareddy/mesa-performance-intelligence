@@ -57,6 +57,31 @@ afterEach(async () => { await db.close(); });
 
 describe("transactional Drive sync state", () => {
 
+  it("keeps cross-scan leases exclusive while allowing same-scan upload resumption", async () => {
+    const connection = await configure(), run = await scan(connection.id);
+    const item = await reserve(connection.id,run.scanId,run.mappings[0].id);
+    expect(await reserve(connection.id,run.scanId,run.mappings[0].id)).toEqual(item);
+    expect((await reserve(connection.id,run.scanId,run.mappings[0].id,"v2")).decision).toBe("retry_later");
+    await rpc("checkpoint",[connection.id,run.scanId,{roots:{[run.mappings[0].id]:{failed:true,completed:false,pendingFolders:[],pendingFiles:[]}}},[]]);
+    const next = await scan(connection.id);
+    expect((await reserve(connection.id,next.scanId,next.mappings[0].id)).decision).toBe("retry_later");
+  });
+
+  it("invalidates previously authorized publication and scans when issuing a new pairing", async () => {
+    const connection = await configure();
+    await rpc("issue_pairing",[connection.id,"a".repeat(64),new Date(Date.now()+60e3).toISOString()]);
+    await rpc("consume_pairing",["a".repeat(64),"b".repeat(64)]);
+    const run = await scan(connection.id), item = await reserve(connection.id,run.scanId,run.mappings[0].id);
+    await rpc("issue_pairing",[connection.id,"c".repeat(64),new Date(Date.now()+60e3).toISOString()]);
+    expect(await rpc("authenticate",["b".repeat(64)])).toBeNull();
+    await expect(rpc("publish",[connection.id,item.itemId,pages,12])).rejects.toThrow();
+    await expect(reserve(connection.id,run.scanId,run.mappings[0].id)).rejects.toThrow();
+    const next = await scan(connection.id), replacement = await reserve(connection.id,next.scanId,next.mappings[0].id);
+    expect(replacement.decision).toBe("upload");
+    expect(replacement.itemId).not.toBe(item.itemId);
+  });
+
+
   it("continues draining a failed root before terminating its daily scan", async () => {
     const connection = await configure(), run = await scan(connection.id);
     const rootId = run.mappings[0].id;
@@ -256,7 +281,8 @@ describe("transactional Drive sync state", () => {
     const a = await scan(first.id), b = await scan(second.id);
     const item = await reserve(first.id,a.scanId,a.mappings[0].id);
     expect(item.decision).toBe("upload");
-    expect((await reserve(first.id,a.scanId,a.mappings[0].id)).decision).toBe("retry_later");
+    const resumed = await reserve(first.id,a.scanId,a.mappings[0].id);
+    expect(resumed).toEqual(item);
     expect((await reserve(second.id,b.scanId,b.mappings[0].id)).decision).toBe("conflict");
     await db.exec("update public.drive_import_items set lease_expires_at=now()-interval '1 second'");
     await expect(rpc("publish",[first.id,item.itemId,pages,12])).rejects.toThrow();
