@@ -75,3 +75,10 @@
 - `npm run lint`, production `npm run build`, and `git diff --check`: passed. The build registers the auth proxy and dynamic Drive page/routes. Installer source/manifest are included in both management route deployment traces.
 - The local production HTTP probe verifies private dashboard/Drive management redirects, missing pairing-code rejection, and missing/malformed bearer-token rejection on all five authenticated agent endpoints. It uses synthetic environment settings and sends no sign-in emails.
 - Browser build assets contain no synthetic server-secret sentinel, server secret setting, connector-token runtime, or persisted credential hashes. No remote operation or production change was used for this verification.
+
+### Task 5 review follow-up (local only)
+
+- A new additive migration filters source inventory and all related totals by the course owner's current verified invitation, including imported and unchanged scan counts. Revoking an invitation or verification removes those sources from connector status without deleting historical records.
+- Unchanged counts exclude current-scan import attempts, active leases from any scan, parse failures/retry gates, unavailable sources, and new pending imports. A previous good material version alone is not proof that the current source is unchanged.
+- Scan errors persist across checkpoints. Only a fully completed scan without root, file, or source errors clears an older connection error; running/failed/error-bearing scans retain it. Already-running scans with an existing error are handled conservatively and require a subsequent clean scan to clear that error.
+- New database regressions reproduced the findings before the fixes. Focused setup/store/importer/recovery tests pass (63 tests); the full suite passes (26 files, 229 tests). Lint, production build, and diff checks pass. No migration was applied remotely and no source was pushed.
