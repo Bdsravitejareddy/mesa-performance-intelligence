@@ -8,15 +8,9 @@ export type RetrievedReference = { key: string; pageId: string; materialId: stri
 export async function retrieveRelevantReferences(supabase: SupabaseClient, courseId: string, assessmentId: string, query: string): Promise<RetrievedReference[]> {
   const terms = [...new Set((query.toLocaleLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []))].slice(0, 16);
   if (!terms.length) return [];
-  const { data: materials } = await supabase.from("course_materials").select("id, name, version, source_kind, drive_source_id").eq("course_id", courseId).or(`assessment_id.is.null,assessment_id.eq.${assessmentId}`);
-  let materialRows = (materials ?? []) as MaterialRow[];
-  const sourceIds = [...new Set(materialRows.flatMap(m => m.drive_source_id ? [m.drive_source_id] : []))];
-  if (sourceIds.length) {
-    const { data: sources, error } = await supabase.from("drive_sources").select("id, current_material_id, available").in("id", sourceIds);
-    if (error) throw new Error("Current course sources could not be loaded.");
-    const currentIds = new Set((sources ?? []).filter(s => s.available).map(s => s.current_material_id));
-    materialRows = materialRows.filter(m => !m.drive_source_id || currentIds.has(m.id));
-  }
+  const { data: materials, error: materialError } = await supabase.from("current_course_materials").select("id, name, version, source_kind, drive_source_id").eq("course_id", courseId).or(`assessment_id.is.null,assessment_id.eq.${assessmentId}`);
+  if (materialError) throw new Error("Current course materials could not be loaded.");
+  const materialRows = (materials ?? []) as MaterialRow[];
   if (!materialRows.length) return [];
   const byId = new Map(materialRows.map((item) => [item.id, item]));
   const { data: pages } = await supabase.from("material_pages").select("id, material_id, page_number, extracted_text, table_data, has_visuals, visual_notes").in("material_id", materialRows.map((item) => item.id)).textSearch("search_document", terms.join(" OR "), { type: "websearch", config: "simple" }).limit(8);

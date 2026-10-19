@@ -111,7 +111,7 @@ async function failure(c: ImportContext, id: string, code: string) { const { err
 export function isPermanentParseFailure(error:unknown,format:'pdf'|'pptx'):boolean {
  if(!(error instanceof Error))return false;
  return format==='pdf'
-  ? ['InvalidPDFException','PasswordException','FormatError'].includes(error.name)
+  ? ['InvalidPDFException','PasswordException','FormatError'].includes(error.name) || (error.name==='UnknownErrorException' && 'details' in error && typeof error.details==='string' && /^FormatError:/.test(error.details))
   : /zip|central directory|readable slides|invalid|malformed|unclosed|unexpected|corrupt|end of data|encrypted|unsupported compression/i.test(error.message);
 }
 export async function finalizeImport(c: ImportContext, id: string): Promise<{

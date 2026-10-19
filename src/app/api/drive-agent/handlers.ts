@@ -67,13 +67,14 @@ export function machineHandler(operation: Operation) {
                 return jsonResponse(await createImportUpload(context, requireId(body.itemId)));
             if (operation === 'finalize')
                 return jsonResponse(await finalizeImport(context, requireId(body.itemId)));
-            // Commit traversal before recording ancillary error messages. Capacity rejection preserves progress.
-            await store.checkpoint(identity.connectionId, body.scanId as string, body.checkpoint as ScanCheckpoint, body.completedRootIds as string[]);
-            for (const error of (body.errors ?? []) as {
-                message: string;
-                itemId?: string;
-            }[])
-                await store.recordError(identity.connectionId, error.message, error.itemId);
+            const result = await client.rpc('drive_sync_checkpoint_with_errors', {
+                p_connection_id: identity.connectionId,
+                p_scan_id: body.scanId,
+                p_value: body.checkpoint,
+                p_completed_root_ids: body.completedRootIds,
+                p_errors: body.errors ?? [],
+            });
+            if (result.error) throw new Error(result.error.message);
             return jsonResponse({ ok: true });
         }
         catch (error) {

@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { PDFDocument, StandardFonts } from "pdf-lib";
+import { PDFDocument, StandardFonts, PDFName } from "pdf-lib";
 import JSZip from "jszip";
+import { extractPdfPages } from "../documents";
 import { createTestDatabase, owner, course } from "./importer-test-db";
 import { DriveSyncStore } from "./store";
 import type { SourceFile } from "./contracts";
@@ -89,6 +90,59 @@ describe('Drive importer', () => {
     it('counts all non-transient failures for the same source fingerprint',async()=>{
         for(const blob of [new Blob(['%PDF-broken'],{type:'application/pdf'}),new Blob(['bad signature'],{type:'application/pdf'}),new Blob(['%PDF-broken'],{type:'text/plain'})]) {const item=await uploaded(blob);await expect(finalizeImport(context,item.itemId)).rejects.toThrow();}
         expect((await reserveSource(context,source)).decision).toBe('unsupported');
+    });
+
+    it('atomically expires terminal item failures before completing their root',async()=>{
+        const item=await uploaded();const checkpoint={roots:{[source.folderMappingId]:{pendingFolders:[],pendingFiles:[],visitedFolderIds:[],failed:false,completed:true}}};
+        const result=await context.client.rpc('drive_sync_checkpoint_with_errors',{p_connection_id:context.connectionId,p_scan_id:context.scanId,p_value:checkpoint,p_completed_root_ids:[source.folderMappingId],p_errors:[{itemId:item.itemId,driveFileId:source.driveFileId,message:'Source permission was lost.'}]});
+        expect(result.error).toBeNull();
+        expect((await db.query<{status:string}>('select status from drive_import_items where id=$1',[item.itemId])).rows).toEqual([{status:'expired'}]);
+        expect((await db.query<{status:string;checkpoint:unknown}>('select status,checkpoint from drive_scans where id=$1',[context.scanId])).rows).toEqual([{status:'complete',checkpoint}]);
+    });
+    it('rolls back item expiry and traversal progress together if checkpoint commit is interrupted',async()=>{
+        const item=await uploaded();const before=(await db.query<{checkpoint:unknown}>('select checkpoint from drive_scans where id=$1',[context.scanId])).rows[0].checkpoint;
+        await db.exec("reset role; create function public.interrupt_checkpoint() returns trigger language plpgsql as $$ begin raise exception 'simulated checkpoint interruption'; end $$; create trigger interrupt_checkpoint before update on public.drive_scans for each row execute function public.interrupt_checkpoint(); set role service_role;");
+        const result=await context.client.rpc('drive_sync_checkpoint_with_errors',{p_connection_id:context.connectionId,p_scan_id:context.scanId,p_value:{roots:{[source.folderMappingId]:{pendingFolders:[],pendingFiles:[],visitedFolderIds:[],failed:false,completed:true}}},p_completed_root_ids:[source.folderMappingId],p_errors:[{itemId:item.itemId,message:'terminal failure'}]});
+        expect(result.error?.message).toContain('simulated checkpoint interruption');
+        expect((await db.query<{status:string;last_error:string|null}>('select status,last_error from drive_import_items where id=$1',[item.itemId])).rows).toEqual([{status:'leased',last_error:null}]);
+        expect((await db.query<{checkpoint:unknown}>('select checkpoint from drive_scans where id=$1',[context.scanId])).rows[0].checkpoint).toEqual(before);
+    });
+    it('rejects oversized progress and foreign-scan item errors without expiring leases',async()=>{
+        const item=await uploaded();const args={p_connection_id:context.connectionId,p_scan_id:context.scanId,p_value:{roots:{}},p_completed_root_ids:[],p_errors:[{itemId:item.itemId,message:'terminal'}]};
+        const oversized=await context.client.rpc('drive_sync_checkpoint_with_errors',{...args,p_value:{roots:{},padding:'x'.repeat(270000)}});expect(oversized.error?.message).toContain('Checkpoint capacity');
+        expect((await db.query<{status:string}>('select status from drive_import_items where id=$1',[item.itemId])).rows).toEqual([{status:'leased'}]);
+        await db.query("update drive_import_items set status='expired' where id=$1",[item.itemId]);
+        await context.store.checkpoint(context.connectionId,context.scanId!,{roots:{[source.folderMappingId]:{pendingFolders:[],pendingFiles:[],visitedFolderIds:[],failed:true,completed:false}}},[]);
+        const next=await context.store.startScan(context.connectionId);const foreign=await context.client.rpc('drive_sync_checkpoint_with_errors',{...args,p_scan_id:next.scanId});expect(foreign.error?.message).toContain('scan');
+        expect((await db.query<{last_error:string|null}>('select last_error from drive_import_items where id=$1',[item.itemId])).rows).toEqual([{last_error:null}]);
+    });
+
+    it('records real worker-wrapped PDF FormatError failures while preserving unknown infrastructure retries',async()=>{
+        const malformed=await PDFDocument.create();malformed.addPage();malformed.catalog.Pages().set(PDFName.of('Kids'),PDFName.of('CorruptKids'));
+        const bytes=new Uint8Array(await malformed.save({addDefaultPage:false}));
+        const reason=await extractPdfPages(bytes.slice()).then(()=>null,(error:unknown)=>error);
+        expect(reason).toMatchObject({name:'UnknownErrorException',details:expect.stringMatching(/^FormatError:/)});
+        const item=await uploaded(new Blob([bytes],{type:'application/pdf'}));
+        await expect(finalizeImport(context,item.itemId)).rejects.toMatchObject({status:422});
+        expect((await db.query<{parse_failure_count:number}>('select parse_failure_count from drive_sources')).rows).toEqual([{parse_failure_count:1}]);
+        for(const details of [undefined,'Error: worker initialization failed','NetworkError: unavailable','Error: FormatError initializing worker']) {
+            const infrastructure=Object.assign(new Error('Worker failed'),{name:'UnknownErrorException',details});
+            expect(isPermanentParseFailure(infrastructure,'pdf')).toBe(false);
+        }
+    });
+
+    it('filters imported history in the database while preserving manual material and historical lookups',async()=>{
+        const item=await uploaded(),published=await finalizeImport(context,item.itemId);
+        const src=(await db.query<{id:string}>('select id from drive_sources')).rows[0].id;
+        await db.query("insert into course_materials(user_id,course_id,name,storage_path,mime_type,file_size,version,drive_source_id,drive_source_version) select $1,$2,'Historical','history-'||n,'application/pdf',10,n,$3,n from generate_series(2,1002) n",[owner,course,src]);
+        const manual=(await db.query<{id:string}>("insert into course_materials(user_id,course_id,name,storage_path,mime_type,file_size) values($1,$2,'Manual','manual','application/pdf',10) returning id",[owner,course])).rows[0].id;
+        const visible=await db.query<{id:string}>('select id from current_course_materials order by name');
+        expect(visible.rows).toEqual([{id:manual},{id:published.materialId}]);
+        expect((await db.query('select id from course_materials where drive_source_version=1002')).rows).toHaveLength(1);
+        await db.query('update drive_sources set available=false where id=$1',[src]);expect((await db.query<{id:string}>('select id from current_course_materials')).rows).toEqual([{id:manual}]);
+        expect((await db.query("select has_table_privilege('authenticated','public.current_course_materials','select') as can_read,has_table_privilege('authenticated','public.current_course_materials','update') as can_write,has_table_privilege('anon','public.current_course_materials','select') as anon_read")).rows).toEqual([{can_read:true,can_write:false,anon_read:false}]);
+        await db.exec("reset role; set role authenticated; select set_config('request.jwt.claim.sub','33333333-3333-4333-8333-333333333333',false)");
+        expect((await db.query('select id from current_course_materials')).rows).toEqual([]);
     });
 
 });
