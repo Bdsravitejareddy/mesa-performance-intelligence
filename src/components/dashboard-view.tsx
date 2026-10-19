@@ -32,6 +32,8 @@ export function DashboardView({ data }: { data: DashboardSnapshot }) {
         <Link href="/courses" className="button button-primary"><Plus size={16} /> Add course material</Link>
       </div>
 
+      {!data.demoMode && data.courses.length === 0 && data.assessmentCount === 0 && data.marks.length === 0 && <div className="info-callout" role="status"><span><strong>No Mesa records have been imported.</strong> LMS sync is not connected. Add a course and its materials to start recording assessment evidence. <Link href="/courses" className="text-link">Open courses <ArrowRight size={14} /></Link></span></div>}
+
       <section className="metric-grid" aria-label="Performance summary">
         <MetricCard label="Average assessment mark" value={average === null ? "—" : formatOfficialMark(average)} meta={data.marks.length ? `${data.marks.length} marked submissions · unweighted` : "No marks recorded"} icon={<TrendingUp size={17} />} accent="mint" />
         <MetricCard label="Courses in view" value={String(data.courses.length)} meta="Course-linked evidence" icon={<BookOpenCheck size={17} />} accent="blue" />

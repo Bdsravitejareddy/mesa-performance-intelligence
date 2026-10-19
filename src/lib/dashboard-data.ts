@@ -33,7 +33,7 @@ const demoSnapshot: DashboardSnapshot = {
 export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
   if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") return demoSnapshot;
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) {
-    return { ...demoSnapshot, demoMode: false, courses: [], marks: [], markSeries: [], mastery: [], assessmentCount: 0, topicCount: 0 };
+    throw new Error("Supabase is not configured. Connect the private workspace before loading dashboard records.");
   }
 
   const supabase = await createClient();

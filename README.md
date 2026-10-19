@@ -42,6 +42,8 @@ Required for a private workspace:
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 - `APP_ALLOWED_EMAIL`
 
+If the deployed site has no data, first check these variables in the Vercel environment used by its production deployment and redeploy after saving them. Applying the Supabase migration creates the schema, not student records. Course materials and official assessment records must then be added or imported. A Chrome LMS session is not available to Vercel, and automated LMS sync is not connected. Do not enable demo mode to represent real student results.
+
 AI rubric drafting and evaluation are disabled by default. The optional `AI_API_BASE_URL`, `AI_API_KEY`, `AI_MODEL`, and `AI_DATA_PROCESSING_APPROVED` settings are server-only. The provider code sends at most eight retrieved page/slide excerpts plus the selected submission and official feedback; it never sends an entire course document. Keep approval false unless you have explicitly approved that data flow and reviewed the provider's data handling. Without all four settings, no AI call is made.
 
 `CRON_SECRET` is reserved for an authorized LMS integration. Daily sync is disabled because no permitted stable LMS interface or persistent authentication contract has been verified.

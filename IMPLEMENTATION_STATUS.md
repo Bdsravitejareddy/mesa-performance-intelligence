@@ -1,6 +1,6 @@
 # Implementation status
 
-**Status:** A reconstructed MVP is pushed to a private GitHub repository and passes tests, lint, production build, and dependency audit. It is not the recovered original Mesa project. The user will deploy it manually on Vercel.
+**Status:** A reconstructed MVP is pushed to a private GitHub repository. The user deployed it at `https://mesa-performance-intelligence.vercel.app/`. A live check confirmed the deployment responds successfully but has missing Supabase configuration and no imported Mesa records. The dashboard now explicitly explains missing setup instead of returning zero metrics for a missing database connection.
 
 ## Workspace and original brief recovery
 
@@ -44,7 +44,7 @@
 
 ## Validation run
 
-- `npm test`: 6 test files, 15 tests passing. Coverage includes arithmetic and 100-point mark validation, PDF/PPTX extraction references, database RLS isolation, local quality checks, provider privacy gating, and strict AI response contracts.
+- `npm test`: 7 test files, 17 tests passing. Coverage includes missing-configuration handling, explicit demo isolation, arithmetic and 100-point mark validation, PDF/PPTX extraction references, database RLS isolation, local quality checks, provider privacy gating, and strict AI response contracts.
 - `npm run lint`: passing.
 - `npm run build`: passing with Next.js production build.
 - `npm audit --audit-level=high`: zero vulnerabilities across production and development dependencies.
@@ -53,5 +53,5 @@
 ## GitHub/Vercel release
 
 - Source is pushed to the private repository `https://github.com/Bdsravitejareddy/mesa-performance-intelligence` on branch `work/mesa-performance-dashboard`, as requested by the user. Initial code commit: `5ab36bb` (`Build Mesa performance intelligence MVP`). The earlier account's repository remains available through the local `previous-account` remote; `origin` now targets Bdsravitejareddy.
-- No Vercel deployment has been created; the user will connect the private repository and deploy manually.
+- The user deployed `https://mesa-performance-intelligence.vercel.app/`. Configure the production Supabase variables, apply the migration to the user-designated project, configure owner sign-in, and import records before expecting actual data. The only visible Supabase project is “Ravi Project”; its designation for Mesa is awaiting the user's answer, and no remote schema has been modified.
 - No credentials, LMS data, `.env.local`, `node_modules`, build output, or generated PDF worker are committed.
