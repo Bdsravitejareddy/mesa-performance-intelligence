@@ -16,7 +16,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     const title = body.label === undefined ? current.label : label(body.label);
     const folders = body.mappings === undefined ? current.mappings.map(({ driveFolderId, mode, courseId, rootCourseTitle }) => ({ driveFolderId, mode, courseId, rootCourseTitle })) : await mappings(body.mappings);
     const enabled = body.enabled === undefined ? current.enabled : body.enabled as boolean;
-    const connection = await new DriveSyncStore(createAdminClient()).configure(userId, id, folders, title, enabled);
+    const connection = await new DriveSyncStore(createAdminClient()).configure(userId, id, folders, title, enabled, current.mappingRevision);
     return jsonResponse({ connection: safeConnection(connection) });
-  } catch (error) { return jsonError(error); }
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "40001") {
+      return jsonError(new HttpError(409, "Drive connection changed. Reload it and try again."));
+    }
+    return jsonError(error);
+  }
 }

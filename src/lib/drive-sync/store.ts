@@ -10,15 +10,18 @@ export class DriveSyncStore {
 
   private async call<T>(name: string, args: Record<string, unknown>): Promise<T> {
     const { data, error } = await this.client.rpc(`drive_sync_${name}`, args);
-    if (error) throw new Error(error.message);
+    if (error) throw Object.assign(new Error(error.message), { code: error.code });
     return data as T;
   }
 
-  configure(userId: string, connectionId: string | null, mappings: FolderMappingInput[], label = "", enabled = true): Promise<DriveConnection> {
-    return this.call("configure", { p_user_id: userId, p_connection_id: connectionId, p_mappings: mappings, p_label: label, p_enabled: enabled });
+  configure(userId: string, connectionId: string | null, mappings: FolderMappingInput[], label = "", enabled = true, expectedMappingRevision?: number): Promise<DriveConnection> {
+    const args = { p_user_id: userId, p_connection_id: connectionId, p_mappings: mappings, p_label: label, p_enabled: enabled };
+    return expectedMappingRevision === undefined
+      ? this.call("configure", args)
+      : this.call("configure_if_current", { ...args, p_expected_mapping_revision: expectedMappingRevision });
   }
-  checkPairingBudget(keyHash: string): Promise<boolean> {
-    return this.call("attempt_pairing", { p_key_hash: keyHash });
+  checkPairingBudget(callerHash: string, codeHash: string): Promise<boolean> {
+    return this.call("attempt_pairing_scoped", { p_caller_hash: callerHash, p_code_hash: codeHash });
   }
   issuePairing(connectionId: string, hash: string, expiresAt: string): Promise<void> {
     return this.call("issue_pairing", { p_connection_id: connectionId, p_hash: hash, p_expires_at: expiresAt });

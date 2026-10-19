@@ -79,7 +79,27 @@ describe("signed-in Drive connection management", () => {
   it("uses the atomic configuration update to pause and revoke", async () => {
     const response = await PATCH(req({ enabled: false }, "PATCH"), ctx);
     expect(response.status).toBe(200);
-    expect(mocks.configure).toHaveBeenCalledWith("actor", id, expect.any(Array), "Personal", false);
+    expect(mocks.configure).toHaveBeenCalledWith("actor", id, expect.any(Array), "Personal", false, 1);
+  });
+  it("returns 409 for a concurrent stale patch without restoring old mappings or enabled state", async () => {
+    let saved = { label: "Personal", enabled: true, mappingRevision: 1, mappings: [mapping] };
+    const replacement = { ...mapping, driveFolderId: "replacement_folder_123" };
+    let releaseRename!: () => void;
+    const pauseSaved = new Promise<void>((resolve) => { releaseRename = resolve; });
+    mocks.configure.mockImplementation(async (_actor, _id, folders, title, enabled, revision) => {
+      if (title === "Stale rename") await pauseSaved;
+      if (revision !== undefined && revision !== saved.mappingRevision) throw Object.assign(new Error("Connection changed"), { code: "40001" });
+      saved = { label: title, enabled, mappingRevision: saved.mappingRevision + 1, mappings: folders };
+      releaseRename();
+      return { id, userId: "owner", ...saved };
+    });
+    const responses = await Promise.all([
+      PATCH(req({ enabled: false, mappings: [replacement] }, "PATCH"), ctx),
+      PATCH(req({ label: "Stale rename" }, "PATCH"), ctx),
+    ]);
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+    expect(await responses.find((response) => response.status === 409)!.json()).toEqual({ error: "Drive connection changed. Reload it and try again." });
+    expect(saved).toMatchObject({ enabled: false, label: "Personal", mappings: [{ driveFolderId: replacement.driveFolderId }], mappingRevision: 2 });
   });
   it("requires JSON objects, rejects malformed and oversized bodies", async () => {
     for (const body of ["{", JSON.stringify(null), JSON.stringify({ pad: "a".repeat(512 * 1024) })]) {

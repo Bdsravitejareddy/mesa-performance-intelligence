@@ -2,8 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { consumePairing, hashConnectorSecret, issuePairing, requireConnector, requireWorkspaceMember } from "./auth";
 
 const mocks = vi.hoisted(() => ({
-  getUser: vi.fn(), rpc: vi.fn(), authenticate: vi.fn(), consume: vi.fn(), issue: vi.fn(), budget: vi.fn(),
+  getUser: vi.fn(), rpc: vi.fn(), authenticate: vi.fn(), consume: vi.fn(), issue: vi.fn(), budget: vi.fn(), headers: vi.fn(),
 }));
+vi.mock("next/headers", () => ({ headers: mocks.headers }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth: { getUser: mocks.getUser }, rpc: mocks.rpc }) }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
 vi.mock("./store", () => ({ DriveSyncStore: class {
@@ -13,6 +14,8 @@ vi.mock("./store", () => ({ DriveSyncStore: class {
 describe("Drive authentication boundary", () => {
   beforeEach(() => {
     vi.stubEnv("NEXT_PUBLIC_DEMO_MODE", "false");
+    vi.stubEnv("VERCEL", "1");
+    mocks.headers.mockResolvedValue(new Headers({ "x-vercel-forwarded-for": "192.0.2.1" }));
     vi.stubEnv("APP_ALLOWED_EMAILS", "first@example.com,second@example.com");
     mocks.getUser.mockResolvedValue({ data: { user: { id: "actor", email: "first@example.com", email_confirmed_at: "2026-01-01" } }, error: null });
     mocks.rpc.mockResolvedValue({ data: true, error: null });
@@ -69,6 +72,32 @@ describe("Drive authentication boundary", () => {
     expect(Buffer.from(result.token, "base64url")).toHaveLength(32);
     expect(Object.keys(result).sort()).toEqual(["connectionId", "token"]);
     await expect(consumePairing(code)).rejects.toMatchObject({ status: 401 });
+  });
+  it("passes only domain-separated hashes of the trusted caller and code to the durable budget", async () => {
+    mocks.consume.mockResolvedValue({ connectionId: "connection", userId: "owner" });
+    const code = "c".repeat(43);
+    await consumePairing(code);
+    expect(mocks.budget).toHaveBeenCalledWith(hashConnectorSecret("drive-agent-pair-caller:192.0.2.1"), hashConnectorSecret(`drive-agent-pair-code:${code}`));
+    expect(JSON.stringify(mocks.budget.mock.calls)).not.toContain("192.0.2.1");
+  });
+  it.each(["", "192.0.2.1, 192.0.2.2", "untrusted"])("rejects a missing or malformed Vercel client address: %s", async (address) => {
+    mocks.headers.mockResolvedValue(new Headers({ "x-vercel-forwarded-for": address, "x-forwarded-for": "192.0.2.9", "x-real-ip": "192.0.2.9" }));
+    await expect(consumePairing("a".repeat(43))).rejects.toMatchObject({ status: 503 });
+    expect(mocks.budget).not.toHaveBeenCalled();
+  });
+  it("does not trust caller-supplied Vercel headers outside a Vercel runtime", async () => {
+    vi.stubEnv("VERCEL", "");
+    await expect(consumePairing("a".repeat(43))).rejects.toMatchObject({ status: 503 });
+    expect(mocks.budget).not.toHaveBeenCalled();
+  });
+  it("canonicalizes equivalent IPv6 addresses before hashing", async () => {
+    mocks.consume.mockResolvedValue({ connectionId: "connection" });
+    for (const address of ["2001:0db8:0:0:0:0:0:1", "2001:db8::1"]) {
+      mocks.headers.mockResolvedValue(new Headers({ "x-vercel-forwarded-for": address }));
+      await consumePairing("a".repeat(43));
+    }
+    expect(mocks.budget.mock.calls[0][0]).toBe(hashConnectorSecret("drive-agent-pair-caller:2001:db8::1"));
+    expect(mocks.budget.mock.calls[0][0]).toBe(mocks.budget.mock.calls[1][0]);
   });
   it("enforces persistent pairing budgets even for invalid codes", async () => {
     mocks.budget.mockResolvedValue(false);

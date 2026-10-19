@@ -1,5 +1,7 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
+import { isIP } from "node:net";
+import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAllowedEmail, isDemoMode } from "@/lib/supabase/config";
@@ -42,8 +44,16 @@ export async function issuePairing(connectionId: string): Promise<{ pairingCode:
 
 export async function consumePairing(code: string): Promise<{ token: string; connectionId: string }> {
   const store = new DriveSyncStore(createAdminClient());
-  // A durable global budget cannot be bypassed with random guesses or spoofed proxy headers.
-  if (!await store.checkPairingBudget(hashConnectorSecret("drive-agent-pair-global"))) {
+  // Trust the platform-owned address only inside its runtime, never generic proxy headers.
+  // https://vercel.com/docs/headers/request-headers#x-vercel-forwarded-for
+  const address = process.env.VERCEL === "1" ? (await headers()).get("x-vercel-forwarded-for")?.trim() : undefined;
+  const family = address ? isIP(address) : 0;
+  if (!address || !family) throw new HttpError(503, "Pairing requires a trusted client address.");
+  const canonicalAddress = family === 6 ? new URL(`http://[${address}]/`).hostname.slice(1, -1) : address;
+  if (!await store.checkPairingBudget(
+    hashConnectorSecret(`drive-agent-pair-caller:${canonicalAddress}`),
+    hashConnectorSecret(`drive-agent-pair-code:${code}`),
+  )) {
     throw new HttpError(429, "Too many pairing attempts. Try again in 15 minutes.");
   }
   if (!/^[A-Za-z0-9_-]{43}$/.test(code)) throw new HttpError(401, "Invalid or expired pairing code.");

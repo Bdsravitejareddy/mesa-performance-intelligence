@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -56,6 +57,48 @@ beforeEach(async () => {
 afterEach(async () => { await db.close(); });
 
 describe("transactional Drive sync state", () => {
+
+  it("isolates persistent caller and code pairing budgets and does not charge blocked callers globally", async () => {
+    const hash = (value: string) => createHash("sha256").update(value).digest("hex");
+    const attempt = (caller: string, code: string) => rpc("attempt_pairing_scoped", [hash(caller), hash(code)]);
+    for (let i = 0; i < 10; i++) expect(await attempt("abuser", `guess-${i}`)).toBe(true);
+    for (let i = 0; i < 20; i++) expect(await attempt("abuser", `blocked-${i}`)).toBe(false);
+    expect(await attempt("first-member", "valid-first")).toBe(true);
+    expect(await attempt("second-member", "valid-second")).toBe(true);
+    for (let i = 0; i < 10; i++) expect(await attempt(`distributed-${i}`, "same-code")).toBe(true);
+    expect(await attempt("another-caller", "same-code")).toBe(false);
+    expect(await attempt("another-caller", "fresh-code")).toBe(true);
+    const global = hash("drive-agent-pair-global");
+    expect((await db.query<{attempt_count:number}>("select attempt_count from private.drive_pairing_attempts where key_hash=$1", [global])).rows[0].attempt_count).toBe(23);
+  });
+
+  it("enforces a durable high global pairing ceiling across isolated callers and resets after 15 minutes", async () => {
+    const hash = (value: string) => createHash("sha256").update(value).digest("hex");
+    const global = hash("drive-agent-pair-global");
+    // Seed close to the ceiling to verify the boundary without 1000 round trips.
+    await db.query("insert into private.drive_pairing_attempts(key_hash,attempt_count) values($1,999)", [global]);
+    expect(await rpc("attempt_pairing_scoped", [hash("caller-a"), hash("code-a")])).toBe(true);
+    expect(await rpc("attempt_pairing_scoped", [hash("caller-b"), hash("code-b")])).toBe(false);
+    expect(await rpc("attempt_pairing_scoped", [hash("caller-c"), hash("code-c")])).toBe(false);
+    await db.exec("update private.drive_pairing_attempts set window_started_at=now()-interval '16 minutes'");
+    expect(await rpc("attempt_pairing_scoped", [hash("caller-d"), hash("code-d")])).toBe(true);
+  });
+
+  it("checks the expected revision atomically before concurrent configuration updates", async () => {
+    const original = [{ driveFolderId:"root", mode:"course", courseId:course, rootCourseTitle:"Finance" }];
+    const connection = await rpc<{id:string;mappingRevision:number}>("configure", [owner,null,original]);
+    const revised = [{ ...original[0], driveFolderId:"replacement" }];
+    const outcomes = await Promise.allSettled([
+      rpc("configure_if_current", [owner, connection.id, revised, "Paused", false, connection.mappingRevision]),
+      rpc("configure_if_current", [member, connection.id, original, "Stale rename", true, connection.mappingRevision]),
+    ]);
+    expect(outcomes.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    const stale = outcomes.find((result) => result.status === "rejected") as PromiseRejectedResult;
+    expect(stale.reason).toMatchObject({ code: "40001" });
+    expect((await db.query("select label,enabled,mapping_revision from public.drive_connections where id=$1", [connection.id])).rows).toEqual([{label:"Paused",enabled:false,mapping_revision:2}]);
+    expect((await db.query("select drive_folder_id from public.drive_folder_mappings where connection_id=$1 and enabled", [connection.id])).rows).toEqual([{drive_folder_id:"replacement"}]);
+    await expect(rpc("configure_if_current", [owner, connection.id, original, "No revision", true, null])).rejects.toThrow();
+  });
 
   it("keeps cross-scan leases exclusive while allowing same-scan upload resumption", async () => {
     const connection = await configure(), run = await scan(connection.id);
