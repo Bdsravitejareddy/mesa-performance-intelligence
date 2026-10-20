@@ -249,7 +249,15 @@ function driveProcessFiles(root) {
 function driveTransfer(file, itemId) {
   var binarySource = file.mimeType === "application/pdf" || file.mimeType === "application/vnd.openxmlformats-officedocument.presentationml.presentation";
   if (binarySource && typeof file.size === "number" && file.size > DRIVE_MAX_BYTES) throw driveSizeError();
-  var destination = driveApi("upload", { itemId: itemId });
+  var destination;
+  try { destination = driveApi("upload", { itemId: itemId }); }
+  catch (error) {
+    // A prior invocation may have uploaded the immutable object before stopping.
+    // Finalization validates its lease and content; expired leases remain retryable.
+    if (error.httpStatus !== 409) throw error;
+    driveFinalize(itemId);
+    return;
+  }
   if (destination.storageOrigin !== DRIVE_AGENT_CONFIG.storageOrigin || !driveStorageUrl(destination.signedUrl)) throw driveError("Unsafe upload destination", false);
   var contentType = file.mimeType, parameters = {}, suffix = "files/" + encodeURIComponent(file.driveFileId);
   if (contentType === "application/vnd.google-apps.document") { contentType = "application/pdf"; suffix += "/export"; parameters.mimeType = contentType; }
@@ -261,6 +269,10 @@ function driveTransfer(file, itemId) {
   var bytes = download.getBlob().getBytes();
   if (bytes.length > DRIVE_MAX_BYTES) throw driveSizeError();
   driveFetch(destination.signedUrl, { method: "put", contentType: contentType, payload: bytes }, true);
+  driveFinalize(itemId);
+}
+
+function driveFinalize(itemId) {
   var final = driveApi("finalize", { itemId: itemId });
   if (!driveString(final.materialId) || typeof final.version !== "number" || !driveString(final.status)) throw driveError("Invalid finalize response", true);
 }

@@ -125,9 +125,19 @@ describe("Drive Apps Script runtime",()=>{
     expect(h.triggers.filter(t=>t.handler==="resumeDrive")).toHaveLength(0);
   });
 
+  it("finalizes an existing upload without downloading or overwriting it",async()=>{
+    const h=await harness({installed:true,pages:{"root:":{files:[pdf("a")]}},hook:r=>r.url.endsWith("/upload") ? {status:409,body:{error:"File already uploaded; finalize this import."}}:undefined});
+    vm.runInContext("syncDrive()",h.context);
+    expect(h.finalized).toEqual(["item-a"]);
+    expect(h.uploads).toHaveLength(0);
+    expect(h.requests.some(r=>r.url.includes("alt=media") || r.url.includes("/export"))).toBe(false);
+    expect(h.state?.roots.mapping.completed).toBe(true);
+    expect(h.checkpoints.some(c=>(c as {errors?:unknown[]}).errors?.length)).toBe(false);
+  });
+
   it.each(["upload","finalize"])("keeps a file pending when its %s lease expires",async endpoint=>{
     let expired=true;
-    const h=await harness({installed:true,pages:{"root:":{files:[pdf("a"),pdf("b")]}},hook:r=>r.url.endsWith(`/${endpoint}`) && JSON.parse(String(r.payload)).itemId==="item-a" && expired ? {status:409,body:{error:"Import lease expired"}}:undefined});
+    const h=await harness({installed:true,pages:{"root:":{files:[pdf("a"),pdf("b")]}},hook:r=>(r.url.endsWith(`/${endpoint}`) || endpoint==="upload" && r.url.endsWith("/finalize")) && JSON.parse(String(r.payload)).itemId==="item-a" && expired ? {status:409,body:{error:"Import lease expired"}}:undefined});
     expect(()=>vm.runInContext("syncDrive()",h.context)).toThrow();
     expect(h.state?.roots.mapping.pendingFiles?.map(f=>f.driveFileId)).toEqual(["a","b"]);
     expect(h.checkpoints.some(c=>(c as {errors?:unknown[]}).errors?.length)).toBe(false);

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { PDFDocument, StandardFonts, PDFName } from "pdf-lib";
 import JSZip from "jszip";
@@ -33,7 +33,7 @@ function client(): SupabaseClient {
             };
             return query;
         },
-        storage: { from: () => ({ createSignedUploadUrl: async (path: string) => ({ data: { signedUrl: `https://storage.example/storage/v1/object/upload/sign/course-files/${path}?token=test` }, error: null }), download: async (path: string) => ({ data: objects.get(path) ?? null, error: null }) }) },
+        storage: { from: () => ({ exists: async (path: string) => objects.has(path) ? { data: true, error: null } : { data: false, error: { status: 400, message: 'Object not found' } }, createSignedUploadUrl: async (path: string) => objects.has(path) ? { data: null, error: { status: 409, message: 'Object already exists' } } : ({ data: { signedUrl: `https://storage.example/storage/v1/object/upload/sign/course-files/${path}?token=test` }, error: null }), download: async (path: string) => ({ data: objects.get(path) ?? null, error: null }) }) },
     } as unknown as SupabaseClient;
 }
 async function pdf(empty = false) { const p = await PDFDocument.create(); const page = p.addPage(); if (!empty)
@@ -41,13 +41,30 @@ async function pdf(empty = false) { const p = await PDFDocument.create(); const 
 async function uploaded(file?: Blob) { const decision = await reserveSource(context, source); if (decision.decision !== 'upload')
     throw Error('Expected upload'); objects.set(decision.storagePath, file ?? await pdf()); return decision; }
 beforeEach(async () => { db = await createTestDatabase(); objects.clear(); process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://storage.example'; const c = client(), store = new DriveSyncStore(c); const connection = await store.configure(owner, null, [{ driveFolderId: 'root', mode: 'course', courseId: course, rootCourseTitle: 'Finance' }]); const scan = await store.startScan(connection.id); context = { connectionId: connection.id, userId: owner, scanId: scan.scanId, client: c, store }; source = { driveFileId: 'file', name: 'notes.pdf', mimeType: 'application/pdf', parentId: 'root', sourceUrl: 'https://drive.google.com/file/d/file/view', fingerprint: 'v1', folderMappingId: scan.mappings[0].id, courseFolderId: 'root', courseFolderTitle: 'Finance' }; });
-afterEach(async () => { await db.close(); });
+afterEach(async () => { vi.restoreAllMocks(); await db.close(); });
 describe('Drive importer', () => {
     it('publishes real parsed PDF pages atomically, resumes finalize and skips unchanged files', async () => { const item = await uploaded(); const result = await finalizeImport(context, item.itemId); expect(result).toMatchObject({ version: 1, status: 'complete' }); objects.clear(); expect(await finalizeImport(context, item.itemId)).toEqual(result); expect(await reserveSource(context, source)).toEqual({ decision: 'unchanged' }); const rows = await db.query<{
         extracted_text: string;
     }>('select extracted_text from material_pages'); expect(rows.rows[0].extracted_text).toBe('Cash flows'); source.fingerprint = 'v2'; const next = await uploaded(); expect((await finalizeImport(context, next.itemId)).version).toBe(2); expect((await db.query('select id from course_materials')).rows).toHaveLength(2); });
     it('marks a text-empty PDF needs_visual_review including idempotent retries', async () => { const i = await uploaded(await pdf(true)); const result = await finalizeImport(context, i.itemId); expect(result.status).toBe('needs_visual_review'); expect((await finalizeImport(context, i.itemId)).status).toBe('needs_visual_review'); });
-    it('issues a direct private signed URL and accepts 5 MB bytes without a JSON upload body', async () => { const base = new Uint8Array(await (await pdf()).arrayBuffer()); const large = new Uint8Array(5 * 1024 * 1024); large.set(base); const i = await uploaded(new Blob([large], { type: 'application/pdf' })); expect(await createImportUpload(context, i.itemId)).toEqual({ signedUrl: `https://storage.example/storage/v1/object/upload/sign/course-files/${i.storagePath}?token=test`, storageOrigin: 'https://storage.example' }); expect((await finalizeImport(context, i.itemId)).status).toBe('complete'); });
+    it('issues a direct private signed URL and accepts 5 MB bytes without a JSON upload body', async () => { const base = new Uint8Array(await (await pdf()).arrayBuffer()); const large = new Uint8Array(5 * 1024 * 1024); large.set(base); const i = await reserveSource(context, source); if (i.decision !== 'upload') throw Error('Expected upload'); expect(await createImportUpload(context, i.itemId)).toEqual({ signedUrl: `https://storage.example/storage/v1/object/upload/sign/course-files/${i.storagePath}?token=test`, storageOrigin: 'https://storage.example' }); objects.set(i.storagePath, new Blob([large], { type: 'application/pdf' })); expect((await finalizeImport(context, i.itemId)).status).toBe('complete'); });
+    it('directs an existing uploaded object to finalize without replacing it', async () => {
+        const i = await uploaded();
+        await expect(createImportUpload(context, i.itemId)).rejects.toMatchObject({status:409,message:'File already uploaded; finalize this import.'});
+        const result = await finalizeImport(context, i.itemId);
+        expect(result).toMatchObject({version:1,status:'complete'});
+        expect(await finalizeImport(context, i.itemId)).toEqual(result);
+        expect((await db.query('select extracted_text from material_pages')).rows).toEqual([{extracted_text:'Cash flows'}]);
+        expect((await db.query('select id from course_materials')).rows).toHaveLength(1);
+    });
+    it.each(['returned','thrown'])('does not presign when the object probe has an unexpected %s error', async kind => {
+        const i = await reserveSource(context, source); if (i.decision !== 'upload') throw Error('Expected upload');
+        const presign = vi.fn().mockResolvedValue({data:{signedUrl:`https://storage.example/storage/v1/object/upload/sign/course-files/${i.storagePath}?token=test`},error:null});
+        const bucket = {exists:async()=>{if(kind==='thrown')throw new Error('Storage unavailable');return {data:false,error:{status:503,message:'Storage unavailable'}};},createSignedUploadUrl:presign};
+        vi.spyOn(context.client.storage,'from').mockReturnValue(bucket as unknown as ReturnType<typeof context.client.storage.from>);
+        await expect(createImportUpload(context,i.itemId)).rejects.toMatchObject({status:503});
+        expect(presign).not.toHaveBeenCalled();
+    });
     it.each(['size', 'mime', 'signature', 'extension', 'path', 'limit'])('rejects mismatched %s without publishing', async (kind) => { if (kind === 'size')
         source.size = 10; if (kind === 'extension')
         source.name = 'notes.pptx'; const i = await uploaded(kind === 'mime' ? new Blob(['%PDF-xxx'], { type: 'text/html' }) : kind === 'signature' ? new Blob(['bad'], { type: 'application/pdf' }) : kind === 'limit' ? new Blob([new Uint8Array(20 * 1024 * 1024 + 1)], { type: 'application/pdf' }) : undefined); if (kind === 'path')

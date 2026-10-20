@@ -92,7 +92,15 @@ export async function createImportUpload(c: ImportContext, id: string): Promise<
     const expected = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? '');
     if (expected.protocol !== 'https:' || expected.username || expected.password)
         throw new HttpError(503, 'Private storage configuration is unavailable.');
-    const { data, error } = await c.client.storage.from('course-files').createSignedUploadUrl(item.storage_path, { upsert: false });
+    const bucket = c.client.storage.from('course-files');
+    let exists: Awaited<ReturnType<typeof bucket.exists>>;
+    try { exists = await bucket.exists(item.storage_path); }
+    catch { throw new HttpError(503, 'Could not check the private upload.'); }
+    if (exists.error && !(exists.data === false && 'status' in exists.error && (exists.error.status === 400 || exists.error.status === 404)))
+        throw new HttpError(503, 'Could not check the private upload.');
+    if (exists.data)
+        throw new HttpError(409, 'File already uploaded; finalize this import.');
+    const { data, error } = await bucket.createSignedUploadUrl(item.storage_path, { upsert: false });
     if (error || !data)
         throw new HttpError(503, 'Could not reserve a private upload.');
     const signed = new URL(data.signedUrl);
