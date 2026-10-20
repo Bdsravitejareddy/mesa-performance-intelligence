@@ -11,6 +11,7 @@
     "dev": "next dev",
     "prebuild": "node scripts/copy-pdf-worker.mjs",
     "build": "next build",
+    "postbuild": "node scripts/check-server-pdf.mjs",
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run"
