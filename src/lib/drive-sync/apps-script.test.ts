@@ -323,10 +323,22 @@ describe("Drive Apps Script runtime",()=>{
     h.advance(360000);vm.runInContext("resumeDrive()",h.context);expect(h.properties.runtimeDay).toBe("2026-10-20");expect(h.requests.some(r=>r.url.endsWith("/session"))).toBe(true);
   });
 
-  it("refunds the platform reservation after normal completion but keeps it after a paused failure",async()=>{
+  it("accounts for actual elapsed time after a catchable failure",async()=>{
     const completed=await harness({installed:true});vm.runInContext("syncDrive()",completed.context);expect(completed.properties.runtimeMs).toBe("0");
     const paused=await harness({installed:true,hook:r=>r.url.endsWith("/session")?{status:503}:undefined});
-    expect(()=>vm.runInContext("syncDrive()",paused.context)).toThrow();expect(paused.properties.runtimeMs).toBe("360000");
+    expect(()=>vm.runInContext("syncDrive()",paused.context)).toThrow();expect(paused.properties.runtimeMs).toBe("7000");
+  });
+
+  it("can resume after six brief lease waits without exhausting the daily runtime budget",async()=>{
+    let waits=0;
+    const h=await harness({installed:true,pages:{"root:":{files:[pdf("a")]}},hook:r=>r.url.endsWith("/inventory") && waits++<6 ? {status:200,body:{decisions:[{driveFileId:"a",action:"retry_later"}]}}:undefined});
+    for(let run=0;run<6;run++){
+      try { vm.runInContext("resumeDrive()",h.context); } catch { /* saved checkpoint is retried */ }
+      h.advance(60000);
+    }
+    vm.runInContext("resumeDrive()",h.context);
+    expect(h.finalized).toEqual(["item-a"]);
+    expect(h.state?.roots.mapping.completed).toBe(true);
   });
 
   it("preserves a page when source version metadata is missing",async()=>{

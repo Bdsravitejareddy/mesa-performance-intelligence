@@ -134,7 +134,10 @@ function driveRun() {
     failure = driveError(error && error.message === "Checkpoint capacity exceeded; previous state preserved" ? error.message : "Drive sync paused; saved progress will be retried", true);
   } finally {
     if (DRIVE_RUN) {
-      if (!failure) properties.setProperty("runtimeMs", String(Math.min(1800000, used + Math.max(0, Date.now() - start))));
+      // Reaching finally means the elapsed time is known, even for a caught
+      // lease wait or retry. A forced platform termination skips finally and
+      // therefore retains the full six-minute reservation made above.
+      properties.setProperty("runtimeMs", String(Math.min(1800000, used + Math.max(0, Date.now() - start))));
       DRIVE_RUN = null;
     }
     try { if (pending) driveContinue(); } finally { lock.releaseLock(); }
