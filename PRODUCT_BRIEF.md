@@ -121,7 +121,7 @@ The installer uses an expiring, single-use pairing code and a revocable connecto
 
 Import PDF/PPTX and export native Docs/Slides to PDF/PPTX. Preserve the 20 MB stored-file and 10 MB Google-export limits. Other formats remain explicit unsupported inventory. Three non-transient parse failures pause retries until a source version changes or a member retries it. Keep inventory and extraction outcomes separate; do not imply empty/image-only files were understood. Do not infer official rubric criteria, marks, learning objectives, or assessment links from filenames. LMS ingestion and Module I remain separate, preserved requirements.
 
-The local setup/status integration is implemented; production schema/secret release, real folder links, Google consent, real import acceptance, and a later automatic trigger remain pending. Both dashboard logins working does not establish Drive authorisation or live sync. AI processing stays disabled.
+Production schema and server credentials are released, Google consent and pairing are complete, and real PDF/PPTX imports and unattended timed continuations have been observed. The initial collection backfill is in progress; detailed acceptance evidence and outstanding limitations are recorded in `IMPLEMENTATION_STATUS.md`. Dashboard login and Google authorisation remain separate checks. AI processing stays disabled.
 
 ## MVP acceptance criteria recovered from the addendum
 

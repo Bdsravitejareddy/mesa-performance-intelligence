@@ -147,13 +147,13 @@ describe("Drive Apps Script runtime",()=>{
   });
 
   it("caps the daily execution budget and resets it on the next UTC day",async()=>{
-    const h=await harness({installed:true});h.properties.runtimeDay="2026-10-19";h.properties.runtimeMs="2400000";
+    const h=await harness({installed:true});h.properties.runtimeDay="2026-10-19";h.properties.runtimeMs="2700000";
     vm.runInContext("syncDrive()",h.context);expect(h.requests).toHaveLength(0);
     h.setDay("2026-10-20T00:00:00Z");vm.runInContext("syncDrive()",h.context);
     expect(h.requests.some(r=>r.url.endsWith("/session"))).toBe(true);expect(h.properties.runtimeDay).toBe("2026-10-20");
   });
 
-  it("continues a large initial import beyond thirty minutes within its bounded forty-minute allowance",async()=>{
+  it("continues a large initial import beyond thirty minutes within its bounded forty-five-minute allowance",async()=>{
     const h=await harness({installed:true});h.properties.runtimeDay="2026-10-19";h.properties.runtimeMs="1800000";
     vm.runInContext("syncDrive()",h.context);
     expect(h.requests.some(r=>r.url.endsWith("/session"))).toBe(true);
@@ -315,10 +315,10 @@ describe("Drive Apps Script runtime",()=>{
     vm.runInContext("syncDrive()",h.context);expect(h.finalized).toEqual(["item-good"]);expect(h.sleeps).toEqual([]);expect(JSON.stringify(h.checkpoints)).not.toContain("google-secret");
   });
 
-  it("retains worst-case reservations when the platform forcibly terminates six runs",async()=>{
+  it("retains worst-case reservations when the platform forcibly terminates seven runs",async()=>{
     const h=await harness({installed:true});
     vm.runInContext("var blockedCalls = 0; UrlFetchApp.fetch = function() { blockedCalls++; while (true) {} };",h.context);
-    for(let run=1;run<=6;run++){
+    for(let run=1;run<=7;run++){
       // VM timeouts terminate JavaScript without running its catch/finally,
       // matching Apps Script's forced execution limit rather than throwing an
       // ordinary catchable fetch error. A fresh invocation resets global state.
@@ -326,12 +326,12 @@ describe("Drive Apps Script runtime",()=>{
       expect(h.properties.runtimeMs).toBe(String(run*360000));h.advance(360000);
     }
     expect(()=>vm.runInContext("DRIVE_RUN = null; syncDrive()",h.context,{timeout:50})).not.toThrow();
-    expect(vm.runInContext("blockedCalls",h.context)).toBe(6);expect(h.properties.runtimeMs).toBe("2160000");
+    expect(vm.runInContext("blockedCalls",h.context)).toBe(7);expect(h.properties.runtimeMs).toBe("2520000");
   });
 
   it("does not start another fetch when less than one platform execution remains in the daily budget",async()=>{
-    const h=await harness({installed:true});h.properties.runtimeDay="2026-10-19";h.properties.runtimeMs="2100000";
-    vm.runInContext("syncDrive()",h.context);expect(h.requests).toEqual([]);expect(h.properties.runtimeMs).toBe("2100000");expect(h.triggers).toEqual([]);
+    const h=await harness({installed:true});h.properties.runtimeDay="2026-10-19";h.properties.runtimeMs="2400000";
+    vm.runInContext("syncDrive()",h.context);expect(h.requests).toEqual([]);expect(h.properties.runtimeMs).toBe("2400000");expect(h.triggers).toEqual([]);
   });
 
   it("defers during the last six minutes of a day so hard termination cannot spill across days",async()=>{

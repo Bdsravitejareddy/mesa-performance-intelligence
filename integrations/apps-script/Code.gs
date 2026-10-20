@@ -12,7 +12,7 @@ var DRIVE_FOLDER = "application/vnd.google-apps.folder";
 var DRIVE_SHORTCUT = "application/vnd.google-apps.shortcut";
 var DRIVE_MAX_BYTES = 20971520;
 var DRIVE_PLATFORM_MS = 360000;
-var DRIVE_DAILY_MS = 2400000;
+var DRIVE_DAILY_MS = 2700000;
 var DRIVE_RUN = null;
 
 function install() {
