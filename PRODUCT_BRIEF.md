@@ -22,6 +22,8 @@ The conversation identifies these existing capabilities as requirements that mus
 - Resume gap analysis.
 - An objective quality checker.
 
+Daily mark ingestion uses Mesa's official, read-only Nexus MCP service when configured. Only explicit earned-score values are official marks; keep them on the confirmed 0–100 scale with source feedback and provenance. Do not use course-card maximum marks or unpublished gradebook rows as student results. The original A–H details remain unrecovered and are not replaced by this reconstructed connector.
+
 The conversation does not contain the original module boundaries, input/output definitions, UX, scoring rules, acceptance criteria, or architecture for A–H. Those are open requirements, not permission to omit or redesign them. Until the original source is recovered, preserve the five named capabilities as a minimum known inventory and label all other A–H details as unavailable.
 
 ## Module I — Course Content Intelligence

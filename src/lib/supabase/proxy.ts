@@ -5,10 +5,11 @@ import { getAllowedEmails, hasSupabaseConfig, isAllowedEmail, isDemoMode } from 
 const publicPaths = ["/login", "/setup", "/unauthorized", "/auth/callback", "/api/auth/magic-link"];
 const machinePaths = new Set(["pair", "session", "inventory", "upload", "finalize", "checkpoint"]
   .map((name) => `/api/drive-agent/${name}`));
+const cronPaths = new Set(["/api/cron/lms-sync"]);
 
 export async function updateSession(request: NextRequest) {
   // These exact routes return their own JSON authentication failures for Apps Script.
-  if (machinePaths.has(request.nextUrl.pathname)) return NextResponse.next({ request });
+  if (machinePaths.has(request.nextUrl.pathname) || cronPaths.has(request.nextUrl.pathname)) return NextResponse.next({ request });
   if (isDemoMode() || !hasSupabaseConfig()) return NextResponse.next({ request });
 
   let response = NextResponse.next({ request });

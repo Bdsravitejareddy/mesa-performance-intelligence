@@ -4,11 +4,11 @@
 
 **Goal:** Build a course-grounded academic and professional performance intelligence MVP while preserving every recovered legacy feature requirement and recording all unrecovered A–H details.
 
-**Architecture:** The original repository was not found. The user approved a GitHub-backed Next.js/TypeScript dashboard for manual Vercel deployment, with Supabase Postgres/Auth/private Storage and a configurable server-side model adapter. LMS sync stays disabled until a permitted source contract is verified.
+**Architecture:** The original repository was not found. The user approved a GitHub-backed Next.js/TypeScript dashboard for manual Vercel deployment, with Supabase Postgres/Auth/private Storage and a configurable server-side model adapter. LMS sync now uses the official read-only Nexus MCP service token in Vercel; production record mapping and scheduled execution still require live verification.
 
 **Tech Stack:** Next.js App Router + TypeScript, Supabase Postgres full-text search/Auth/private Storage, and a server-side model adapter. The user will deploy manually to Vercel. No remote project is confirmed or modified.
 
-**Architecture decision:** User confirmed the Vercel/GitHub approach and requested Supabase for storage. See `docs/superpowers/specs/2026-10-19-vercel-mvp-architecture.md`. Build and verify locally, then push code to a new private GitHub repository if CLI authorization permits. User will perform Vercel deployment. Hosted model provider and sign-in allowlist remain configuration gaps. LMS daily sync remains disabled pending a verified permitted data contract.
+**Architecture decision:** User confirmed the Vercel/GitHub approach and requested Supabase for storage. See `docs/superpowers/specs/2026-10-19-vercel-mvp-architecture.md`. The user deploys through Vercel. The official Nexus MCP service is now the LMS source; sync code is local and its additive schema migration is applied, while the production MCP result mapping, Cron secret, and scheduled execution remain outstanding.
 
 **Spec:** `PRODUCT_BRIEF.md`
 
@@ -62,7 +62,7 @@
 - Produces: versioned data contract for course, assessment, score, feedback, rubric, and course material records; auth and rate-limit requirements.
 
 - [ ] Inspect Courses, My Work, Attendance & Grade, Documents, and course detail pages for available assessment and material fields.
-- [ ] Identify an official or permitted authenticated data interface and verify its read behavior, pagination, update markers, and error responses.
+- [x] Identify the official authenticated Nexus MCP interface and read-only tool inventory. Live pagination, update-marker, and error semantics remain to be verified after deployment.
 - [ ] Record no credentials, cookies, or tokens in repository files or logs.
 - [ ] If no permitted stable interface is available, document the limitation and use an explicitly approved export workflow rather than scraping around access controls.
 
@@ -76,8 +76,8 @@
 - Consumes: the verified LMS integration contract from Task 2.
 - Produces: idempotent daily synchronization for marks, feedback, rubrics, and course materials with source timestamps and per-record provenance.
 
-- [ ] Choose persistent authentication supported by the LMS and store secrets only in an OS credential store or deployment secret manager.
-- [ ] Implement pagination, retry/backoff, idempotency, partial-failure reporting, and a visible last-success timestamp.
+- [x] Choose the LMS service token and store it only in Vercel's server-side environment.
+- [ ] Verify production pagination, retry/backoff, and tool output; local code has idempotent upserts, partial-failure reporting, and visible last-sync status.
 - [ ] Preserve existing records on failed/incomplete sync and record deletions only when the source confirms them.
 - [ ] Provide an operator-triggered sync path for recovery.
 

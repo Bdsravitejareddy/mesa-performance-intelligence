@@ -42,12 +42,15 @@ Required for a private workspace:
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 - `APP_ALLOWED_EMAILS`
+- `SUPABASE_SECRET_KEY` (server-only)
+- `NEXUS_MCP_TOKEN` (server-only official Nexus MCP token)
+- `CRON_SECRET` (server-only Vercel Cron bearer secret)
 
-If the deployed site has no data, first check these variables in the Vercel environment used by its production deployment and redeploy after saving them. Applying the Supabase migration creates the schema, not student records. Course materials and official assessment records must then be added or imported. A Chrome LMS session is not available to Vercel, and automated LMS sync is not connected. Do not enable demo mode to represent real student results.
+If the deployed site has no data, first check these variables in the Vercel environment used by its production deployment and redeploy after saving them. Applying the Supabase migration creates the schema, not student records. Course materials and official assessment records must then be added or imported. A Chrome LMS session is not available to Vercel; the server-side LMS connector uses the official Nexus MCP service token instead. Do not enable demo mode to represent real student results.
 
 AI rubric drafting and evaluation are disabled by default. The optional `AI_API_BASE_URL`, `AI_API_KEY`, `AI_MODEL`, and `AI_DATA_PROCESSING_APPROVED` settings are server-only. The provider code sends at most eight retrieved page/slide excerpts plus the selected submission and official feedback; it never sends an entire course document. Keep approval false unless you have explicitly approved that data flow and reviewed the provider's data handling. Without all four settings, no AI call is made.
 
-`CRON_SECRET` is reserved for an authorized LMS integration. Daily sync is disabled because no permitted stable LMS interface or persistent authentication contract has been verified.
+Nexus assignment and grade synchronization uses the official, read-only MCP tools. Set `NEXUS_MCP_TOKEN` in Vercel without a `NEXT_PUBLIC_` prefix. Set a separate random `CRON_SECRET` in Production to authorize the daily 03:00 UTC cron. A signed-in recovery action is available on Marks & feedback. The service token expires within the LMS's 7–90 day policy and must be rotated when it expires. See [the Nexus MCP integration contract](docs/integrations/mesa-nexus-mcp.md). Production sync is not considered verified until a real run imports known released marks and feedback and a later Vercel Cron run succeeds.
 
 ## Current capabilities
 

@@ -15,7 +15,12 @@ describe("Drive machine proxy boundary", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("location")).toBeNull();
   });
-  it.each(["/api/drive-agent", "/api/drive-agent/pair/extra", "/api/drive-agent/pairing", "/api/drive-agent/unknown", "/api/drive-sync/connections"])("keeps %s behind the interactive session", async (path) => {
+  it("passes the exact LMS cron route to bearer authentication", async () => {
+    const response = await updateSession(new NextRequest("https://example.com/api/cron/lms-sync"));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("location")).toBeNull();
+  });
+  it.each(["/api/drive-agent", "/api/drive-agent/pair/extra", "/api/drive-agent/pairing", "/api/drive-agent/unknown", "/api/drive-sync/connections", "/api/cron/lms-sync/extra"])("keeps %s behind the interactive session", async (path) => {
     const response = await updateSession(new NextRequest(`https://example.com${path}`));
     expect(response.status).toBe(307);
     expect(new URL(response.headers.get("location")!).pathname).toBe("/login");

@@ -81,7 +81,7 @@ export function AppShell({ children, demoMode }: { children: React.ReactNode; de
         </nav>
 
         <div className="sidebar-bottom">
-          <div className="sync-status"><span className="status-dot" /><span><strong>LMS sync</strong><small>Not connected</small></span><button title="Sync details" type="button" aria-label="Sync details"><ArrowUpRight size={14} /></button></div>
+          <div className="sync-status"><span className="status-dot" /><span><strong>LMS sync</strong><small>{demoMode ? "Preview only" : "Sync in Marks & feedback"}</small></span><Link href="/marks" title="Open marks and run an LMS sync" aria-label="Open marks and run an LMS sync"><ArrowUpRight size={14} /></Link></div>
           <Link href="/setup" className="nav-link"><CircleHelp size={17} /><span>Setup & help</span></Link>
           <div className="profile-card">
             <div className="profile-avatar">MP</div>
