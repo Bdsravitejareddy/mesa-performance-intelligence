@@ -110,6 +110,26 @@ describe("transactional Drive sync state", () => {
     expect((await reserve(connection.id,next.scanId,next.mappings[0].id)).decision).toBe("retry_later");
   });
 
+  it("renews a nearly expired owned lease when resuming the same upload", async () => {
+    const connection = await configure(), run = await scan(connection.id);
+    const item = await reserve(connection.id,run.scanId,run.mappings[0].id);
+    await db.query("update public.drive_import_items set lease_expires_at=now()+interval '1 second' where id=$1", [item.itemId]);
+
+    expect(await reserve(connection.id,run.scanId,run.mappings[0].id)).toEqual(item);
+    const remaining = await db.query<{seconds:number}>("select extract(epoch from lease_expires_at-now())::float8 as seconds from public.drive_import_items where id=$1", [item.itemId]);
+    expect(remaining.rows[0].seconds).toBeGreaterThanOrEqual(240);
+    expect(remaining.rows[0].seconds).toBeLessThanOrEqual(300);
+    expect((await db.query("select id from public.drive_import_items")).rows).toHaveLength(1);
+
+    // Neither a changed fingerprint nor a different scan may extend this lease.
+    const expiry = (await db.query<{expires:string}>("select lease_expires_at::text as expires from public.drive_import_items where id=$1", [item.itemId])).rows[0].expires;
+    expect((await reserve(connection.id,run.scanId,run.mappings[0].id,"v2")).decision).toBe("retry_later");
+    await rpc("checkpoint",[connection.id,run.scanId,{roots:{[run.mappings[0].id]:{failed:true,completed:false,pendingFolders:[],pendingFiles:[]}}},[]]);
+    const next = await scan(connection.id);
+    expect((await reserve(connection.id,next.scanId,next.mappings[0].id)).decision).toBe("retry_later");
+    expect((await db.query<{expires:string}>("select lease_expires_at::text as expires from public.drive_import_items where id=$1", [item.itemId])).rows[0].expires).toBe(expiry);
+  });
+
   it("invalidates previously authorized publication and scans when issuing a new pairing", async () => {
     const connection = await configure();
     await rpc("issue_pairing",[connection.id,"a".repeat(64),new Date(Date.now()+60e3).toISOString()]);

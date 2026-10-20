@@ -12,6 +12,7 @@ var DRIVE_FOLDER = "application/vnd.google-apps.folder";
 var DRIVE_SHORTCUT = "application/vnd.google-apps.shortcut";
 var DRIVE_MAX_BYTES = 20971520;
 var DRIVE_PLATFORM_MS = 360000;
+var DRIVE_DAILY_MS = 2400000;
 var DRIVE_RUN = null;
 
 function install() {
@@ -58,7 +59,7 @@ function driveContinue() {
   var properties = PropertiesService.getScriptProperties();
   var day = new Date(Date.now()).toISOString().slice(0, 10);
   var used = properties.getProperty("runtimeDay") === day ? Number(properties.getProperty("runtimeMs") || 0) : 0;
-  if (used >= 0 && used + DRIVE_PLATFORM_MS <= 1800000) {
+  if (used >= 0 && used + DRIVE_PLATFORM_MS <= DRIVE_DAILY_MS) {
     ScriptApp.newTrigger("resumeDrive").timeBased().after(60000).create();
   }
 }
@@ -69,13 +70,13 @@ function driveRun() {
   var properties = PropertiesService.getScriptProperties();
   var start = Date.now(), day = new Date(start).toISOString().slice(0, 10);
   var used = properties.getProperty("runtimeDay") === day ? Number(properties.getProperty("runtimeMs") || 0) : 0;
-  if (!isFinite(used) || used < 0) used = 1800000;
+  if (!isFinite(used) || used < 0) used = DRIVE_DAILY_MS;
   var dayRemaining = Date.parse(day + "T00:00:00.000Z") + 86400000 - start;
   var allowance = 240000;
   var pending = false, failure = null;
   try {
     driveRemoveTriggers("resumeDrive");
-    if (used + DRIVE_PLATFORM_MS > 1800000) return;
+    if (used + DRIVE_PLATFORM_MS > DRIVE_DAILY_MS) return;
     // A blocking UrlFetch can run beyond our cooperative work deadline. Do not
     // start unless its entire platform lifetime fits this UTC day's allowance.
     if (dayRemaining <= DRIVE_PLATFORM_MS) { pending = true; return; }
@@ -137,7 +138,7 @@ function driveRun() {
       // Reaching finally means the elapsed time is known, even for a caught
       // lease wait or retry. A forced platform termination skips finally and
       // therefore retains the full six-minute reservation made above.
-      properties.setProperty("runtimeMs", String(Math.min(1800000, used + Math.max(0, Date.now() - start))));
+      properties.setProperty("runtimeMs", String(Math.min(DRIVE_DAILY_MS, used + Math.max(0, Date.now() - start))));
       DRIVE_RUN = null;
     }
     try { if (pending) driveContinue(); } finally { lock.releaseLock(); }
@@ -279,7 +280,14 @@ function driveStorageUrl(value) {
 function driveApi(endpoint, body, pairing) {
   var headers = {};
   if (!pairing) headers.Authorization = "Bearer " + PropertiesService.getScriptProperties().getProperty("connectorToken");
-  return driveJson(driveFetch(DRIVE_AGENT_CONFIG.baseUrl + "/api/drive-agent/" + endpoint, { method: "post", contentType: "application/json", payload: JSON.stringify(body), headers: headers }, false, endpoint === "checkpoint"));
+  try {
+    return driveJson(driveFetch(DRIVE_AGENT_CONFIG.baseUrl + "/api/drive-agent/" + endpoint, { method: "post", contentType: "application/json", payload: JSON.stringify(body), headers: headers }, false, endpoint === "checkpoint"));
+  } catch (error) {
+    // An expired lease must be reserved again on the next invocation, rather
+    // than dropping a valid file as a permanent transfer failure.
+    if (!pairing && (endpoint === "upload" || endpoint === "finalize") && error.httpStatus === 409) error.retryable = true;
+    throw error;
+  }
 }
 
 function driveGoogleJson(path, parameters, id, key) { return driveJson(driveGoogle(path, parameters, id, key)); }

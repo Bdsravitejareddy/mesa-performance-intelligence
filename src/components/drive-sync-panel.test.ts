@@ -8,6 +8,24 @@ import type { DriveConnectionStatus } from '@/lib/drive-sync/contracts';
 const connection: DriveConnectionStatus = {id:'connection',userId:'owner',enabled:true,label:'Mesa <script>alert(1)</script>',mappingRevision:1,mappings:[{id:'mapping',driveFolderId:'folder_123456',resourceKey:'0-root_KEY',mode:'collection',rootCourseTitle:'Root readings'}],lastError:null,lastScanAt:null,lastSuccessfulScanAt:null,paired:true,latestScan:{id:'scan',status:'failed',startedAt:'2026-10-19T00:00:00Z',completedAt:null,partial:true,completedRoots:0,imported:2,unchanged:5},counts:{total:3,indexed:1,unsupported:1,failed:1,unavailable:1},sources:[{id:'source1',driveFileId:'file1',name:'Old.pdf',sourceUrl:'https://drive.google.com/file/d/file1/view',courseId:'course',exportFormat:'pdf',available:false,version:1,failureCount:0,failureCode:null,extractionStatus:'complete'},{id:'source2',driveFileId:'file2',name:'Grades.xlsx',sourceUrl:null,courseId:'course',exportFormat:'unsupported',available:false,version:0,failureCount:0,failureCode:null,extractionStatus:null},{id:'source3',driveFileId:'file3',name:'Bad.pdf',sourceUrl:null,courseId:'course',exportFormat:'pdf',available:true,version:0,failureCount:3,failureCode:'parse_pdf',extractionStatus:null}]};
 afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();vi.useRealTimers();});
 describe('Drive sync setup and operational view',()=>{
+  it.each(['running','complete'] as const)('shows a %s scan with a file error as needing review',status=>{
+    const lastError='File exceeds the 20 MiB import limit';
+    const current={...connection,lastError,latestScan:{...connection.latestScan!,status,partial:false}};
+    const host=document.createElement('div');
+    host.innerHTML=renderToStaticMarkup(createElement(DriveSyncPanel,{connections:[current],courses:[],configured:true}));
+    const badge=host.querySelector('.status-pill');
+    expect(badge?.textContent).toBe('Needs review');
+    expect(badge?.classList.contains('warning')).toBe(true);
+    expect(host.textContent).toContain(`Last error: ${lastError}`);
+    expect(host.textContent).toContain(`Latest scan: ${status}`);
+    expect(host.textContent).toContain('2 imported · 5 unchanged');
+  });
+  it('keeps a failed nonpartial scan labelled Failed',()=>{
+    const current={...connection,lastError:'File transfer failed',latestScan:{...connection.latestScan!,partial:false}};
+    const host=document.createElement('div');
+    host.innerHTML=renderToStaticMarkup(createElement(DriveSyncPanel,{connections:[current],courses:[],configured:true}));
+    expect(host.querySelector('.status-pill')?.textContent).toBe('Failed');
+  });
   it('renders escaped account labels, folder keys, inventory exceptions and installation guidance',()=>{
     const html=renderToStaticMarkup(createElement(DriveSyncPanel,{connections:[connection],courses:[],configured:true}));
     expect(html).toContain('Mesa &lt;script&gt;');expect(html).not.toContain('<script>');
