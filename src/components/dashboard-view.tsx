@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SyncHealthNotice } from "@/components/sync-health-notice";
 import {
   ArrowDownRight,
   ArrowRight,
@@ -18,9 +19,7 @@ import { IntelligenceVisual } from "@/components/intelligence-visual";
 import { InsightSummary } from "@/components/insight-summary";
 
 export function DashboardView({ data }: { data: DashboardSnapshot }) {
-  const average = data.marks.length
-    ? Math.round((data.marks.reduce((sum, item) => sum + item.mark, 0) / data.marks.length) * 10) / 10
-    : null;
+  const average = data.averageMark;
   const demonstrated = data.mastery.filter((item) => item.state.toLowerCase().includes("demonstrated")).length;
 
   return (
@@ -37,10 +36,12 @@ export function DashboardView({ data }: { data: DashboardSnapshot }) {
 
       <InsightSummary demoMode={data.demoMode} />
 
-      {!data.demoMode && data.courses.length === 0 && data.assessmentCount === 0 && data.marks.length === 0 && <div className="info-callout" role="status"><span><strong>No Mesa records have been imported.</strong> LMS sync is not connected. Add a course and its materials to start recording assessment evidence. <Link href="/courses" className="text-link">Open courses <ArrowRight size={14} /></Link></span></div>}
+      {data.syncHealth && data.syncHealth.level !== "ok" && <SyncHealthNotice health={data.syncHealth} compact />}
+
+      {!data.demoMode && data.courses.length === 0 && data.assessmentCount === 0 && data.marks.length === 0 && <div className="info-callout" role="status"><span><strong>No Mesa records have been imported.</strong> Run an LMS sync from Marks & feedback, or add a course and its materials to start recording assessment evidence. <Link href="/courses" className="text-link">Open courses <ArrowRight size={14} /></Link></span></div>}
 
       <section className="metric-grid" aria-label="Performance summary">
-        <MetricCard label="Average assessment mark" value={average === null ? "—" : formatOfficialMark(average)} meta={data.marks.length ? `${data.marks.length} marked submissions · unweighted` : "No marks recorded"} icon={<TrendingUp size={17} />} accent="mint" />
+        <MetricCard label="Average assessment mark" value={average === null ? "—" : formatOfficialMark(average)} meta={data.markCount ? `${data.markCount} marked submissions · unweighted` : "No marks recorded"} icon={<TrendingUp size={17} />} accent="mint" />
         <MetricCard label="Courses in view" value={String(data.courses.length)} meta="Course-linked evidence" icon={<BookOpenCheck size={17} />} accent="blue" />
         <MetricCard label="Assessments" value={String(data.assessmentCount)} meta="Across linked courses" icon={<FileText size={17} />} accent="violet" />
         <MetricCard label="Topics demonstrated" value={`${demonstrated} / ${data.topicCount}`} meta="Evidence-weighted view" icon={<Target size={17} />} accent="amber" />
@@ -132,5 +133,5 @@ function MasteryRow({ item, index }: { item: DashboardSnapshot["mastery"][number
   const isGood = item.state.toLowerCase().includes("demonstrated");
   const isNeed = item.state.toLowerCase().includes("development");
   const bar = isGood ? "bar-good" : isNeed ? "bar-review" : "bar-muted";
-  return <div className="mastery-row"><span className={`mastery-index mastery-index-${index}`}>{String(index + 1).padStart(2, "0")}</span><span className="mastery-topic"><strong>{item.topic}</strong><span className="mastery-track"><i className={bar} style={{ width: `${Math.max(6, Math.min(item.value, 100))}%` }} /></span></span><span className="mastery-value">{item.value ? item.value : "—"}{item.value ? "/100" : ""}<small>{item.state}</small></span></div>;
+  return <div className="mastery-row"><span className={`mastery-index mastery-index-${index}`}>{String(index + 1).padStart(2, "0")}</span><span className="mastery-topic"><strong>{item.topic}</strong><span className="mastery-track"><i className={bar} style={{ width: item.value === null ? "0%" : `${Math.max(6, Math.min(item.value, 100))}%` }} /></span></span><span className="mastery-value">{item.value === null ? "Not scored" : `${item.value}/100`}<small>{item.state}</small></span></div>;
 }

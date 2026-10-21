@@ -5,6 +5,8 @@ import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
 import { LmsSyncAction } from "@/components/lms-sync-action";
 import Link from "next/link";
+import { SyncHealthNotice } from "@/components/sync-health-notice";
+import { describeSyncHealth, type SyncRun } from "@/lib/lms/sync-health";
 import { EvaluationSummary, getSummaryReferences, isEvaluationSummaryData } from "@/components/evaluation-summary";
 
 export const dynamic = "force-dynamic";
@@ -12,21 +14,21 @@ export const dynamic = "force-dynamic";
 export default async function MarksPage() {
   const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
   const items = demoMode ? demoData.assessments.map((item) => ({ id: item.id, title: item.title, course: item.course, mark: item.mark, feedback: "Illustrative evaluator note: connect the conclusion to the evidence and state key assumptions.", sourceMark: null as number | null, sourceMaximum: null as number | null })) : await loadMarks();
-  const lastSync = demoMode ? null : await loadLastSync();
+  const syncHealth = demoMode ? null : await loadSyncHealth();
   return <AppShell demoMode={demoMode}><div className="section-page"><div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> OFFICIAL RESULTS AND FEEDBACK</div><h1>Marks & feedback</h1><p className="page-subtitle">Official scores remain on their original 0–100 scale. AI comparisons require matching criterion evidence.</p></div>{!demoMode && <LmsSyncAction />}</div>
-    {!demoMode && <div className="info-callout" role="status">{lastSync ? `Last LMS sync: ${lastSync.status} · ${new Date(lastSync.finished_at ?? lastSync.started_at).toLocaleString()} · ${lastSync.message}` : "LMS sync has not run yet. Use Sync Mesa LMS now to test the connection."}</div>}
+    {syncHealth && <SyncHealthNotice health={syncHealth} />}
     <section className="content-panel"><h2>Recorded marks <span className="panel-count">{items.length}</span></h2>{items.length ? <div className="marks-table">{items.map((item) => <article className="mark-feedback-row" key={item.id}><div><strong>{item.title}</strong><small>{item.course}{"source" in item && item.source ? ` · ${item.source}` : ""}</small></div><div className="mark-result"><strong className="mark-pill">{formatOfficialMark(item.mark)}</strong>{item.sourceMark !== null && item.sourceMaximum !== null && (item.sourceMark !== item.mark || item.sourceMaximum !== 100) && <small className="mark-original">LMS mark: {item.sourceMark}/{item.sourceMaximum}</small>}</div><p>{item.feedback || "No official feedback recorded."}</p>{"evaluationSummary" in item && <EvaluationSummary submissionId={item.id} summary={item.evaluationSummary} sourceReferences={item.sourceReferences} sampleCount={1} documents={[]} />}{"courseId" in item && <Link className="text-link" href={`/courses/${item.courseId}`}>Open course and assessment evidence</Link>}</article>)}</div> : <div className="empty-copy"><p>No official marks have been entered or imported. Use the course assessment record to add marks and evaluator feedback.</p></div>}</section>
     <div className="info-callout">A difference between an AI estimate and an official mark is a prompt to inspect the criterion, rubric, and source evidence. It does not by itself show that the official grade is wrong.</div>
     {demoMode && <p className="scope-note">All scores and feedback shown in preview mode are synthetic examples.</p>}
   </div></AppShell>;
 }
 
-async function loadLastSync() {
+async function loadSyncHealth() {
   if (!hasSupabaseConfig()) return null;
   const supabase = await createClient();
-  const { data, error } = await supabase.from("sync_runs").select("status,started_at,finished_at,message").eq("source_name", "Mesa Nexus MCP").order("started_at", { ascending: false }).limit(1).maybeSingle();
+  const { data, error } = await supabase.from("sync_runs").select("status,started_at,finished_at,message").eq("source_name", "Mesa Nexus MCP").order("started_at", { ascending: false }).limit(20);
   if (error) throw new Error("Could not load LMS sync status.");
-  return data;
+  return describeSyncHealth((data ?? []) as SyncRun[]);
 }
 
 async function loadMarks() {

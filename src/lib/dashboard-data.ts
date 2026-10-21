@@ -1,15 +1,20 @@
 import { demoData, demoMarkSeries } from "@/lib/demo-data";
 import { createClient } from "@/lib/supabase/server";
+import { describeSyncHealth, type SyncHealth, type SyncRun } from "@/lib/lms/sync-health";
 
 export type DashboardSnapshot = {
   demoMode: boolean;
   courses: { id: string; code: string; title: string; term: string; materials?: number }[];
   marks: { id: string; title: string; course: string; date: string; mark: number; format: string }[];
   markSeries: { label: string; value: number }[];
-  mastery: { topic: string; value: number; state: string }[];
+  // Unweighted mean of every official mark (not just the recent rows shown); null when no marks exist.
+  averageMark: number | null;
+  markCount: number;
+  // value is null when a topic has no scored evidence; never coerce that to 0.
+  mastery: { topic: string; value: number | null; state: string }[];
   assessmentCount: number;
   topicCount: number;
-  syncMessage: string;
+  syncHealth: SyncHealth | null;
 };
 
 const demoSnapshot: DashboardSnapshot = {
@@ -24,10 +29,12 @@ const demoSnapshot: DashboardSnapshot = {
     format: assessment.format,
   })),
   markSeries: demoMarkSeries,
+  averageMark: averageOf(demoData.assessments.map((assessment) => assessment.mark)),
+  markCount: demoData.assessments.length,
   mastery: demoData.mastery,
   assessmentCount: 12,
   topicCount: 11,
-  syncMessage: "LMS sync is not configured",
+  syncHealth: null,
 };
 
 export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
@@ -37,14 +44,15 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
   }
 
   const supabase = await createClient();
-  const [courseResult, assessmentResult, submissionResult, competencyResult] = await Promise.all([
+  const [courseResult, assessmentResult, submissionResult, competencyResult, syncResult] = await Promise.all([
     supabase.from("courses").select("id, code, title, term").order("created_at", { ascending: false }),
     supabase.from("assessments").select("id, course_id, title, assessment_format, due_at"),
     supabase.from("submissions").select("id, assessment_id, official_mark, submitted_at").not("official_mark", "is", null).order("submitted_at", { ascending: false }),
     supabase.from("topic_competencies").select("topic, state, score"),
+    supabase.from("sync_runs").select("status, started_at, finished_at, message").eq("source_name", "Mesa Nexus MCP").order("started_at", { ascending: false }).limit(20),
   ]);
 
-  const error = courseResult.error ?? assessmentResult.error ?? submissionResult.error ?? competencyResult.error;
+  const error = courseResult.error ?? assessmentResult.error ?? submissionResult.error ?? competencyResult.error ?? syncResult.error;
   if (error) throw new Error("Could not load the private workspace. Check the Supabase migration and project configuration.");
 
   const courses = courseResult.data ?? [];
@@ -69,7 +77,7 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
   const markSeries = chronological.slice(-12).map((item) => ({ label: item.date, value: item.mark }));
   const competencies = (competencyResult.data ?? []).map((item) => ({
     topic: item.topic,
-    value: item.score === null ? 0 : Number(item.score),
+    value: item.score === null ? null : Number(item.score),
     state: stateLabel(item.state),
   }));
 
@@ -78,10 +86,12 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
     courses: courses.map((course) => ({ ...course, term: course.term ?? "" })),
     marks: marks.slice(0, 6),
     markSeries,
+    averageMark: averageOf(marks.map((item) => item.mark)),
+    markCount: marks.length,
     mastery: competencies.slice(0, 6),
     assessmentCount: assessments.length,
     topicCount: competencies.length,
-    syncMessage: "LMS sync is not connected",
+    syncHealth: describeSyncHealth((syncResult.data ?? []) as SyncRun[]),
   };
 }
 
@@ -94,4 +104,9 @@ function stateLabel(state: string): string {
     development_needed: "Development needed",
   };
   return labels[state] ?? "Insufficient evidence";
+}
+
+export function averageOf(values: number[]): number | null {
+  if (!values.length) return null;
+  return Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10;
 }

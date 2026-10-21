@@ -88,3 +88,5 @@ html,body{background:var(--paper);color:var(--ink)}
 .submission-form .submission-lms-fallback{margin:0;font-size:9px}
 @media(max-width:900px){.summary-sections{grid-template-columns:1fr}.summary-section{padding:10px}}
 .swot-evidence-note{margin:0 0 14px}.swot-draft{border-top-style:dashed}
+
+.data-quality-warning{flex-direction:column;align-items:flex-start;border-color:var(--amber);background:var(--amber-pale)}.data-quality-warning strong{color:var(--amber)}.data-quality-list{margin:4px 0 0;padding-left:16px}.data-quality-list li{margin:2px 0}
