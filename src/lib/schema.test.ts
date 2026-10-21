@@ -42,6 +42,7 @@ describe("Supabase migration access boundaries", () => {
 
     const migration = await readFile(migrationPath, "utf8");
     await database.exec(migration);
+    await database.exec(await readFile(new URL("../../supabase/migrations/20261022090001_role_benchmark_sources.sql", import.meta.url), "utf8"));
     await database.exec(`
       insert into auth.users (id) values
         ('11111111-1111-4111-8111-111111111111'),
@@ -62,6 +63,13 @@ describe("Supabase migration access boundaries", () => {
     expect(visibleFiles.rows.map((row) => row.name)).toEqual([
       "11111111-1111-4111-8111-111111111111/course/notes.pdf",
     ]);
+
+    await database.query("insert into public.role_profiles (user_id, title, employer, source_url, retrieved_at, posting_date, is_verified, source_content_hash, competencies) values ($1, $2, $3, $4, $5, $6, $7, $8, $9)", [
+      "11111111-1111-4111-8111-111111111111", "Senior Technical Product Manager", "Example Health", "https://careers.example.org/role", "2026-10-22T10:00:00Z", "2026-10-01", true, "sha256", JSON.stringify([{ title: "FHIR", description: "Integrations", sourceQuote: "FHIR integrations", evidenceKind: "required" }]),
+    ]);
+    const role = await database.query<{ employer: string; source_url: string; posting_date: string; is_verified: boolean; competencies: Array<{ sourceQuote: string }> }>("select employer, source_url, posting_date::text, is_verified, competencies from public.role_profiles");
+    expect(role.rows).toEqual([{ employer: "Example Health", source_url: "https://careers.example.org/role", posting_date: "2026-10-01", is_verified: true, competencies: [{ title: "FHIR", description: "Integrations", sourceQuote: "FHIR integrations", evidenceKind: "required" }] }]);
+    await expect(database.query("insert into public.role_profiles (user_id, title) values ($1, 'Cross-owner profile')", ["22222222-2222-4222-8222-222222222222"])).rejects.toThrow(/row-level security/i);
 
     await database.exec(`insert into public.courses (user_id, code, title) values ('11111111-1111-4111-8111-111111111111', 'MKT-2', 'Second Marketing Course');`);
     const firstCourse = await database.query<{ id: string }>("select id from public.courses where title = 'Marketing Analytics'");
