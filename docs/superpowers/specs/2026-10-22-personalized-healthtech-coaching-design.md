@@ -1,7 +1,7 @@
 # Evidence-Grounded HealthTech Career Coaching Design
 
 **Date:** 2026-10-22  
-**Status:** Design approved in conversation; awaiting written-spec review before implementation planning.  
+**Status:** Design and implementation plans approved in conversation; implementation in progress.
 **Product:** Mesa Performance Intelligence, reconstructed in this repository. The original A–H brief remains unavailable; preserve every recovered requirement and do not invent missing A–H behavior.
 
 ## Goal and user intent
