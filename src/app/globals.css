@@ -87,3 +87,4 @@ html,body{background:var(--paper);color:var(--ink)}
 .evaluation-summary{display:flex;flex-direction:column;gap:8px;margin:9px 0;padding-top:9px;border-top:1px solid #302d38}.summary-heading{display:flex;justify-content:space-between;align-items:flex-end;gap:8px}.summary-heading .eyebrow{font-size:7px;margin:0 0 4px}.summary-heading h3{margin:0;color:#eae5ef;font:600 12px Manrope,sans-serif}.summary-sample{color:#b5a1e8;font-size:8px}.evaluation-report .evaluation-summary{margin-top:8px}.mark-feedback-row .evaluation-summary{grid-column:1/-1;width:100%}.mark-feedback-row>.text-link{grid-column:1/-1}
 .submission-form .submission-lms-fallback{margin:0;font-size:9px}
 @media(max-width:900px){.summary-sections{grid-template-columns:1fr}.summary-section{padding:10px}}
+.swot-evidence-note{margin:0 0 14px}.swot-draft{border-top-style:dashed}
