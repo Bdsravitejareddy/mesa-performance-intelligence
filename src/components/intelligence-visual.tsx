@@ -1,4 +1,5 @@
-const colors = ["#a78bfa", "#8b5cf6", "#53d8c8", "#f0bf6b", "#eb8ea7"] as const;
+// Sunlit gold particles with a few moss-green nodes, after the Optimind network sphere.
+const colors = ["#fff1c9", "#f3c86b", "#e9a93a", "#ffe6a8", "#a9c98f"] as const;
 
 type Particle = { x: number; y: number; color: (typeof colors)[number]; radius: number };
 
@@ -27,9 +28,9 @@ export function IntelligenceVisual() {
       <svg viewBox="0 0 500 360" focusable="false">
         <defs>
           <radialGradient id="intelligence-cloud">
-            <stop offset="0%" stopColor="#965cff" stopOpacity=".22" />
-            <stop offset="70%" stopColor="#5a37b9" stopOpacity=".08" />
-            <stop offset="100%" stopColor="#15121e" stopOpacity="0" />
+            <stop offset="0%" stopColor="#f3c86b" stopOpacity=".30" />
+            <stop offset="70%" stopColor="#b07d1c" stopOpacity=".08" />
+            <stop offset="100%" stopColor="#13201a" stopOpacity="0" />
           </radialGradient>
         </defs>
         <ellipse cx="250" cy="180" rx="174" ry="136" fill="url(#intelligence-cloud)" />

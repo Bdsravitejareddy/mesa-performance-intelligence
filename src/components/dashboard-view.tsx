@@ -26,12 +26,14 @@ export function DashboardView({ data }: { data: DashboardSnapshot }) {
     <div className="dashboard-page page-enter">
       <section className="overview-hero">
         <div className="overview-hero-copy">
-          <div className="eyebrow"><span className="eyebrow-line" /> YOUR LEARNING, IN CONTEXT</div>
+          <div className="eyebrow"><span className="eyebrow-line" /> Your learning, in context</div>
           <h1>See the signal in your performance.</h1>
           <p>Connect what you were taught with the work you’ve shown, then choose what to improve next.</p>
           <Link href="/courses" className="button button-primary"><Plus size={16} /> Add course material</Link>
         </div>
         <IntelligenceVisual />
+        <div className="hero-counter" aria-label={`${data.markCount} marked submissions`}>{String(data.markCount).padStart(2, "0")}<small>/ {String(data.assessmentCount).padStart(2, "0")} marked</small></div>
+        <nav className="hero-links" aria-label="Evidence shortcuts"><Link href="/evidence">Evidence</Link><Link href="/competencies">Competencies</Link><Link href="/marks">Marks</Link></nav>
       </section>
 
       <InsightSummary demoMode={data.demoMode} />
