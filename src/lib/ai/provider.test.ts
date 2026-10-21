@@ -23,3 +23,24 @@ describe("AI provider privacy gate", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+describe("Gemini provider requests", () => {
+  afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+
+  it("calls the Gemini endpoint with a bearer key, omits JSON mode, and parses fenced JSON", async () => {
+    vi.stubEnv("AI_DATA_PROCESSING_APPROVED", "true");
+    vi.stubEnv("AI_API_BASE_URL", "");
+    vi.stubEnv("AI_API_KEY", "");
+    vi.stubEnv("AI_MODEL", "");
+    vi.stubEnv("GEMINI_API_KEY", "gemini-test-key");
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: "```json\n{\"ok\":true}\n```" } }] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(requestJsonFromProvider("system", "user")).resolves.toEqual({ ok: true });
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [URL, RequestInit];
+    expect(String(url)).toBe("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
+    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer gemini-test-key");
+    const body = JSON.parse(String(init.body));
+    expect(body.model).toBe("gemini-3.8-flash");
+    expect(body.response_format).toBeUndefined();
+  });
+});

@@ -1,15 +1,17 @@
+import { resolveProviderSettings } from "./settings";
+
 export async function requestJsonFromProvider(system: string, user: string): Promise<Record<string, unknown>> {
   if (process.env.AI_DATA_PROCESSING_APPROVED !== "true") throw new Error("AI processing is disabled until excerpt sharing is explicitly approved in server configuration.");
-  const apiBase = process.env.AI_API_BASE_URL?.trim().replace(/\/$/, "");
-  const apiKey = process.env.AI_API_KEY?.trim();
-  const model = process.env.AI_MODEL?.trim();
+  const { base: apiBase, key: apiKey, model, kind } = resolveProviderSettings();
   if (!apiBase || !apiKey || !model) throw new Error("Configure the server-side AI endpoint, key, and model before requesting an evaluation.");
   const url = new URL(`${apiBase}/chat/completions`);
   if (url.protocol !== "https:") throw new Error("The hosted AI endpoint must use HTTPS.");
   const response = await fetch(url, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model, temperature: 0.1, response_format: { type: "json_object" }, messages: [{ role: "system", content: system }, { role: "user", content: user }] }),
+    // Gemini's OpenAI-compatible endpoint documents schema-based structured output but not plain JSON mode,
+    // so it relies on the JSON-only instruction and tolerant parsing below.
+    body: JSON.stringify({ model, temperature: 0.1, ...(kind === "gemini" ? {} : { response_format: { type: "json_object" } }), messages: [{ role: "system", content: `${system}\nRespond with a single JSON object and nothing else.` }, { role: "user", content: user }] }),
     signal: AbortSignal.timeout(45_000),
     cache: "no-store",
   });
@@ -18,8 +20,15 @@ export async function requestJsonFromProvider(system: string, user: string): Pro
   const content = body.choices?.[0]?.message?.content;
   if (typeof content !== "string") throw new Error("The AI provider returned no JSON content.");
   try {
-    const result: unknown = JSON.parse(content);
+    const result: unknown = JSON.parse(stripJsonFence(content));
     if (result && typeof result === "object" && !Array.isArray(result)) return result as Record<string, unknown>;
   } catch { /* Keep provider response contents out of logs and error messages. */ }
   throw new Error("The AI provider response did not match the required JSON format.");
+}
+
+// Some providers wrap JSON in a Markdown code fence even when asked not to.
+export function stripJsonFence(content: string): string {
+  const trimmed = content.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  return fenced ? fenced[1] : trimmed;
 }

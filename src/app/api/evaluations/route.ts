@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { resolveProviderSettings } from "@/lib/ai/settings";
 import { validateEvaluation } from "@/lib/ai/contracts";
 import { createEvaluationInputHash } from "@/lib/ai/evaluation-input";
 import { getAIProcessingConfig, isAIConsentCurrent } from "@/lib/ai/consent";
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest) {
     analytical_score: result.analytical.score,
     professional_score: result.professional.score,
     status,
-    provider_model: process.env.AI_MODEL?.slice(0, 120) ?? "",
+    provider_model: resolveProviderSettings().model.slice(0, 120),
     input_hash: inputHash,
     report: { ...result, arithmeticChecks, rubricSource: rubric.source_kind, roleProfile: roleProfile ? { title: roleProfile.title, industry: roleProfile.industry, benchmarkSource: roleProfile.benchmark_source } : null, sourceReferences: refs.map(({ key, pageId, materialId, label, sourceKind }) => ({ key, pageId, materialId, label, sourceKind })) },
   }).select("id").single();

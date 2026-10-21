@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { resolveProviderSettings } from "./settings";
 
 export const AI_DISCLOSURE_VERSION = "mesa-ai-2026-10-22-v1";
 
@@ -12,9 +13,7 @@ export type AIProcessingConfig = {
 };
 
 export function getAIProcessingConfig(): AIProcessingConfig {
-  const base = process.env.AI_API_BASE_URL?.trim() ?? "";
-  const key = process.env.AI_API_KEY?.trim() ?? "";
-  const model = process.env.AI_MODEL?.trim() ?? "";
+  const { base, key, model } = resolveProviderSettings();
   const retentionNotice = process.env.AI_DATA_RETENTION_NOTICE?.trim() ?? "";
   let providerHost = "";
   let endpoint = "";
