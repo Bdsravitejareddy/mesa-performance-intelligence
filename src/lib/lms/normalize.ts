@@ -65,6 +65,18 @@ function extractRecords(value: unknown): JsonObject[] {
 export function assignmentRecordFieldPaths(value: unknown): string[] {
   const payload = unwrapToolResult(value);
   const paths = new Set<string>();
+  function visitPayload(item: unknown, prefix: string, depth: number) {
+    if (depth < 1 || !item || typeof item !== "object") return;
+    if (Array.isArray(item)) {
+      for (const child of item.slice(0, 2)) visitPayload(child, prefix ? `${prefix}[]` : "[]", depth - 1);
+      return;
+    }
+    for (const [key, child] of Object.entries(item as JsonObject)) {
+      const path = prefix ? `${prefix}.${key}` : key;
+      paths.add(path);
+      if (depth > 1) visitPayload(child, path, depth - 1);
+    }
+  }
   function visit(record: JsonObject, prefix: string, depth: number) {
     if (depth < 1) return;
     for (const [key, child] of Object.entries(record)) {
@@ -73,7 +85,10 @@ export function assignmentRecordFieldPaths(value: unknown): string[] {
       if (depth > 1 && child && typeof child === "object" && !Array.isArray(child)) visit(child as JsonObject, path, depth - 1);
     }
   }
-  for (const record of extractRecords(payload).slice(0, 3)) visit(record, "", 3);
+  const records = extractRecords(payload).slice(0, 3);
+  if (records.length) for (const record of records) visit(record, "", 3);
+  else if (typeof payload === "string") paths.add(`$text(length:${payload.length})`);
+  else visitPayload(payload, "", 4);
   return [...paths].sort().slice(0, 24);
 }
 

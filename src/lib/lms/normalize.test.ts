@@ -41,4 +41,9 @@ describe("Mesa MCP assignment normalization", () => {
     expect(fields).toContain("course_ref.label");
     expect(fields.join(" ")).not.toMatch(/private|Confidential/);
   });
+
+  it("reports response structure for tools whose output did not normalize", () => {
+    expect(assignmentRecordFieldPaths({ data: { student_grades: [{ earned: 92, assessment_ref: { name: "private title" } }] } }))
+      .toEqual(expect.arrayContaining(["earned", "assessment_ref.name"]));
+  });
 });

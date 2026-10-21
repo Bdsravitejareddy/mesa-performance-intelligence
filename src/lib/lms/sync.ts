@@ -153,13 +153,15 @@ export async function syncMesaLms(): Promise<SyncResult> {
     const counts = await persistRecords(client, ownerId, members, records);
     const missingCourseDiagnostics = readDiagnostics.filter((item) => item.missingCourse > 0).slice(0, 3)
       .map((item) => `${item.tool}: ${item.missingCourse}/${item.records} missing course; fields=${item.fields.join(",") || "none"}`);
+    const emptyReadDiagnostics = readDiagnostics.filter((item) => item.records === 0).slice(0, 3)
+      .map((item) => `${item.tool}: no assignment records; response fields=${item.fields.join(",") || "none"}`);
     const toolInventory = availableTools.map((tool) => {
       const properties = tool.inputSchema?.properties && typeof tool.inputSchema.properties === "object" ? Object.keys(tool.inputSchema.properties) : [];
       const required = Array.isArray(tool.inputSchema?.required) ? tool.inputSchema.required.map(String) : [];
       return `${tool.name}(args:${properties.join(",") || "none"};required:${required.join(",") || "none"})`;
     }).join(" | ").slice(0, 1200);
     const hasPartialData = failedReads || counts.skipped || !counts.assessments || !counts.marks;
-    const summary: SyncResult = { status: hasPartialData ? "partial" : "succeeded", runId: run.id, courses: counts.courses, assessments: counts.assessments, submissions: counts.submissions, marks: counts.marks, feedback: counts.feedback, message: hasPartialData ? `Imported ${counts.assessments} assessment(s), ${counts.marks} marks, and ${counts.feedback} feedback records; ${failedReads} read operation(s) failed and ${counts.skipped} record(s) lacked a course reference.${missingCourseDiagnostics.length ? ` Tool field diagnostics: ${missingCourseDiagnostics.join(" | ")}` : ""} Available tool schemas: ${toolInventory}` : `Synced ${counts.assessments} assessments, ${counts.marks} marks, and ${counts.feedback} feedback records. Only explicit earned scores were saved as official marks.` };
+    const summary: SyncResult = { status: hasPartialData ? "partial" : "succeeded", runId: run.id, courses: counts.courses, assessments: counts.assessments, submissions: counts.submissions, marks: counts.marks, feedback: counts.feedback, message: hasPartialData ? `Imported ${counts.assessments} assessment(s), ${counts.marks} marks, and ${counts.feedback} feedback records; ${failedReads} read operation(s) failed and ${counts.skipped} record(s) lacked a course reference.${missingCourseDiagnostics.length ? ` Tool field diagnostics: ${missingCourseDiagnostics.join(" | ")}` : ""}${emptyReadDiagnostics.length ? ` Empty-tool diagnostics: ${emptyReadDiagnostics.join(" | ")}` : ""} Available tool schemas: ${toolInventory}` : `Synced ${counts.assessments} assessments, ${counts.marks} marks, and ${counts.feedback} feedback records. Only explicit earned scores were saved as official marks.` };
     const { error } = await client.from("sync_runs").update({ status: summary.status, finished_at: new Date().toISOString(), message: summary.message }).eq("id", run.id).eq("user_id", ownerId);
     if (error) throw new Error("Sync status could not be saved.");
     return summary;
