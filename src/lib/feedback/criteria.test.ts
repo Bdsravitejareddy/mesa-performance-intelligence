@@ -27,6 +27,15 @@ describe("criterion marks in official feedback", () => {
     expect(parseCriterionScores("Clarity 6/5 | Q1 2/3 | Q2 1/3 | due 12/10/2026")).toEqual([]);
   });
 
+  it("ignores fractions inside running prose and single scored headings", () => {
+    const prose = "FEEDBACK (L0-L4): Q1 correct. Q2 — repeat customers rated 4/5 (answer: 120): Correct. Q3 — revenue: close. ---------- FEEDBACK (OPEN QUESTION): 18/25. Good answer overall.";
+    expect(parseCriterionScores(prose)).toEqual([]);
+  });
+
+  it("does not treat criterion-like text after the first breakdown item as a new label", () => {
+    expect(parseCriterionScores("Clarity 4/5 | Depth 2/5 Depth: needs a worked example, e.g. 3/4 of cases").map((item) => item.label)).toEqual(["Clarity", "Depth"]);
+  });
+
   it("returns nothing for feedback without a breakdown", () => {
     expect(parseCriterionScores("You got L0 (counting questions) almost completely right — well done.")).toEqual([]);
     expect(parseCriterionScores("")).toEqual([]);

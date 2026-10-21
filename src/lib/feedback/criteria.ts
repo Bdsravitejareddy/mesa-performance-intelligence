@@ -4,17 +4,22 @@
 
 export type CriterionScore = { label: string; score: number; max: number; percent: number };
 
-const SEGMENT = /([A-Za-z][A-Za-z0-9&,'’()\- ]{1,80}?)\s*[:\-–]?\s*(\d{1,3}(?:\.\d{1,2})?)\s*\/\s*(\d{1,3}(?:\.\d{1,2})?)(?![\d/])/g;
-// Overall totals, dates and question numbers are not criteria.
-const EXCLUDED_LABEL = /^(total|overall|final|grand total|score|marks?|mark|result|q\d+|question \d+)$/i;
+// Each list item must open with its label and score, e.g. "MVP concept 3/5 ..." or "Structure: 4/5".
+const ITEM = /^([A-Za-z][A-Za-z0-9&,'’\- ]{1,60}?)\s*[:\-–]?\s*(\d{1,3}(?:\.\d{1,2})?)\s*\/\s*(\d{1,3}(?:\.\d{1,2})?)(?![\d/])/;
+// Overall totals and question numbers are not criteria.
+const EXCLUDED_LABEL = /^(total|overall|final|grand total|score|marks?|result|feedback|q\d+|question \d+)$/i;
 const MIN_CRITERIA = 2;
 
+// Only structured breakdowns count: items separated by "|", ";", bullets or line breaks. A fraction inside a
+// sentence ("bookings rated 5/5") is prose, not a criterion, and is ignored.
 export function parseCriterionScores(feedback: string): CriterionScore[] {
   if (!feedback.trim()) return [];
   const found: CriterionScore[] = [];
   const seen = new Set<string>();
-  for (const match of feedback.matchAll(SEGMENT)) {
-    const label = cleanLabel(match[1]);
+  for (const segment of feedback.split(/\s*(?:\||;|•|\r?\n)\s*/)) {
+    const match = segment.trim().match(ITEM);
+    if (!match) continue;
+    const label = match[1].replace(/[\s,.:\-–]+$/g, "").replace(/\s+/g, " ");
     const score = Number(match[2]);
     const max = Number(match[3]);
     if (!label || EXCLUDED_LABEL.test(label) || !(max > 0) || score < 0 || score > max) continue;
@@ -23,14 +28,8 @@ export function parseCriterionScores(feedback: string): CriterionScore[] {
     seen.add(key);
     found.push({ label, score, max, percent: Math.round((score / max) * 1000) / 10 });
   }
-  // A single "x/y" in prose is too weak to treat as a rubric breakdown.
+  // A single scored line is too weak to treat as a rubric breakdown.
   return found.length >= MIN_CRITERIA ? found : [];
-}
-
-function cleanLabel(raw: string): string {
-  // Keep only the text after the last separator so "...early doct | MVP concept" yields "MVP concept".
-  const tail = raw.split(/[|;•\n]/).at(-1) ?? "";
-  return tail.replace(/^[\s,.:\-–]+|[\s,.:\-–]+$/g, "").replace(/\s+/g, " ").slice(0, 80);
 }
 
 export type CriterionGap = CriterionScore & { overall: number };
