@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
+import { CriterionBreakdown } from "@/components/criterion-breakdown";
 import { SyncHealthNotice } from "@/components/sync-health-notice";
 import { describeSyncHealth, type SyncRun } from "@/lib/lms/sync-health";
 import { formatOfficialMark } from "@/lib/scoring";
@@ -66,7 +67,7 @@ function EvidenceContent({ data }: { data: Awaited<ReturnType<typeof loadData>> 
           return <div className="evidence-table-row" role="row" key={assessment.id}>
             <span role="cell"><strong>{assessment.title}</strong><small>{courseTitle.get(assessment.course_id) ?? "Course"} · {assessment.assessment_format}</small></span>
             <span role="cell">{mark === null ? <em>No released mark</em> : <><strong>{formatOfficialMark(mark)}</strong>{latest.source_original_mark !== null && latest.source_original_max_mark !== null && <small>LMS: {Number(latest.source_original_mark)}/{Number(latest.source_original_max_mark)}</small>}</>}{rows.length > 1 && <small>{rows.length} submission records</small>}</span>
-            <span role="cell">{latest?.official_feedback.trim() ? <small>{latest.official_feedback.trim().slice(0, 160)}{latest.official_feedback.trim().length > 160 ? "…" : ""}</small> : <small>None recorded</small>}</span>
+            <span role="cell">{latest?.official_feedback.trim() ? <><small>{latest.official_feedback.trim().slice(0, 160)}{latest.official_feedback.trim().length > 160 ? "…" : ""}</small><CriterionBreakdown feedback={latest.official_feedback} overall={mark} /></> : <small>None recorded</small>}</span>
             <span role="cell"><small>{assessment.source_record_id ? "Mesa LMS" : "Manual entry"}{latest?.official_mark_source ? ` · ${latest.official_mark_source}` : ""}</small><small>{latest?.source_updated_at ? `LMS updated ${new Date(latest.source_updated_at).toLocaleDateString()}` : `Recorded ${new Date((latest ?? assessment).created_at).toLocaleDateString()}`}</small>{latest?.lms_submission_status && <small>Status: {latest.lms_submission_status}</small>}</span>
           </div>;
         })}

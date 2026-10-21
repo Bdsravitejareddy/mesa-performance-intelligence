@@ -27,6 +27,8 @@ export type CompetencyEvidence = {
   mappingSource: "user_tagged" | "official_rubric" | "learning_objective" | "ai_suggested";
   // A whole-assessment mark is indirect evidence for each competency the assessment covers.
   granularity: "whole_assessment" | "criterion";
+  // Set for criterion-level evidence, e.g. "Customer, market & competition".
+  criterionLabel?: string | null;
 };
 
 export type EvidenceRow = CompetencyEvidence & { band: "high" | "middle" | "low" | "unscored" };
@@ -90,6 +92,12 @@ export function classifyCompetency(input: CompetencyEvidence[], now: Date = new 
   }
 
   const confidence = confidenceFor(scored);
+  // Strengths and development areas need separate assessments; several criteria of one piece of work are one context.
+  const distinct = (rows: EvidenceRow[]) => new Set(rows.map((row) => row.assessmentId)).size;
+  const highAssessments = distinct(high);
+  const lowAssessments = distinct(low);
+  const scoredAssessments = distinct(scored);
+  const allWhole = scored.every((row) => row.granularity === "whole_assessment");
   if (high.length && low.length) {
     return {
       state: "conflicting",
@@ -98,36 +106,39 @@ export function classifyCompetency(input: CompetencyEvidence[], now: Date = new 
       why: { ...base, interpretation: "Results point in different directions across assessments. The difference may reflect context, difficulty, format, or what each assessment actually tested; it is reported rather than averaged away.", wouldChangeThis: "Criterion-level feedback or rubric scores showing which part of each assessment drove the result." },
     };
   }
-  if (scored.length === 1) {
-    const only = scored[0];
-    if (only.band === "high") {
+  if (scoredAssessments === 1) {
+    if (high.length) {
       return { state: "emerging", confidence, headline: "One high result", why: { ...base, interpretation: "One high result is early positive evidence. A single assessment cannot establish a strength.", wouldChangeThis: "A second high result on a different assessment would support a demonstrated strength." } };
     }
-    if (only.band === "low") {
-      return { state: "insufficient_evidence", confidence, headline: "One low result — check before concluding", why: { ...base, interpretation: "One low result is a signal to review that piece of work, not proof of a development area.", wouldChangeThis: "Another assessment of this competency: a second low result would establish a development area; a high one would make the evidence conflicting." } };
+    if (low.length) {
+      return { state: "insufficient_evidence", confidence, headline: low.length > 1 ? `${low.length} low criteria in one assessment — check before concluding` : "One low result — check before concluding", why: { ...base, interpretation: "Low results from a single assessment are a signal to review that piece of work, not proof of a development area.", wouldChangeThis: "Another assessment of this competency: a second low result would establish a development area; a high one would make the evidence conflicting." } };
     }
     return { state: "insufficient_evidence", confidence, headline: "One mid-range result", why: { ...base, interpretation: "One result between the bands does not establish either a strength or a shortfall.", wouldChangeThis: "Further assessed work on this competency." } };
   }
-  if (high.length >= 2) {
-    return { state: "demonstrated_strength", confidence, headline: `High results in ${high.length} assessments`, why: { ...base, interpretation: `${high.length} separate assessments mapped to this competency scored ${HIGH_RESULT}/100 or above, with no low results.`, wouldChangeThis: "A low result on a later mapped assessment would make this conflicting." } };
+  if (highAssessments >= 2) {
+    return { state: "demonstrated_strength", confidence, headline: `High results in ${highAssessments} assessments`, why: { ...base, interpretation: `${highAssessments} separate assessments mapped to this competency scored ${HIGH_RESULT}/100 or above, with no low results.`, wouldChangeThis: "A low result on a later mapped assessment would make this conflicting." } };
   }
-  if (low.length >= 2) {
-    return { state: "development_area", confidence, headline: `Low results in ${low.length} assessments`, why: { ...base, interpretation: `${low.length} separate assessments mapped to this competency scored below ${LOW_RESULT}/100, with no high results. Because these are whole-assessment marks, the shortfall may sit in a specific part of the work; check the feedback.`, wouldChangeThis: "A high result on a later mapped assessment, or criterion feedback showing the low marks came from a different skill." } };
+  if (lowAssessments >= 2) {
+    return { state: "development_area", confidence, headline: `Low results in ${lowAssessments} assessments`, why: { ...base, interpretation: `${lowAssessments} separate assessments mapped to this competency scored below ${LOW_RESULT}/100, with no high results.${allWhole ? " Because these are whole-assessment marks, the shortfall may sit in a specific part of the work; check the feedback." : ""}`, wouldChangeThis: "A high result on a later mapped assessment, or criterion feedback showing the low marks came from a different skill." } };
   }
-  if (high.length === 1) {
+  if (highAssessments === 1) {
     return { state: "emerging", confidence, headline: "One high result, others mid-range", why: { ...base, interpretation: `One assessment scored ${HIGH_RESULT}/100 or above and ${middle.length + low.length} did not reach that band.`, wouldChangeThis: "Another high result would support a demonstrated strength." } };
   }
-  return { state: "meets_expectations", confidence, headline: `${scored.length} results, none at the high or low band`, why: { ...base, interpretation: `Results sit between ${LOW_RESULT} and ${HIGH_RESULT}/100${low.length ? ", with one low result" : ""}. Neither a strength nor a shortfall is established.`, wouldChangeThis: "Consistently high or low results on further mapped assessments." } };
+  return { state: "meets_expectations", confidence, headline: `${scoredAssessments} assessments, none at the high or low band`, why: { ...base, interpretation: `Results sit between ${LOW_RESULT} and ${HIGH_RESULT}/100${low.length ? ", with one low result" : ""}. Neither a strength nor a shortfall is established.`, wouldChangeThis: "Consistently high or low results on further mapped assessments." } };
 }
 
-// A resubmission or corrected grade for the same assessment must not count twice.
+// A resubmission or corrected grade for the same assessment must not count twice. When an assessment has
+// criterion-level evidence for this competency, that more specific evidence replaces its whole-assessment mark.
 function latestPerAssessment(rows: EvidenceRow[]): EvidenceRow[] {
-  const byAssessment = new Map<string, EvidenceRow>();
+  const latest = new Map<string, EvidenceRow>();
   for (const row of rows) {
-    const current = byAssessment.get(row.assessmentId);
-    if (!current || (row.date ?? "") > (current.date ?? "")) byAssessment.set(row.assessmentId, row);
+    const key = `${row.assessmentId}|${row.granularity === "criterion" ? row.criterionLabel ?? "" : ""}|${row.granularity}`;
+    const current = latest.get(key);
+    if (!current || (row.date ?? "") > (current.date ?? "")) latest.set(key, row);
   }
-  return [...byAssessment.values()];
+  const values = [...latest.values()];
+  const withCriteria = new Set(values.filter((row) => row.granularity === "criterion").map((row) => row.assessmentId));
+  return values.filter((row) => row.granularity === "criterion" || !withCriteria.has(row.assessmentId));
 }
 
 function confidenceFor(scored: EvidenceRow[]): Confidence {

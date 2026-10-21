@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { formatOfficialMark } from "@/lib/scoring";
 
 type Competency = { id: string; domain: string; name: string };
-type Assessment = { id: string; title: string; course: string; tagged: string[]; locked: string[]; mark: number | null };
+type Assessment = { id: string; title: string; course: string; tagged: string[]; locked: string[]; mark: number | null; criteria: { label: string; score: number; max: number }[]; criterionTags: Record<string, string> };
 
 export function AssessmentCompetencyTagger({ competencies, assessments }: { competencies: Competency[]; assessments: Assessment[] }) {
   const [filter, setFilter] = useState("");
@@ -25,16 +25,18 @@ export function AssessmentCompetencyTagger({ competencies, assessments }: { comp
 function AssessmentTags({ assessment, byDomain, names }: { assessment: Assessment; byDomain: [string, Competency[]][]; names: Map<string, string> }) {
   const router = useRouter();
   const [selected, setSelected] = useState(new Set(assessment.tagged));
+  const [criterionTags, setCriterionTags] = useState<Record<string, string>>(assessment.criterionTags);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
-  const dirty = selected.size !== assessment.tagged.length || assessment.tagged.some((id) => !selected.has(id));
+  const criterionDirty = assessment.criteria.some((item) => (criterionTags[item.label] ?? "") !== (assessment.criterionTags[item.label] ?? ""));
+  const dirty = criterionDirty || selected.size !== assessment.tagged.length || assessment.tagged.some((id) => !selected.has(id));
   const toggle = (id: string) => setSelected((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
 
   async function save() {
     setBusy(true);
     setStatus("");
     try {
-      const response = await fetch("/api/assessment-competencies", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ assessmentId: assessment.id, competencyIds: [...selected] }) });
+      const response = await fetch("/api/assessment-competencies", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ assessmentId: assessment.id, competencyIds: [...selected], criteria: Object.entries(criterionTags).filter(([, competencyId]) => competencyId).map(([label, competencyId]) => ({ label, competencyId })) }) });
       const result = await response.json() as { error?: string };
       if (!response.ok) throw new Error(result.error || "Could not save.");
       setStatus("Saved.");
@@ -46,7 +48,8 @@ function AssessmentTags({ assessment, byDomain, names }: { assessment: Assessmen
     }
   }
 
-  const summary = [...selected, ...assessment.locked].map((id) => names.get(id)).filter(Boolean).join(", ");
+  const criterionCount = Object.values(criterionTags).filter(Boolean).length;
+  const summary = [[...selected, ...assessment.locked].map((id) => names.get(id)).filter(Boolean).join(", "), criterionCount ? `${criterionCount} criterion tag${criterionCount > 1 ? "s" : ""}` : ""].filter(Boolean).join(" · ");
   return <details className="tagger-row">
     <summary><span><strong>{assessment.title}</strong><small>{assessment.course} · {assessment.mark === null ? "no released mark" : formatOfficialMark(assessment.mark)}</small></span><small className="tagger-summary">{summary || "Not mapped"}</small></summary>
     <div className="tagger-body">
@@ -54,6 +57,10 @@ function AssessmentTags({ assessment, byDomain, names }: { assessment: Assessmen
         const locked = assessment.locked.includes(item.id);
         return <label key={item.id} className="tagger-option"><input type="checkbox" checked={locked || selected.has(item.id)} disabled={locked || busy} onChange={() => toggle(item.id)} />{item.name}{locked && <small> (official)</small>}</label>;
       })}</fieldset>)}
+      {assessment.criteria.length > 0 && <fieldset className="tagger-criteria"><legend>Criterion-level mapping (from official feedback)</legend>
+        <small>Tag a criterion when it tests one competency. Criterion marks are direct evidence and replace the whole-assessment mark for that competency.</small>
+        {assessment.criteria.map((item) => <label key={item.label} className="tagger-criterion"><span>{item.label} <small>{item.score}/{item.max}</small></span><select value={criterionTags[item.label] ?? ""} disabled={busy} onChange={(event) => setCriterionTags((current) => ({ ...current, [item.label]: event.target.value }))}><option value="">Not mapped</option>{byDomain.map(([domain, items]) => <optgroup key={domain} label={domain}>{items.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</optgroup>)}</select></label>)}
+      </fieldset>}
       <div className="tagger-actions"><button className="button button-primary" type="button" onClick={save} disabled={!dirty || busy || selected.size > 12}>{busy ? "Saving…" : "Save mapping"}</button>{selected.size > 12 && <small>Choose at most 12.</small>}{status && <small role="status">{status}</small>}</div>
     </div>
   </details>;

@@ -81,3 +81,31 @@ describe("competency classification", () => {
     expect(text).toMatch(/one course/);
   });
 });
+
+describe("criterion-level evidence", () => {
+  it("prefers criterion marks over the whole-assessment mark for the same assessment", () => {
+    const whole = ev(90, { assessmentId: "mid" });
+    const criterion = ev(40, { assessmentId: "mid", granularity: "criterion", criterionLabel: "Market sizing" });
+    const result = classifyCompetency([whole, criterion], now);
+    expect(result.state).toBe("insufficient_evidence");
+    expect(result.headline).toMatch(/One low result/);
+  });
+
+  it("keeps both criteria as evidence but does not treat one assessment as repeated evidence", () => {
+    const result = classifyCompetency([
+      ev(40, { assessmentId: "mid", granularity: "criterion", criterionLabel: "Customer" }),
+      ev(40, { assessmentId: "mid", granularity: "criterion", criterionLabel: "GTM" }),
+    ], now);
+    expect(result.state).toBe("insufficient_evidence");
+    expect(result.headline).toMatch(/2 low criteria in one assessment/);
+  });
+
+  it("establishes a development area from low criteria in two different assessments", () => {
+    const result = classifyCompetency([
+      ev(40, { assessmentId: "mid", granularity: "criterion", criterionLabel: "Customer" }),
+      ev(50, { assessmentId: "end", granularity: "criterion", criterionLabel: "Customer" }),
+    ], now);
+    expect(result.state).toBe("development_area");
+    expect(result.why.interpretation).not.toMatch(/whole-assessment/);
+  });
+});

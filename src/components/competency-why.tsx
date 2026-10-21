@@ -11,8 +11,8 @@ export function CompetencyWhy({ assessment }: { assessment: CompetencyAssessment
       <h3>Evidence</h3>
       {why.evidence.length ? <ul className="competency-evidence">{why.evidence.map((row, index) => <li key={`${row.assessmentId}-${row.submissionId ?? "none"}-${index}`}>
         <span><strong>{row.assessmentTitle}</strong> · {row.course}</span>
-        <span className={`band band-${row.band}`}>{row.mark === null ? "No released mark" : formatOfficialMark(row.mark)}</span>
-        <small>{row.source}{row.date ? ` · ${new Date(row.date).toLocaleDateString()}` : ""} · {MAPPING_LABELS[row.mappingSource]} mapping · whole-assessment mark</small>
+        <span className={`band band-${row.band}`}>{row.mark === null ? "No released mark" : row.granularity === "criterion" ? `${row.mark}% of criterion` : formatOfficialMark(row.mark)}</span>
+        <small>{row.source}{row.date ? ` · ${new Date(row.date).toLocaleDateString()}` : ""} · {MAPPING_LABELS[row.mappingSource]} mapping · {row.granularity === "criterion" ? "criterion mark" : "whole-assessment mark"}</small>
         {row.feedback.trim() && <q>{row.feedback.trim().slice(0, 300)}</q>}
       </li>)}</ul> : <p>No assessment is mapped to this competency.</p>}
       <h3>Benchmark</h3><p>{why.benchmark}</p>

@@ -27,6 +27,7 @@ describe("competency framework migration", () => {
     await db.exec(await migration("20261019062743_create_course_intelligence_schema.sql"));
     await db.exec(await migration("20261019063732_shared_workspace_access.sql"));
     await db.exec(await migration("20261022120000_competency_framework.sql"));
+    await db.exec(await migration("20261022140000_criterion_competency_mappings.sql"));
     await db.exec(`
       insert into private.workspace_access(email) values ('first@example.com'),('second@example.com');
       insert into auth.users(id,email,email_confirmed_at) values
@@ -63,6 +64,13 @@ describe("competency framework migration", () => {
     // Duplicate mapping is rejected, so re-tagging is idempotent via upsert.
     await expect(db.exec(`insert into public.assessment_competencies(user_id,assessment_id,competency_id,mapping_source)
       values ('11111111-1111-4111-8111-111111111111','a1111111-1111-4111-8111-111111111111','analytical.numerical_analysis','user_tagged')`)).rejects.toThrow();
+    // Criterion-level tags for the same competency coexist with the whole-assessment tag, but each scope is unique.
+    await db.exec(`insert into public.assessment_competencies(user_id,assessment_id,competency_id,mapping_source,criterion_label)
+      values ('11111111-1111-4111-8111-111111111111','a1111111-1111-4111-8111-111111111111','analytical.numerical_analysis','user_tagged','Market sizing')`);
+    await expect(db.exec(`insert into public.assessment_competencies(user_id,assessment_id,competency_id,mapping_source,criterion_label)
+      values ('11111111-1111-4111-8111-111111111111','a1111111-1111-4111-8111-111111111111','analytical.numerical_analysis','user_tagged','Market sizing')`)).rejects.toThrow();
+    await expect(db.exec(`insert into public.assessment_competencies(user_id,assessment_id,competency_id,mapping_source,criterion_label)
+      values ('11111111-1111-4111-8111-111111111111','a1111111-1111-4111-8111-111111111111','analytical.logical_reasoning','user_tagged','  ')`)).rejects.toThrow();
     // An accepted AI suggestion must carry its rationale.
     await expect(db.exec(`insert into public.assessment_competencies(user_id,assessment_id,competency_id,mapping_source,review_status)
       values ('11111111-1111-4111-8111-111111111111','a1111111-1111-4111-8111-111111111111','business.finance','ai_suggested','accepted')`)).rejects.toThrow();

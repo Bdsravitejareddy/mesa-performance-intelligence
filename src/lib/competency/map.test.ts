@@ -39,3 +39,19 @@ describe("competency map", () => {
     expect(strategy.assessment.headline).toMatch(/no released mark/);
   });
 });
+
+describe("criterion mappings", () => {
+  it("uses the criterion mark from official feedback as criterion-level evidence", () => {
+    const feedbackSubmissions = [{ id: "s9", assessment_id: "a1", official_mark: 51, official_feedback: "Problem & validation 3/5 | Customer, market & competition 2/5 | MVP concept 3/5", official_mark_source: "Mesa Nexus MCP", submitted_at: "2026-10-01T00:00:00Z" }];
+    const domains = buildCompetencyMap({ competencies, courses, assessments, submissions: feedbackSubmissions, mappings: [{ assessment_id: "a1", competency_id: "business.strategy", mapping_source: "user_tagged", review_status: "accepted", criterion_label: "Customer, market & competition" }] }, now);
+    const row = domains[1].competencies[0].assessment.why.evidence[0];
+    expect(row.granularity).toBe("criterion");
+    expect(row.mark).toBe(40);
+    expect(row.source).toMatch(/criterion 2\/5/);
+  });
+
+  it("treats a criterion missing from feedback as unscored", () => {
+    const domains = buildCompetencyMap({ competencies, courses, assessments, submissions, mappings: [{ assessment_id: "a1", competency_id: "business.strategy", mapping_source: "user_tagged", review_status: "accepted", criterion_label: "Market sizing" }] }, now);
+    expect(domains[1].competencies[0].assessment.why.evidence[0].mark).toBeNull();
+  });
+});

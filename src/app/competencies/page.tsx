@@ -3,6 +3,7 @@ import { AssessmentCompetencyTagger } from "@/components/assessment-competency-t
 import { CompetencyWhy } from "@/components/competency-why";
 import { STATE_LABELS, type CompetencyState } from "@/lib/competency/classify";
 import { buildCompetencyMap, type AssessmentRow, type CompetencyRow, type CourseRow, type MappingRow, type SubmissionRow } from "@/lib/competency/map";
+import { parseCriterionScores } from "@/lib/feedback/criteria";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
 
@@ -40,7 +41,7 @@ export default async function CompetenciesPage() {
       <section className="content-panel"><h2>Map assessments to competencies <span className="panel-count">{data.assessments.length}</span></h2><p className="empty-hint">Tag each assessment with the competencies it actually tested. Tags are visible to both workspace members and are labelled as member-tagged in every explanation, not as official Mesa rubric criteria.</p>
         <AssessmentCompetencyTagger
           competencies={data.competencies.map(({ id, domain_name, name }) => ({ id, domain: domain_name, name }))}
-          assessments={data.assessments.map((assessment) => ({ id: assessment.id, title: assessment.title, course: data.courses.find((course) => course.id === assessment.course_id)?.title ?? "Course", tagged: data.mappings.filter((row) => row.assessment_id === assessment.id && row.mapping_source === "user_tagged").map((row) => row.competency_id), locked: data.mappings.filter((row) => row.assessment_id === assessment.id && row.mapping_source !== "user_tagged" && row.review_status === "accepted").map((row) => row.competency_id), mark: latestMark(data.submissions, assessment.id) }))}
+          assessments={data.assessments.map((assessment) => ({ id: assessment.id, title: assessment.title, course: data.courses.find((course) => course.id === assessment.course_id)?.title ?? "Course", tagged: data.mappings.filter((row) => row.assessment_id === assessment.id && row.mapping_source === "user_tagged" && !row.criterion_label).map((row) => row.competency_id), locked: data.mappings.filter((row) => row.assessment_id === assessment.id && row.mapping_source !== "user_tagged" && row.review_status === "accepted" && !row.criterion_label).map((row) => row.competency_id), mark: latestMark(data.submissions, assessment.id), criteria: latestCriteria(data.submissions, assessment.id), criterionTags: Object.fromEntries(data.mappings.filter((row) => row.assessment_id === assessment.id && row.mapping_source === "user_tagged" && row.criterion_label).map((row) => [row.criterion_label!, row.competency_id])) }))}
         />
       </section>
     </>}
@@ -52,11 +53,16 @@ function latestMark(submissions: SubmissionRow[], assessmentId: string): number 
   return rows.length ? Number(rows[0].official_mark) : null;
 }
 
+function latestCriteria(submissions: SubmissionRow[], assessmentId: string) {
+  const rows = submissions.filter((row) => row.assessment_id === assessmentId && row.official_feedback).sort((a, b) => (b.source_updated_at ?? b.submitted_at ?? "").localeCompare(a.source_updated_at ?? a.submitted_at ?? ""));
+  return rows.length ? parseCriterionScores(rows[0].official_feedback ?? "").map(({ label, score, max }) => ({ label, score, max })) : [];
+}
+
 async function loadData() {
   const supabase = await createClient();
   const [competencies, mappings, assessments, submissions, courses] = await Promise.all([
     supabase.from("competencies").select("id, domain_key, domain_name, name, description, sort_order").order("sort_order"),
-    supabase.from("assessment_competencies").select("assessment_id, competency_id, mapping_source, review_status"),
+    supabase.from("assessment_competencies").select("assessment_id, competency_id, mapping_source, review_status, criterion_label"),
     supabase.from("assessments").select("id, course_id, title").order("title"),
     supabase.from("submissions").select("id, assessment_id, official_mark, official_feedback, official_mark_source, submitted_at, source_updated_at"),
     supabase.from("courses").select("id, title"),
