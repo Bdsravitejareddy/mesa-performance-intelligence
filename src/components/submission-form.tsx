@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FilePlus2, LoaderCircle, Save, Trash2 } from "lucide-react";
 
@@ -15,6 +15,7 @@ export function SubmissionForm({ assessmentId, submissionId, courseMaterials = [
   const [busy, setBusy] = useState(false);
   const [selectedMaterial, setSelectedMaterial] = useState("");
   const [activeSubmissionId, setActiveSubmissionId] = useState(submissionId);
+  const activeSubmissionIdRef = useRef(submissionId);
 
   async function attachEvidence(targetSubmissionId: string, file?: File | null) {
     if (!file && !selectedMaterial) return;
@@ -38,17 +39,18 @@ export function SubmissionForm({ assessmentId, submissionId, courseMaterials = [
     const markText = String(form.get("officialMark") ?? "").trim();
     const officialMark = markText ? Number(markText) : null;
     try {
-      let targetSubmissionId = activeSubmissionId;
+      let targetSubmissionId = activeSubmissionIdRef.current;
       if (!targetSubmissionId) {
         const response = await fetch("/api/submissions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ assessmentId, answerText: form.get("answerText"), officialMark, officialFeedback: form.get("officialFeedback") }) });
         const result = (await response.json()) as { id?: string; error?: string };
         if (!response.ok || !result.id) throw new Error(result.error ?? "Could not save this assessment record.");
         targetSubmissionId = result.id;
+        activeSubmissionIdRef.current = result.id;
         setActiveSubmissionId(result.id);
       }
       await attachEvidence(targetSubmissionId, selectedFile);
       if (selectedFile || selectedMaterial) setSelectedMaterial("");
-      if (!activeSubmissionId) formElement.reset();
+      if (!submissionId) formElement.reset();
       router.refresh();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not save this assessment record.");
@@ -57,9 +59,10 @@ export function SubmissionForm({ assessmentId, submissionId, courseMaterials = [
   async function removeEvidence(documentId: string) {
     setBusy(true); setError("");
     try {
-      const response = await fetch(`/api/submissions/${encodeURIComponent(activeSubmissionId ?? "")}/documents`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ documentId }) });
-      const result = (await response.json()) as { error?: string };
+      const response = await fetch(`/api/submissions/${encodeURIComponent(activeSubmissionIdRef.current ?? "")}/documents`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ documentId }) });
+      const result = (await response.json()) as { error?: string; warning?: string };
       if (!response.ok) throw new Error(result.error ?? "Submission evidence could not be removed.");
+      if (result.warning) setMessage(result.warning);
       router.refresh();
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Submission evidence could not be removed."); }
     finally { setBusy(false); }

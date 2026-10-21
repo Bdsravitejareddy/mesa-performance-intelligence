@@ -15,6 +15,22 @@ describe("course document extraction", () => {
     ]);
   });
 
+  it("rejects a PDF exceeding the configured page budget before extracting page content", async () => {
+    const pdf = await PDFDocument.create();
+    pdf.addPage(); pdf.addPage();
+    const bytes = await pdf.save();
+    await expect(extractPdfPages(bytes, { maxPages: 1 })).rejects.toThrow("page limit");
+  });
+
+  it("enforces PDF extraction time and text budgets", async () => {
+    const pdf = await PDFDocument.create();
+    const page = pdf.addPage();
+    page.drawText("Bounded text", { font: await pdf.embedFont(StandardFonts.Helvetica) });
+    const bytes = await pdf.save();
+    await expect(extractPdfPages(bytes.slice(), { timeoutMs: 0 })).rejects.toThrow("time limit");
+    await expect(extractPdfPages(bytes.slice(), { maxTextCharacters: 2 })).rejects.toThrow("text limit");
+  });
+
   it("extracts PPTX slide text and table rows while flagging visual content", async () => {
     const deck = new JSZip();
     deck.file(
@@ -35,5 +51,49 @@ describe("course document extraction", () => {
         hasVisuals: true,
       },
     ]);
+  });
+
+  it("rejects a PPTX whose declared expansion exceeds the budget before inflating slide XML", async () => {
+    const deck = new JSZip();
+    deck.file("ppt/slides/slide1.xml", "<sld>" + "x".repeat(1024 * 1024) + "</sld>");
+    const bytes = await deck.generateAsync({ type: "uint8array", compression: "DEFLATE", compressionOptions: { level: 9 } });
+    await expect(extractPptxSlides(bytes, { maxUncompressedBytes: 512 * 1024 })).rejects.toThrow("uncompressed size limit");
+  });
+
+  it("caps actual PPTX expansion when a malicious ZIP understates its central-directory size", async () => {
+    const deck = new JSZip();
+    deck.file("ppt/slides/slide1.xml", "<sld>" + "x".repeat(2 * 1024 * 1024) + "</sld>");
+    const bytes = await deck.generateAsync({ type: "uint8array", compression: "DEFLATE", compressionOptions: { level: 9 } });
+    const forged = bytes.slice();
+    const view = new DataView(forged.buffer, forged.byteOffset, forged.byteLength);
+    let central = -1;
+    for (let offset = forged.length - 46; offset >= 0; offset -= 1) {
+      if (view.getUint32(offset, true) === 0x02014b50) { central = offset; break; }
+    }
+    if (central < 0) throw new Error("Generated ZIP had no central-directory entry.");
+    view.setUint32(central + 24, 1, true);
+    await expect(extractPptxSlides(forged, { maxEntryBytes: 1024 * 1024 })).rejects.toThrow();
+  });
+
+  it("rejects a PPTX exceeding the configured slide count before parsing slide XML", async () => {
+    const deck = new JSZip();
+    for (let index = 1; index <= 3; index += 1) deck.file(`ppt/slides/slide${index}.xml`, `<sld>${index}</sld>`);
+    const bytes = await deck.generateAsync({ type: "uint8array" });
+    await expect(extractPptxSlides(bytes, { maxPages: 2 })).rejects.toThrow("slide limit");
+  });
+
+  it("enforces PPTX extraction time and text budgets", async () => {
+    const deck = new JSZip();
+    deck.file("ppt/slides/slide1.xml", "<p:sld xmlns:a=\"a\"><a:t>Bounded text</a:t></p:sld>");
+    const bytes = await deck.generateAsync({ type: "uint8array" });
+    await expect(extractPptxSlides(bytes, { timeoutMs: 0 })).rejects.toThrow("time limit");
+    await expect(extractPptxSlides(bytes, { maxTextCharacters: 2 })).rejects.toThrow("text limit");
+  });
+
+  it("rejects archives with excessive central-directory entries", async () => {
+    const deck = new JSZip();
+    for (let index = 0; index < 3; index += 1) deck.file(`ppt/slides/slide${index + 1}.xml`, `<sld>${index}</sld>`);
+    const bytes = await deck.generateAsync({ type: "uint8array" });
+    await expect(extractPptxSlides(bytes, { maxZipEntries: 2 })).rejects.toThrow("entry count limit");
   });
 });

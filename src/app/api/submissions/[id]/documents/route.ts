@@ -8,6 +8,15 @@ import { hasSupabaseConfig } from "@/lib/supabase/config";
 const maxFileSize = 20 * 1024 * 1024;
 const pdfMime = SUBMISSION_DOCUMENT_MIME_TYPES[0];
 const pptxMime = SUBMISSION_DOCUMENT_MIME_TYPES[1];
+const uploadExtractionLimits = {
+  maxPages: 500,
+  maxTextCharacters: 1_000_000,
+  timeoutMs: 30_000,
+  maxZipEntries: 4_096,
+  maxUncompressedBytes: 80 * 1024 * 1024,
+  maxEntryBytes: 16 * 1024 * 1024,
+  maxSlideBytes: 4 * 1024 * 1024,
+} as const;
 
 type SubmissionDocumentContext = { params: Promise<{ id: string }> };
 
@@ -79,8 +88,8 @@ export async function POST(request: NextRequest, context: SubmissionDocumentCont
     const { error: uploadError } = await supabase.storage.from("submission-files").upload(objectPath, bytes, { contentType: mimeType, upsert: false });
     if (uploadError) throw new Error("Private submission file upload failed.");
     const pages = mimeType === pdfMime
-      ? await extractPdfPages(bytes)
-      : (await extractPptxSlides(bytes)).map((slide) => ({ pageNumber: slide.slideNumber, text: slide.text, hasVisuals: slide.hasVisuals }));
+      ? await extractPdfPages(bytes, uploadExtractionLimits)
+      : (await extractPptxSlides(bytes, uploadExtractionLimits)).map((slide) => ({ pageNumber: slide.slideNumber, text: slide.text, hasVisuals: slide.hasVisuals }));
     if (!pages.length) throw new Error("The file contains no readable pages or slides.");
     const extractedText = pages.map((page) => `[Page or slide ${page.pageNumber}]\n${page.text}`).join("\n\n").slice(0, 500_000);
     const extractionStatus = pages.some((page) => page.hasVisuals) ? "needs_visual_review" : "complete";
@@ -101,7 +110,12 @@ export async function POST(request: NextRequest, context: SubmissionDocumentCont
     return NextResponse.json({ id: data.id, name: filename, extractionStatus }, { status: 201 });
   } catch (reason) {
     if (objectPath) {
-      try { await supabase.storage.from("submission-files").remove([objectPath]); } catch { /* Keep the processing error safe for display; storage remains private. */ }
+      try {
+        const { error } = await supabase.storage.from("submission-files").remove([objectPath]);
+        if (error) return NextResponse.json({ error: "Submission processing failed and private file cleanup could not be confirmed. The unlinked object remains private." }, { status: 503 });
+      } catch {
+        return NextResponse.json({ error: "Submission processing failed and private file cleanup could not be confirmed. The unlinked object remains private." }, { status: 503 });
+      }
     }
     const message = reason instanceof Error ? reason.message : "Submission evidence could not be processed.";
     return NextResponse.json({ error: message }, { status: 422 });
@@ -120,11 +134,15 @@ export async function DELETE(request: NextRequest, context: SubmissionDocumentCo
   if (!body?.documentId) return NextResponse.json({ error: "Choose submission evidence to remove." }, { status: 400 });
   const { data: document } = await supabase.from("submission_documents").select("id, storage_path").eq("id", body.documentId).eq("submission_id", submissionId).maybeSingle();
   if (!document) return NextResponse.json({ error: "Submission evidence was not found." }, { status: 404 });
-  if (document.storage_path) {
-    const { error } = await supabase.storage.from("submission-files").remove([document.storage_path]);
-    if (error) return NextResponse.json({ error: "The private file could not be removed; evidence record was kept." }, { status: 503 });
-  }
   const { error } = await supabase.from("submission_documents").delete().eq("id", document.id).eq("submission_id", submissionId);
   if (error) return NextResponse.json({ error: "Could not remove submission evidence." }, { status: 400 });
+  if (document.storage_path) {
+    try {
+      const { error: storageError } = await supabase.storage.from("submission-files").remove([document.storage_path]);
+      if (storageError) return NextResponse.json({ removed: true, warning: "Evidence was detached, but private file cleanup failed; an unlinked private object may remain." });
+    } catch {
+      return NextResponse.json({ removed: true, warning: "Evidence was detached, but private file cleanup failed; an unlinked private object may remain." });
+    }
+  }
   return NextResponse.json({ removed: true });
 }
