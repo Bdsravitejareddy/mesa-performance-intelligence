@@ -33,6 +33,10 @@ function parseRequirements(value: unknown): Requirement[] | null {
   return requirements;
 }
 
+function includesText(sourceText: string, value: string): boolean {
+  return sourceText.toLocaleLowerCase().replace(/\s+/g, " ").includes(value.toLocaleLowerCase().replace(/\s+/g, " "));
+}
+
 export async function POST(request: NextRequest) {
   if (!hasSupabaseConfig()) return NextResponse.json({ error: "Connect Supabase to manage private role profiles." }, { status: 503 });
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
@@ -90,15 +94,24 @@ export async function POST(request: NextRequest) {
   let sourceHash: string | null = null;
   let finalRequirements = requirements;
   if (sourceUrl && permitted) {
+    const review = body.reviewedSource && typeof body.reviewedSource === "object" && !Array.isArray(body.reviewedSource) ? body.reviewedSource as Record<string, unknown> : null;
+    const reviewedCanonicalUrl = typeof review?.canonicalUrl === "string" ? publicDiscoveryUrl(review.canonicalUrl) : null;
+    const reviewedContentHash = typeof review?.contentHash === "string" && /^[\da-f]{64}$/i.test(review.contentHash) ? review.contentHash.toLowerCase() : null;
+    if (!reviewedCanonicalUrl || reviewedCanonicalUrl !== sourceUrl || !reviewedContentHash) return NextResponse.json({ error: "Review the fetched source before saving this benchmark." }, { status: 400 });
     const source = await fetchPublicSource(sourceUrl, { session: createResearchSession(), approvedSources: [{ hostname: host, sourceClass: "employer-careers" }] });
     if (source.status !== "fetched") return NextResponse.json({ error: "The reviewed source is no longer retrievable; the benchmark was not saved as verified." }, { status: 422 });
+    if (source.canonicalUrl !== reviewedCanonicalUrl || source.contentHash.toLowerCase() !== reviewedContentHash) return NextResponse.json({ error: "The role source changed since review. Reopen and review the updated page before saving." }, { status: 409 });
     if (requirements.some((requirement) => !requirement.sourceQuote || !source.text.includes(requirement.sourceQuote))) return NextResponse.json({ error: "Each verified requirement must include an exact quote from the fetched role source." }, { status: 400 });
     savedUrl = source.canonicalUrl;
     retrievedAt = source.retrievedAt;
     sourceHash = source.contentHash;
     finalRequirements = requirements.map((item) => ({ ...item, sourceUrl: source.canonicalUrl, retrievedAt: source.retrievedAt } as Requirement & { sourceUrl: string; retrievedAt: string }));
-    const sourceDate = source.date && !Number.isNaN(Date.parse(source.date)) ? new Date(source.date).toISOString().slice(0, 10) : null;
-    verified = Boolean(employer && postingDate && sourceDate === postingDate);
+    const pageText = `${source.title} ${source.text}`;
+    const confirmsTitle = includesText(pageText, title);
+    const confirmsEmployer = Boolean(employer && includesText(source.text, employer));
+    // Article/page metadata dates describe the page, not necessarily the job posting.
+    const confirmsPostingDate = Boolean(postingDate && includesText(source.text, postingDate));
+    verified = Boolean(confirmsTitle && confirmsEmployer && confirmsPostingDate);
   } else {
     // User-entered details and links remain useful as private notes, but do not become verified benchmarks.
     finalRequirements = requirements.map((item) => ({ ...item, sourceQuote: "" }));
@@ -109,7 +122,7 @@ export async function POST(request: NextRequest) {
     title,
     industry,
     employer,
-    benchmark_source: verified ? "fetched_public_role" : "user_supplied_unverified",
+    benchmark_source: verified ? "fetched_public_role" : sourceUrl && permitted ? "user_confirmed_unverified" : "user_supplied_unverified",
     source_url: savedUrl,
     retrieved_at: retrievedAt,
     posting_date: postingDate,

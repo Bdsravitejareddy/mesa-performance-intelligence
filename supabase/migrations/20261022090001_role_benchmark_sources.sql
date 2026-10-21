@@ -19,5 +19,5 @@ alter table public.role_profiles
 comment on column public.role_profiles.source_url is 'Canonical public role source reviewed by the workspace member; nullable for incomplete user-entered profiles.';
 comment on column public.role_profiles.retrieved_at is 'Server retrieval time for the source page; null when no permitted page was fetched.';
 comment on column public.role_profiles.posting_date is 'Source posting date, when stated and reviewed; null when unknown.';
-comment on column public.role_profiles.is_verified is 'True only after a member reviews a fetched permitted source and every structured requirement quote is present verbatim.';
+comment on column public.role_profiles.is_verified is 'True only when a member reviewed the same fetched source content saved by hash, every requirement quote is exact, and the page text explicitly confirms employer, role title, and posting date. Generic metadata dates and user-entered claims do not qualify.';
 comment on column public.role_profiles.source_content_hash is 'SHA-256 hash of the fetched source body used for review.';

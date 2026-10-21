@@ -47,7 +47,6 @@ export function RoleProfileForm() {
       const result = await postRole({ action: "fetch", sourceUrl: url });
       if (!result.source) throw new Error("No source text was returned for review.");
       setSource(result.source); setSourceUrl(result.source.canonicalUrl); setHits([]); setReviewed(false);
-      if (!postingDate && result.source.pageDate) setPostingDate(result.source.pageDate.slice(0, 10));
       setMessage("Source text retrieved. Review it and enter exact requirement quotes before saving.");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not retrieve that public page."); }
     finally { setBusy(false); }
@@ -57,10 +56,14 @@ export function RoleProfileForm() {
     event.preventDefault(); setBusy(true); setError(""); setMessage("");
     const parsed = requirements.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => ({ title: line.slice(0, 160), description: line, sourceQuote: source ? line : "", evidenceKind }));
     try {
-      await postRole({ action: "save", title, employer, industry, sourceUrl: sourceUrl || null, postingDate: postingDate || null, requirements: parsed, reviewed });
-      setMessage("Role profile saved. It will be used as a benchmark only when its source, employer, and posting date are verified.");
+      await postRole({ action: "save", title, employer, industry, sourceUrl: sourceUrl || null, postingDate: postingDate || null, requirements: parsed, reviewed, reviewedSource: source ? { canonicalUrl: source.canonicalUrl, contentHash: source.contentHash } : null });
+      setMessage("Role profile saved. Fetched pages are verified only when the page text confirms the role title, employer, and posting date; other details stay user-confirmed and unverified.");
       router.refresh();
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not save this profile."); }
+    } catch (reason) {
+      const detail = reason instanceof Error ? reason.message : "Could not save this profile.";
+      setError(detail);
+      if (detail.includes("changed since review")) { setSource(null); setReviewed(false); }
+    }
     finally { setBusy(false); }
   }
 
@@ -77,7 +80,7 @@ export function RoleProfileForm() {
       <label className="field"><span>Role source URL</span><input type="url" value={sourceUrl} onChange={(event) => { setSourceUrl(event.target.value); setSource(null); setReviewed(false); }} placeholder="https://company.example/careers/role" /></label>
       {!source && <button type="button" className="button button-secondary" disabled={busy || !sourceUrl} onClick={() => void fetchSource(sourceUrl)}>Review fetched role source</button>}
       <label className="field"><span>Posting date</span><input type="date" value={postingDate} onChange={(event) => setPostingDate(event.target.value)} /></label>
-      {source && <div className="role-source-review"><div><strong>Retrieved source · not yet verified</strong><small>{source.canonicalUrl} · Retrieved {new Date(source.retrievedAt).toLocaleString()}</small></div><p>{source.text}</p></div>}
+      {source && <div className="role-source-review"><div><strong>Retrieved source · page text must confirm employer, title, and posting date</strong><small>{source.canonicalUrl} · Retrieved {new Date(source.retrievedAt).toLocaleString()}{source.pageDate ? ` · Generic page metadata date ${source.pageDate}; not treated as posting date` : " · No page metadata date"}</small></div><p>{source.text}</p></div>}
       <label className="field"><span>Requirement type for the lines below</span><select value={evidenceKind} onChange={(event) => setEvidenceKind(event.target.value as typeof evidenceKind)}><option value="required">Required qualification</option><option value="preferred">Preferred qualification</option><option value="responsibility">Responsibility</option></select></label>
       <label className="field"><span>{source ? "Exact source quote for each requirement (one per line)" : "Requirements you reviewed (one per line)"}</span><textarea value={requirements} onChange={(event) => setRequirements(event.target.value)} required rows={5} placeholder={source ? "Paste exact requirement wording from the fetched source" : "Enter requirements from a role description you reviewed"} /></label>
       <label className="field role-review-confirm"><span><input type="checkbox" checked={reviewed} onChange={(event) => setReviewed(event.target.checked)} /> {source ? "I reviewed the fetched role source and confirm these lines represent its requirements." : "I reviewed this role description and confirm these requirements."}</span></label>

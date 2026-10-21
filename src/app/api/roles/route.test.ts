@@ -11,7 +11,8 @@ vi.mock("@/lib/public-research/contracts", () => ({ createResearchSession: () =>
 vi.mock("@/lib/public-research/search-provider", () => ({ createSearchProvider: (...args: unknown[]) => createSearchProvider(...args), searchPublicWeb: (...args: unknown[]) => searchPublicWeb(...args), publicDiscoveryUrl: (value: unknown) => { try { const url = new URL(String(value)); return url.protocol === "https:" ? url.href : null; } catch { return null; } } }));
 vi.mock("@/lib/public-research/safe-fetch", () => ({ fetchPublicSource: (...args: unknown[]) => fetchPublicSource(...args) }));
 
-const fetched = { status: "fetched", title: "Senior Product Manager", text: "Required: lead clinical product discovery and healthcare integrations. Preferred: experience with FHIR.", date: "2026-10-01T00:00:00Z", canonicalUrl: "https://careers.example.org/roles/senior-pm", contentHash: "abc123", retrievedAt: "2026-10-22T10:00:00.000Z", evidence: "fetched-page" };
+const fetched = { status: "fetched", title: "Senior Product Manager", text: "Required: lead clinical product discovery and healthcare integrations. Preferred: experience with FHIR.", date: "2026-10-01T00:00:00Z", canonicalUrl: "https://careers.example.org/roles/senior-pm", contentHash: "a".repeat(64), retrievedAt: "2026-10-22T10:00:00.000Z", evidence: "fetched-page" };
+const verifiableFetched = { ...fetched, title: "Senior Technical Product Manager", text: "Employer: Example Health. Role: Senior Technical Product Manager. Posted: 2026-10-01. Required: lead clinical product discovery and healthcare integrations.", contentHash: "b".repeat(64) };
 function req(body: unknown) { return new NextRequest("https://app.test/api/roles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); }
 
 describe("sourced role benchmarks", () => {
@@ -21,8 +22,8 @@ describe("sourced role benchmarks", () => {
     const stored: { row: Record<string, unknown> | null } = { row: null };
     insert.mockImplementation((value: Record<string, unknown>) => { stored.row = value; return { select: () => ({ single: async () => ({ data: { id: "role-1" }, error: null }) }) }; });
     from.mockReturnValue({ insert });
-    fetchPublicSource.mockResolvedValue(fetched);
-    const response = await POST(req({ action: "save", title: "Senior Technical Product Manager", employer: "Example Health", industry: "Singapore healthtech", sourceUrl: fetched.canonicalUrl, postingDate: "2026-10-01", reviewed: true, requirements: [{ title: "Clinical discovery", description: "Lead clinical product discovery", sourceQuote: "lead clinical product discovery", evidenceKind: "required" }] }));
+    fetchPublicSource.mockResolvedValue(verifiableFetched);
+    const response = await POST(req({ action: "save", title: "Senior Technical Product Manager", employer: "Example Health", industry: "Singapore healthtech", sourceUrl: fetched.canonicalUrl, postingDate: "2026-10-01", reviewed: true, reviewedSource: { canonicalUrl: verifiableFetched.canonicalUrl, contentHash: verifiableFetched.contentHash }, requirements: [{ title: "Clinical discovery", description: "Lead clinical product discovery", sourceQuote: "lead clinical product discovery", evidenceKind: "required" }] }));
     expect(response.status).toBe(201);
     expect(stored.row).toEqual(expect.objectContaining({ user_id: "workspace-member", employer: "Example Health", source_url: fetched.canonicalUrl, retrieved_at: fetched.retrievedAt, posting_date: "2026-10-01", is_verified: true }));
     expect((stored.row?.competencies as Array<Record<string, unknown>>)[0]).toEqual(expect.objectContaining({ sourceQuote: "lead clinical product discovery", evidenceKind: "required" }));
@@ -30,7 +31,7 @@ describe("sourced role benchmarks", () => {
 
   it("saves incomplete profiles as unverified when the posting date or employer is missing", async () => {
     insert.mockReturnValue({ select: () => ({ single: async () => ({ data: { id: "role-2" }, error: null }) }) }); from.mockReturnValue({ insert }); fetchPublicSource.mockResolvedValue(fetched);
-    const response = await POST(req({ action: "save", title: "Senior PM", sourceUrl: fetched.canonicalUrl, reviewed: true, requirements: [{ title: "Clinical discovery", description: "Lead clinical product discovery", sourceQuote: "lead clinical product discovery", evidenceKind: "required" }] }));
+    const response = await POST(req({ action: "save", title: "Senior PM", sourceUrl: fetched.canonicalUrl, reviewed: true, reviewedSource: { canonicalUrl: fetched.canonicalUrl, contentHash: fetched.contentHash }, requirements: [{ title: "Clinical discovery", description: "Lead clinical product discovery", sourceQuote: "lead clinical product discovery", evidenceKind: "required" }] }));
     expect(response.status).toBe(201);
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({ posting_date: null, employer: "", is_verified: false }));
   });
@@ -42,11 +43,25 @@ describe("sourced role benchmarks", () => {
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({ source_url: null, retrieved_at: null, posting_date: null, is_verified: false, benchmark_source: "user_supplied_unverified" }));
   });
 
-  it("does not mark a benchmark verified when its posting date conflicts with fetched page metadata", async () => {
+  it("does not treat generic page metadata dates as proof of the posting date", async () => {
     insert.mockReturnValue({ select: () => ({ single: async () => ({ data: { id: "role-3" }, error: null }) }) }); from.mockReturnValue({ insert }); fetchPublicSource.mockResolvedValue(fetched);
-    const response = await POST(req({ action: "save", title: "Senior PM", employer: "Example Health", sourceUrl: fetched.canonicalUrl, postingDate: "2026-10-02", reviewed: true, requirements: [{ title: "Clinical discovery", description: "Lead clinical product discovery", sourceQuote: "lead clinical product discovery", evidenceKind: "required" }] }));
+    const response = await POST(req({ action: "save", title: "Senior PM", employer: "Example Health", sourceUrl: fetched.canonicalUrl, postingDate: "2026-10-02", reviewed: true, reviewedSource: { canonicalUrl: fetched.canonicalUrl, contentHash: fetched.contentHash }, requirements: [{ title: "Clinical discovery", description: "Lead clinical product discovery", sourceQuote: "lead clinical product discovery", evidenceKind: "required" }] }));
     expect(response.status).toBe(201);
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({ posting_date: "2026-10-02", is_verified: false }));
+  });
+
+  it("keeps generic article dates and user-entered employer/title unverified", async () => {
+    insert.mockReturnValue({ select: () => ({ single: async () => ({ data: { id: "role-4" }, error: null }) }) }); from.mockReturnValue({ insert }); fetchPublicSource.mockResolvedValue(fetched);
+    const response = await POST(req({ action: "save", title: "Senior Technical Product Manager", employer: "Arbitrary Employer", sourceUrl: fetched.canonicalUrl, postingDate: "2026-10-01", reviewed: true, reviewedSource: { canonicalUrl: fetched.canonicalUrl, contentHash: fetched.contentHash }, requirements: [{ title: "Clinical discovery", description: "Lead clinical product discovery", sourceQuote: "lead clinical product discovery", evidenceKind: "required" }] }));
+    expect(response.status).toBe(201);
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ is_verified: false, benchmark_source: "user_confirmed_unverified" }));
+  });
+
+  it("rejects saving when the reviewed source content changed before save", async () => {
+    fetchPublicSource.mockResolvedValueOnce({ ...verifiableFetched, contentHash: "c".repeat(64) });
+    const response = await POST(req({ action: "save", title: "Senior Technical Product Manager", employer: "Example Health", sourceUrl: fetched.canonicalUrl, postingDate: "2026-10-01", reviewed: true, reviewedSource: { canonicalUrl: verifiableFetched.canonicalUrl, contentHash: verifiableFetched.contentHash }, requirements: [{ title: "Clinical discovery", description: "Lead clinical product discovery", sourceQuote: "lead clinical product discovery", evidenceKind: "required" }] }));
+    expect(response.status).toBe(409);
+    expect(insert).not.toHaveBeenCalled();
   });
 
   it("rejects non-HTTPS source URLs and criteria not present as exact source quotes", async () => {
