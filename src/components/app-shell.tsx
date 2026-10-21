@@ -14,7 +14,9 @@ import {
   GraduationCap,
   CloudDownload,
   LayoutDashboard,
+  Library,
   MessageSquareText,
+  Network,
   Search,
   ShieldCheck,
   Sparkles,
@@ -30,11 +32,13 @@ const groups = [
       { href: "/drive-sync", label: "Drive sync", icon: CloudDownload },
       { href: "/assessments", label: "Assessments", icon: FileCheck2 },
       { href: "/marks", label: "Marks & feedback", icon: MessageSquareText },
+      { href: "/evidence", label: "Evidence library", icon: Library },
     ],
   },
   {
     label: "Insights",
     links: [
+      { href: "/competencies", label: "Competency map", icon: Network },
       { href: "/swot", label: "SWOT analysis", icon: Target },
       { href: "/correlations", label: "Correlations", icon: ChartNoAxesCombined },
       { href: "/career", label: "Career readiness", icon: BriefcaseBusiness },

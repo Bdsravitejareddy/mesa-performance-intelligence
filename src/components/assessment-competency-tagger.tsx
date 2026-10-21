@@ -1,0 +1,60 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
+import { formatOfficialMark } from "@/lib/scoring";
+
+type Competency = { id: string; domain: string; name: string };
+type Assessment = { id: string; title: string; course: string; tagged: string[]; locked: string[]; mark: number | null };
+
+export function AssessmentCompetencyTagger({ competencies, assessments }: { competencies: Competency[]; assessments: Assessment[] }) {
+  const [filter, setFilter] = useState("");
+  const visible = assessments.filter((item) => `${item.title} ${item.course}`.toLowerCase().includes(filter.trim().toLowerCase()));
+  const byDomain = useMemo(() => {
+    const groups = new Map<string, Competency[]>();
+    for (const item of competencies) groups.set(item.domain, [...(groups.get(item.domain) ?? []), item]);
+    return [...groups.entries()];
+  }, [competencies]);
+  return <div className="competency-tagger">
+    <label className="field"><span>Filter assessments</span><input type="search" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Course or assessment title" /></label>
+    {visible.map((assessment) => <AssessmentTags key={assessment.id} assessment={assessment} byDomain={byDomain} names={new Map(competencies.map((item) => [item.id, item.name]))} />)}
+    {!visible.length && <p className="empty-hint">No assessments match.</p>}
+  </div>;
+}
+
+function AssessmentTags({ assessment, byDomain, names }: { assessment: Assessment; byDomain: [string, Competency[]][]; names: Map<string, string> }) {
+  const router = useRouter();
+  const [selected, setSelected] = useState(new Set(assessment.tagged));
+  const [status, setStatus] = useState("");
+  const [busy, setBusy] = useState(false);
+  const dirty = selected.size !== assessment.tagged.length || assessment.tagged.some((id) => !selected.has(id));
+  const toggle = (id: string) => setSelected((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+
+  async function save() {
+    setBusy(true);
+    setStatus("");
+    try {
+      const response = await fetch("/api/assessment-competencies", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ assessmentId: assessment.id, competencyIds: [...selected] }) });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "Could not save.");
+      setStatus("Saved.");
+      router.refresh();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not save.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const summary = [...selected, ...assessment.locked].map((id) => names.get(id)).filter(Boolean).join(", ");
+  return <details className="tagger-row">
+    <summary><span><strong>{assessment.title}</strong><small>{assessment.course} · {assessment.mark === null ? "no released mark" : formatOfficialMark(assessment.mark)}</small></span><small className="tagger-summary">{summary || "Not mapped"}</small></summary>
+    <div className="tagger-body">
+      {byDomain.map(([domain, items]) => <fieldset key={domain}><legend>{domain}</legend>{items.map((item) => {
+        const locked = assessment.locked.includes(item.id);
+        return <label key={item.id} className="tagger-option"><input type="checkbox" checked={locked || selected.has(item.id)} disabled={locked || busy} onChange={() => toggle(item.id)} />{item.name}{locked && <small> (official)</small>}</label>;
+      })}</fieldset>)}
+      <div className="tagger-actions"><button className="button button-primary" type="button" onClick={save} disabled={!dirty || busy || selected.size > 12}>{busy ? "Saving…" : "Save mapping"}</button>{selected.size > 12 && <small>Choose at most 12.</small>}{status && <small role="status">{status}</small>}</div>
+    </div>
+  </details>;
+}
