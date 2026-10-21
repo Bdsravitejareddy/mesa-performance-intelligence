@@ -46,6 +46,11 @@ export async function POST(request: NextRequest, context: SubmissionDocumentCont
     if (material.extraction_status !== "complete" && material.extraction_status !== "needs_visual_review") {
       return NextResponse.json({ error: "Only successfully indexed course materials can be linked." }, { status: 400 });
     }
+    const sourceVersion = String(material.version);
+    const findExisting = () => supabase.from("submission_documents").select("id, name, extraction_status")
+      .eq("submission_id", submission.id).eq("course_material_id", material.id).eq("source_version", sourceVersion).maybeSingle();
+    const { data: priorLink } = await findExisting();
+    if (priorLink) return NextResponse.json({ id: priorLink.id, name: priorLink.name, extractionStatus: priorLink.extraction_status }, { status: 200 });
     const { data: pages, error: pageError } = await supabase.from("material_pages").select("page_number, extracted_text").eq("material_id", material.id).order("page_number", { ascending: true });
     if (pageError || !pages?.length) return NextResponse.json({ error: "The selected material has no indexed text to attach." }, { status: 400 });
     const extractedText = pages.map((page) => `[Page or slide ${page.page_number}]\n${page.extracted_text}`).join("\n\n").slice(0, 500_000);
@@ -61,8 +66,12 @@ export async function POST(request: NextRequest, context: SubmissionDocumentCont
       file_size: material.file_size,
       extracted_text: extractedText,
       extraction_status: material.extraction_status,
-      source_version: String(material.version),
+      source_version: sourceVersion,
     }).select("id").single();
+    if (error?.code === "23505") {
+      const { data: duplicate } = await findExisting();
+      if (duplicate) return NextResponse.json({ id: duplicate.id, name: duplicate.name, extractionStatus: duplicate.extraction_status }, { status: 200 });
+    }
     if (error || !data) return NextResponse.json({ error: "Could not link the indexed course material." }, { status: 400 });
     return NextResponse.json({ id: data.id, name: material.name, extractionStatus: material.extraction_status }, { status: 201 });
   }
@@ -83,6 +92,11 @@ export async function POST(request: NextRequest, context: SubmissionDocumentCont
     if ((mimeType === pdfMime && signature !== "%PDF-") || (mimeType === pptxMime && signature !== "PK\u0003\u0004")) {
       return NextResponse.json({ error: "The file content does not match its PDF or PPTX type." }, { status: 415 });
     }
+    const sourceVersion = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+    const findExisting = () => supabase.from("submission_documents").select("id, name, extraction_status")
+      .eq("submission_id", submission.id).eq("source_kind", "upload").eq("source_version", sourceVersion).maybeSingle();
+    const { data: priorUpload } = await findExisting();
+    if (priorUpload) return NextResponse.json({ id: priorUpload.id, name: priorUpload.name, extractionStatus: priorUpload.extraction_status }, { status: 200 });
     const safeName = filename.replace(/[^a-zA-Z0-9._-]+/g, "-").slice(-150) || "submission";
     objectPath = `${submission.user_id}/${submission.id}/${randomUUID()}/${safeName}`;
     const { error: uploadError } = await supabase.storage.from("submission-files").upload(objectPath, bytes, { contentType: mimeType, upsert: false });
@@ -93,7 +107,6 @@ export async function POST(request: NextRequest, context: SubmissionDocumentCont
     if (!pages.length) throw new Error("The file contains no readable pages or slides.");
     const extractedText = pages.map((page) => `[Page or slide ${page.pageNumber}]\n${page.text}`).join("\n\n").slice(0, 500_000);
     const extractionStatus = pages.some((page) => page.hasVisuals) ? "needs_visual_review" : "complete";
-    const sourceVersion = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
     const { data, error } = await supabase.from("submission_documents").insert({
       user_id: submission.user_id,
       submission_id: submission.id,
@@ -106,6 +119,15 @@ export async function POST(request: NextRequest, context: SubmissionDocumentCont
       extraction_status: extractionStatus,
       source_version: sourceVersion,
     }).select("id").single();
+    if (error?.code === "23505") {
+      const { data: duplicate } = await findExisting();
+      if (duplicate) {
+        const { error: cleanupError } = await supabase.storage.from("submission-files").remove([objectPath]);
+        if (cleanupError) return NextResponse.json({ error: "Duplicate evidence was found, but cleanup of the newly uploaded private file could not be confirmed." }, { status: 503 });
+        objectPath = null;
+        return NextResponse.json({ id: duplicate.id, name: duplicate.name, extractionStatus: duplicate.extraction_status }, { status: 200 });
+      }
+    }
     if (error || !data) throw new Error("The file was extracted but could not be saved as submission evidence.");
     return NextResponse.json({ id: data.id, name: filename, extractionStatus }, { status: 201 });
   } catch (reason) {

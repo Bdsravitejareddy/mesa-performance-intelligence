@@ -30,7 +30,7 @@ describe("private submission documents migration", () => {
       grant usage on schema storage to authenticated;
       grant select,insert,update,delete on storage.objects to authenticated;
     `);
-    for (const name of ["20261019062743_create_course_intelligence_schema.sql", "20261019063732_shared_workspace_access.sql", "20261022090000_submission_documents.sql"]) {
+    for (const name of ["20261019062743_create_course_intelligence_schema.sql", "20261019063732_shared_workspace_access.sql", "20261022090000_submission_documents.sql", "20261022090007_submission_document_idempotency.sql"]) {
       await db.exec(await readFile(new URL(`../../supabase/migrations/${name}`, import.meta.url), "utf8"));
     }
     await db.exec(`
@@ -72,6 +72,13 @@ describe("private submission documents migration", () => {
     for (const invalid of [{ file_size: 20971521 }, { file_size: 0 }, { mime_type: "text/html" }, { storage_path: null }, { source_version: " " }, { name: " " }, { source_kind: "url" }, { storage_path: `${member}/${submission}/answer.pdf` }]) {
       await expect(insertDocument(invalid)).rejects.toThrow(/check constraint/i);
     }
+  });
+
+  it("prevents duplicate upload versions and duplicate material-version links per submission", async () => {
+    await insertDocument({ source_version: "sha256:upload-v1" });
+    await expect(insertDocument({ source_version: "sha256:upload-v1", storage_path: `${owner}/${submission}/retry/answer.pdf` })).rejects.toThrow(/unique/i);
+    await insertDocument({ source_kind: "drive", storage_path: null, source_id: "drive-1", course_material_id: submission, source_version: "2" });
+    await expect(insertDocument({ source_kind: "drive", storage_path: null, source_id: "drive-1", course_material_id: submission, source_version: "2" })).rejects.toThrow(/unique/i);
   });
 
   it("denies outsider, unverified, and anonymous document access", async () => {

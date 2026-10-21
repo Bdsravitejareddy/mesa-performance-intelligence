@@ -24,6 +24,8 @@ let failStorageRemove = false;
 let failDocumentDelete = false;
 let documentRow: { id: string; storage_path: string | null } | null = null;
 let documentDeleteAttempts = 0;
+let existingEvidence: { id: string; submission_id: string; source_kind: string; source_version: string; course_material_id: string | null; name: string; extraction_status: string } | null = null;
+let duplicateInsert = false;
 
 function responseRequest(blob: Blob, filename: string, mime: string, id = "submission") {
   const form = new FormData();
@@ -41,15 +43,22 @@ function makeQuery(table: string) {
   q.select = () => q;
   q.eq = (column, value) => { filters[String(column)] = value; return q; };
   q.order = () => Promise.resolve({ data: table === "material_pages" ? [{ page_number: 1, extracted_text: "Course evidence", table_data: [], has_visuals: false }] : [] });
-  q.maybeSingle = async () => ({ data: table === "submissions" ? submissionRow : table === "assessments" ? assessmentRow : table === "course_materials" ? materialRow : table === "submission_documents" && filters.id === "document" && filters.submission_id === "submission" ? documentRow : null, error: null });
-  q.insert = (row) => { inserted = row as Record<string, unknown>; return { select: () => ({ single: async () => ({ data: { id: "document" }, error: null }) }) }; };
+  q.maybeSingle = async () => {
+    const isExistingEvidence = table === "submission_documents" && existingEvidence && Object.entries(filters).every(([key, value]) => existingEvidence?.[key as keyof typeof existingEvidence] === value);
+    const data = table === "submissions" ? submissionRow : table === "assessments" ? assessmentRow : table === "course_materials" ? materialRow : table === "submission_documents" && filters.id === "document" && filters.submission_id === "submission" ? documentRow : isExistingEvidence ? existingEvidence : null;
+    return { data, error: null };
+  };
+  q.insert = (row) => {
+    inserted = row as Record<string, unknown>;
+    return { select: () => ({ single: async () => (duplicateInsert ? { data: null, error: { code: "23505", message: "duplicate key" } } : { data: { id: "document" }, error: null }) }) };
+  };
   q.delete = () => ({ eq: () => ({ eq: async () => { documentDeleteAttempts += 1; return { error: failDocumentDelete ? { message: "database unavailable" } : null }; } }) });
   q.in = () => ({ order: async () => ({ data: [] }) });
   return q;
 }
 
 describe("private submission evidence route", () => {
-  afterEach(() => { vi.clearAllMocks(); inserted = null; removedObjects = []; materialRow = material; assessmentRow = assessment; submissionRow = submission; authUser.id = "member"; failStorageRemove = false; failDocumentDelete = false; documentRow = null; documentDeleteAttempts = 0; });
+  afterEach(() => { vi.clearAllMocks(); inserted = null; removedObjects = []; materialRow = material; assessmentRow = assessment; submissionRow = submission; authUser.id = "member"; failStorageRemove = false; failDocumentDelete = false; documentRow = null; documentDeleteAttempts = 0; existingEvidence = null; duplicateInsert = false; });
   beforeEach(() => {
     auth.getClaims.mockImplementation(async () => ({ data: { claims: authUser.id ? { sub: authUser.id } : {} } }));
     from.mockImplementation((table: string) => makeQuery(table));
@@ -79,6 +88,34 @@ describe("private submission evidence route", () => {
     expect(res.status).toBe(201);
     expect(inserted).toEqual(expect.objectContaining({ source_kind: "drive", source_id: "drive-source", course_material_id: "material", extracted_text: "[Page or slide 1]\nCourse evidence", source_version: "2" }));
     expect(storageUpload).not.toHaveBeenCalled();
+  });
+
+  it("returns the already-linked material when the client retries after losing the response", async () => {
+    existingEvidence = { id: "already-linked", submission_id: "submission", source_kind: "drive", source_version: "2", course_material_id: "material", name: "Lecture.pdf", extraction_status: "complete" };
+    const response = await POST(materialRequest("material"), context());
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ id: "already-linked", name: "Lecture.pdf" });
+    expect(inserted).toBeNull();
+  });
+
+  it("returns existing uploaded evidence for an identical retry without creating another object", async () => {
+    existingEvidence = { id: "existing-upload", submission_id: "submission", source_kind: "upload", source_version: `sha256:${await import("node:crypto").then(({ createHash }) => createHash("sha256").update("%PDF-synthetic").digest("hex"))}`, course_material_id: null, name: "answer.pdf", extraction_status: "complete" };
+    const response = await POST(responseRequest(new Blob(["%PDF-synthetic"]), "answer.pdf", "application/pdf"), context());
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ id: "existing-upload", name: "answer.pdf" });
+    expect(storageUpload).not.toHaveBeenCalled();
+  });
+
+  it("removes a newly uploaded object when a concurrent identical request wins the unique insert", async () => {
+    const { createHash } = await import("node:crypto");
+    const winner = { id: "race-winner", submission_id: "submission", source_kind: "upload", source_version: `sha256:${createHash("sha256").update("%PDF-synthetic").digest("hex")}`, course_material_id: null, name: "answer.pdf", extraction_status: "complete" };
+    storageUpload.mockImplementation(async () => { existingEvidence = winner; return { error: null }; });
+    duplicateInsert = true;
+    const response = await POST(responseRequest(new Blob(["%PDF-synthetic"]), "answer.pdf", "application/pdf"), context());
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ id: "race-winner" });
+    expect(storageUpload).toHaveBeenCalledOnce();
+    expect(storageRemove).toHaveBeenCalledWith([expect.stringMatching(/^owner\/submission\//)]);
   });
 
   it("rejects a submission from a different course", async () => {
