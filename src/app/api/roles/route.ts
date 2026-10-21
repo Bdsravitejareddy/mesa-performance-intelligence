@@ -33,8 +33,18 @@ function parseRequirements(value: unknown): Requirement[] | null {
   return requirements;
 }
 
-function includesText(sourceText: string, value: string): boolean {
-  return sourceText.toLocaleLowerCase().replace(/\s+/g, " ").includes(value.toLocaleLowerCase().replace(/\s+/g, " "));
+function normalizedText(value: string): string {
+  return value.toLocaleLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function hasLabeledValue(sourceText: string, labels: readonly string[], value: string): boolean {
+  return sourceText.split(/[\r\n.!?;|]+/).some((segment) => {
+    return labels.some((label) => {
+      const labelPattern = label.replace(/\s+/g, "\\s+");
+      const match = new RegExp(`^\\s*${labelPattern}\\s*(?::|-|\\s)\\s*(.*?)\\s*$`, "i").exec(segment);
+      return Boolean(match && normalizedText(match[1]) === normalizedText(value));
+    });
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -106,11 +116,10 @@ export async function POST(request: NextRequest) {
     retrievedAt = source.retrievedAt;
     sourceHash = source.contentHash;
     finalRequirements = requirements.map((item) => ({ ...item, sourceUrl: source.canonicalUrl, retrievedAt: source.retrievedAt } as Requirement & { sourceUrl: string; retrievedAt: string }));
-    const pageText = `${source.title} ${source.text}`;
-    const confirmsTitle = includesText(pageText, title);
-    const confirmsEmployer = Boolean(employer && includesText(source.text, employer));
+    const confirmsTitle = normalizedText(source.title) === normalizedText(title) || hasLabeledValue(source.text, ["role", "job title", "position"], title);
+    const confirmsEmployer = Boolean(employer && hasLabeledValue(source.text, ["employer", "company", "hiring organization"], employer));
     // Article/page metadata dates describe the page, not necessarily the job posting.
-    const confirmsPostingDate = Boolean(postingDate && includesText(source.text, postingDate));
+    const confirmsPostingDate = Boolean(postingDate && hasLabeledValue(source.text, ["date posted", "posted on", "job posted"], postingDate));
     verified = Boolean(confirmsTitle && confirmsEmployer && confirmsPostingDate);
   } else {
     // User-entered details and links remain useful as private notes, but do not become verified benchmarks.

@@ -18,7 +18,9 @@ describe("role benchmark form", () => {
     expect(markup).toContain("Review fetched role source");
     expect(markup).toContain("Requirements you reviewed (one per line)");
     expect(markup).toContain("LinkedIn results are not imported");
-    expect(markup).toContain("Unverified profiles are not used as benchmarks");
+    expect(markup).toContain("User-entered employer, title, and date remain unverified");
+    expect(markup).toContain("Generic page metadata dates do not establish a posting date");
+    expect(markup).toContain("Unverified profiles are excluded from benchmarking");
   });
 
   it("sends the reviewed source hash and asks for a fresh review when save-time content changes", async () => {
@@ -43,6 +45,8 @@ describe("role benchmark form", () => {
     const review = [...host.querySelectorAll("button")].find((button) => button.textContent?.includes("Review fetched role source"))!;
     await act(async () => review.click());
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(host.textContent).toContain("Generic page metadata date");
+    expect(host.textContent).toContain("not treated as posting date");
     const requirements = host.querySelector("textarea")!;
     await act(async () => setValue(requirements, "build healthcare products"));
     const confirmation = host.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
