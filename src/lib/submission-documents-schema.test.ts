@@ -30,7 +30,7 @@ describe("private submission documents migration", () => {
       grant usage on schema storage to authenticated;
       grant select,insert,update,delete on storage.objects to authenticated;
     `);
-    for (const name of ["20261019062743_create_course_intelligence_schema.sql", "20261019063732_shared_workspace_access.sql", "20261022090000_submission_documents.sql", "20261022090007_submission_document_idempotency.sql"]) {
+    for (const name of ["20261019062743_create_course_intelligence_schema.sql", "20261019063732_shared_workspace_access.sql", "20261022090000_submission_documents.sql", "20261022090008_submission_document_integrity.sql"]) {
       await db.exec(await readFile(new URL(`../../supabase/migrations/${name}`, import.meta.url), "utf8"));
     }
     await db.exec(`
@@ -79,6 +79,21 @@ describe("private submission documents migration", () => {
     await expect(insertDocument({ source_version: "sha256:upload-v1", storage_path: `${owner}/${submission}/retry/answer.pdf` })).rejects.toThrow(/unique/i);
     await insertDocument({ source_kind: "drive", storage_path: null, source_id: "drive-1", course_material_id: submission, source_version: "2" });
     await expect(insertDocument({ source_kind: "drive", storage_path: null, source_id: "drive-1", course_material_id: submission, source_version: "2" })).rejects.toThrow(/unique/i);
+  });
+
+  it("reports legacy duplicate evidence before attempting uniqueness enforcement", async () => {
+    await db.exec("reset role; drop index public.submission_upload_version_unique; drop index public.submission_material_version_unique;");
+    await insertDocument({ source_version: "sha256:legacy-duplicate" });
+    await insertDocument({ source_version: "sha256:legacy-duplicate", storage_path: `${owner}/${submission}/legacy-copy/answer.pdf` });
+    await insertDocument({ source_kind: "drive", storage_path: null, source_id: "drive-legacy", course_material_id: submission, source_version: "7" });
+    await insertDocument({ source_kind: "drive", storage_path: null, source_id: "drive-legacy", course_material_id: submission, source_version: "7" });
+    const migration = await readFile(new URL("../../supabase/migrations/20261022090008_submission_document_integrity.sql", import.meta.url), "utf8");
+    await expect(db.exec(migration)).rejects.toThrow(/found 1 duplicate upload version group\(s\) and 1 duplicate course-material version group\(s\).*review and resolve/i);
+  });
+
+  it("rejects same-owner course materials from another course at the database boundary", async () => {
+    await db.exec(`reset role; insert into public.courses(id,user_id,title) values ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','${owner}','Other course'); insert into public.course_materials(id,user_id,course_id,name,storage_path,mime_type,file_size) values ('cccccccc-cccc-4ccc-8ccc-cccccccccccc','${owner}','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','other-course.pdf','${owner}/other-course.pdf','application/pdf',100); set role authenticated;`);
+    await expect(insertDocument({ source_kind: "drive", storage_path: null, source_id: "drive-other-course", course_material_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc" })).rejects.toThrow(/course material must match the submission assessment course/i);
   });
 
   it("denies outsider, unverified, and anonymous document access", async () => {
