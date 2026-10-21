@@ -1,0 +1,118 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { NextRequest } from "next/server";
+import { DELETE, POST } from "./route";
+
+const { from, auth, insert, storageUpload, storageRemove, authUser } = vi.hoisted(() => ({
+  from: vi.fn(), auth: { getClaims: vi.fn() }, insert: vi.fn(), storageUpload: vi.fn(), storageRemove: vi.fn(), authUser: { id: "member" as string | null },
+}));
+vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth, from, storage: { from: () => ({ upload: storageUpload, remove: storageRemove }) } }) }));
+vi.mock("@/lib/supabase/config", () => ({ hasSupabaseConfig: () => true }));
+vi.mock("@/lib/documents", () => ({
+  extractPdfPages: vi.fn(async () => [{ pageNumber: 1, text: "Synthetic answer", tables: [], hasVisuals: false }]),
+  extractPptxSlides: vi.fn(async () => [{ slideNumber: 1, text: "Synthetic answer slide", tables: [], hasVisuals: true }]),
+}));
+
+const submission = { id: "submission", user_id: "owner", assessment_id: "assessment" };
+const assessment = { id: "assessment", course_id: "course" };
+const material = { id: "material", user_id: "owner", course_id: "course", assessment_id: null, name: "Lecture.pdf", mime_type: "application/pdf", file_size: 100, version: 2, extraction_status: "complete", drive_source_id: "drive-source" };
+let materialRow: typeof material | null = material;
+let assessmentRow: typeof assessment | null = assessment;
+let submissionRow: typeof submission | null = submission;
+let inserted: Record<string, unknown> | null = null;
+let removedObjects: string[][] = [];
+
+function responseRequest(blob: Blob, filename: string, mime: string, id = "submission") {
+  const form = new FormData();
+  form.set("file", new File([blob], filename, { type: mime }));
+  return new NextRequest(`https://example.com/api/submissions/${id}/documents`, { method: "POST", body: form });
+}
+function materialRequest(courseMaterialId: string, id = "submission") {
+  return new NextRequest(`https://example.com/api/submissions/${id}/documents`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ courseMaterialId }) });
+}
+function context(id = "submission") { return { params: Promise.resolve({ id }) }; }
+
+function makeQuery(table: string) {
+  const filters: Record<string, unknown> = {};
+  const q: Record<string, (...args: unknown[]) => unknown> = {};
+  q.select = () => q;
+  q.eq = (column, value) => { filters[String(column)] = value; return q; };
+  q.order = () => Promise.resolve({ data: table === "material_pages" ? [{ page_number: 1, extracted_text: "Course evidence", table_data: [], has_visuals: false }] : [] });
+  q.maybeSingle = async () => ({ data: table === "submissions" ? submissionRow : table === "assessments" ? assessmentRow : table === "course_materials" ? materialRow : table === "submission_documents" && filters.id === "document" && filters.submission_id === "submission" ? { id: "document", storage_path: null } : null, error: null });
+  q.insert = (row) => { inserted = row as Record<string, unknown>; return { select: () => ({ single: async () => ({ data: { id: "document" }, error: null }) }) }; };
+  q.delete = () => ({ eq: () => ({ eq: async () => ({ error: null }) }) });
+  q.in = () => ({ order: async () => ({ data: [] }) });
+  return q;
+}
+
+describe("private submission evidence route", () => {
+  afterEach(() => { vi.clearAllMocks(); inserted = null; removedObjects = []; materialRow = material; assessmentRow = assessment; submissionRow = submission; authUser.id = "member"; });
+  beforeEach(() => {
+    auth.getClaims.mockImplementation(async () => ({ data: { claims: authUser.id ? { sub: authUser.id } : {} } }));
+    from.mockImplementation((table: string) => makeQuery(table));
+    storageUpload.mockResolvedValue({ error: null });
+    storageRemove.mockImplementation(async (paths: string[]) => { removedObjects.push(paths); return { error: null }; });
+  });
+
+  it("uploads and extracts a PDF into a private submission-scoped object", async () => {
+    const res = await POST(responseRequest(new Blob(["%PDF-synthetic"]), "answer.pdf", "application/pdf"), context());
+    expect(res.status, JSON.stringify(await res.clone().json())).toBe(201);
+    expect(inserted).toEqual(expect.objectContaining({ user_id: "owner", submission_id: "submission", source_kind: "upload", name: "answer.pdf", mime_type: "application/pdf", extracted_text: "[Page or slide 1]\nSynthetic answer", extraction_status: "complete" }));
+    expect(storageUpload).toHaveBeenCalledWith(expect.stringMatching(/^owner\/submission\//), expect.any(Uint8Array), expect.objectContaining({ upsert: false, contentType: "application/pdf" }));
+  });
+
+  it("uploads and extracts a PPTX while retaining visual review status", async () => {
+    const res = await POST(responseRequest(new Blob(["PK\u0003\u0004synthetic"]), "answer.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"), context());
+    expect(res.status).toBe(201);
+    expect(inserted).toEqual(expect.objectContaining({ mime_type: "application/vnd.openxmlformats-officedocument.presentationml.presentation", extraction_status: "needs_visual_review", extracted_text: "[Page or slide 1]\nSynthetic answer slide" }));
+  });
+
+  it("links only an already indexed course material in the assessment course", async () => {
+    const res = await POST(materialRequest("material"), context());
+    expect(res.status).toBe(201);
+    expect(inserted).toEqual(expect.objectContaining({ source_kind: "drive", source_id: "drive-source", course_material_id: "material", extracted_text: "[Page or slide 1]\nCourse evidence", source_version: "2" }));
+    expect(storageUpload).not.toHaveBeenCalled();
+  });
+
+  it("rejects a submission from a different course", async () => {
+    assessmentRow = { ...assessment, course_id: "other-course" };
+    expect((await POST(materialRequest("material"), context())).status).toBe(400);
+    expect(insert).not.toHaveBeenCalled();
+  });
+
+  it("rejects a course material that does not match the assessment course", async () => {
+    materialRow = { ...material, course_id: "other-course" };
+    expect((await POST(materialRequest("material"), context())).status).toBe(400);
+    expect(inserted).toBeNull();
+  });
+
+  it("rejects unsupported MIME, mismatched extension, and files over 20 MiB", async () => {
+    expect((await POST(responseRequest(new Blob(["bad"]), "answer.docx", "application/msword"), context())).status).toBe(415);
+    expect((await POST(responseRequest(new Blob(["bad"]), "answer.pdf", "application/pdf"), context())).status).toBe(415);
+    const large = new Blob([new Uint8Array(20 * 1024 * 1024 + 1)]);
+    expect((await POST(responseRequest(large, "large.pdf", "application/pdf"), context())).status).toBe(413);
+    expect(storageUpload).not.toHaveBeenCalled();
+  });
+
+  it("rejects anonymous requests before touching workspace records", async () => {
+    authUser.id = null;
+    expect((await POST(materialRequest("material"), context())).status).toBe(401);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it("removes the uploaded object when extraction fails", async () => {
+    const { extractPdfPages } = await import("@/lib/documents");
+    vi.mocked(extractPdfPages).mockRejectedValueOnce(new Error("invalid PDF"));
+    expect((await POST(responseRequest(new Blob(["%PDF-synthetic"]), "broken.pdf", "application/pdf"), context())).status).toBe(422);
+    expect(storageRemove).toHaveBeenCalledTimes(1);
+    expect(removedObjects[0][0]).toMatch(/^owner\/submission\//);
+    expect(inserted).toBeNull();
+  });
+
+  it("removes an attached evidence row only for its owning submission", async () => {
+    const makeDeleteRequest = () => new NextRequest("https://example.com/api/submissions/submission/documents", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ documentId: "document" }) });
+    const res = await DELETE(makeDeleteRequest(), context());
+    expect(res.status).toBe(200);
+    const mismatched = await DELETE(makeDeleteRequest(), context("another-submission"));
+    expect(mismatched.status).toBe(404);
+  });
+});
