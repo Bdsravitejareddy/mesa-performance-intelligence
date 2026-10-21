@@ -177,26 +177,53 @@ export async function extractPdfPages(bytes: Uint8Array | ArrayBuffer, limits: D
   try {
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
       const page = await withDeadline(document.getPage(pageNumber), deadline, "PDF extraction");
-      const content = await withDeadline(page.getTextContent(), deadline, "PDF extraction");
       let previousY: number | undefined;
       const parts: string[] = [];
-      for (const item of content.items) {
-        if ("str" in item) {
-          const y = item.transform[5];
-          const separator = previousY === undefined ? "" : Math.abs(previousY - y) > 2 ? "\n" : " ";
-          previousY = y;
-          const part = `${separator}${item.str}`;
-          totalTextCharacters += part.length;
-          if (limits.maxTextCharacters !== undefined && totalTextCharacters > limits.maxTextCharacters) throw new Error("Document exceeds the extracted text limit.");
-          parts.push(part);
+      try {
+        if (limits.maxTextCharacters === undefined) {
+          // Keep the legacy importer path unchanged unless a caller explicitly requests a bound.
+          const content = await withDeadline(page.getTextContent(), deadline, "PDF extraction");
+          for (const item of content.items) {
+            if ("str" in item) {
+              const y = item.transform[5];
+              const separator = previousY === undefined ? "" : Math.abs(previousY - y) > 2 ? "\n" : " ";
+              previousY = y;
+              parts.push(`${separator}${item.str}`);
+            }
+          }
+        } else {
+          const reader = page.streamTextContent().getReader();
+          let streamDone = false;
+          try {
+            while (true) {
+              const { done, value } = await withDeadline(reader.read(), deadline, "PDF extraction");
+              if (done) { streamDone = true; break; }
+              for (const item of value.items) {
+                if ("str" in item) {
+                  const y = item.transform[5];
+                  const separator = previousY === undefined ? "" : Math.abs(previousY - y) > 2 ? "\n" : " ";
+                  previousY = y;
+                  const part = `${separator}${item.str}`;
+                  totalTextCharacters += part.length;
+                  if (totalTextCharacters > limits.maxTextCharacters) throw new Error("Document exceeds the extracted text limit.");
+                  parts.push(part);
+                }
+              }
+            }
+          } finally {
+            // Cancellation stops PDF.js from parsing the rest of a page once its text budget is exceeded.
+            if (!streamDone) await reader.cancel(new Error("PDF text extraction stopped at its configured limit.")).catch(() => undefined);
+            reader.releaseLock();
+          }
         }
-      }
-      const text = parts.join("")
-        .replace(/[ \t]+\n/g, "\n")
-        .trim();
+        const text = parts.join("")
+          .replace(/[ \t]+\n/g, "\n")
+          .trim();
 
-      pages.push({ pageNumber, text, tables: [], hasVisuals: false });
-      page.cleanup();
+        pages.push({ pageNumber, text, tables: [], hasVisuals: false });
+      } finally {
+        page.cleanup();
+      }
     }
   } finally {
     await loadingTask.destroy();
