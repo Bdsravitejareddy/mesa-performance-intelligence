@@ -28,7 +28,7 @@ export default async function CompetenciesPage() {
 
   return <AppShell demoMode={demoMode}><div className="section-page">
     <div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> EVIDENCE, NOT VERDICTS</div><h1>Competency map</h1><p className="page-subtitle">What your assessed work has demonstrated, what it has not, and what remains unknown.</p></div></div>
-    <div className="info-callout">Each competency is classified from official marks on the assessments mapped to it. A competency with no mapped, marked assessment is <strong>unknown</strong>, not weak. Open <em>Why this conclusion?</em> on any row to see the evidence, the benchmark and its limits.</div>
+    <div className="info-callout"><span>Each competency is classified from official marks on the assessments mapped to it. A competency with no mapped, marked assessment is <strong>unknown</strong>, not weak. Open <em>Why this conclusion?</em> on any row to see the evidence, the benchmark and its limits.</span></div>
     {!data ? <section className="content-panel"><p className="empty-hint">{demoMode ? "Preview mode has no competency evidence. Connect the private workspace to map real assessments." : "Connect Supabase to load competency evidence."}</p></section> : <>
       <section className="competency-summary" aria-label="Summary by classification">
         {STATE_ORDER.map((state) => <div className={`competency-summary-item state-${state}`} key={state}><strong>{counts.get(state) ?? 0}</strong><span>{STATE_LABELS[state]}</span></div>)}
@@ -41,7 +41,7 @@ export default async function CompetenciesPage() {
             <div><strong>{item.name}</strong><small>{item.description}</small></div>
             <div className="competency-verdict"><span className={`competency-state state-${item.assessment.state}`}>{STATE_LABELS[item.assessment.state]}</span><small>{item.assessment.headline} · {item.assessment.confidence === "insufficient" ? "no confidence rating" : `${item.assessment.confidence} confidence`}</small>{(challengesById.get(item.id) ?? []).some((row) => row.status === "open") && <small className="challenge-badge">Challenged · under review</small>}</div>
           </div>
-          <CompetencyWhy assessment={item.assessment} history={historyById.get(item.id) ?? []}><CompetencyChallenge competencyId={item.id} currentState={item.assessment.state} stateLabel={STATE_LABELS[item.assessment.state]} challenges={challengesById.get(item.id) ?? []} /></CompetencyWhy>
+          <CompetencyWhy assessment={item.assessment} history={historyById.get(item.id) ?? []}>{(item.assessment.why.evidence.length > 0 || (challengesById.get(item.id) ?? []).length > 0) && <CompetencyChallenge competencyId={item.id} currentState={item.assessment.state} stateLabel={STATE_LABELS[item.assessment.state]} challenges={challengesById.get(item.id) ?? []} />}</CompetencyWhy>
         </article>)}</div>
       </section>)}
       <section className="content-panel"><h2>Map assessments to competencies <span className="panel-count">{data.assessments.length}</span></h2><p className="empty-hint">Tag each assessment with the competencies it actually tested. Tags are visible to both workspace members and are labelled as member-tagged in every explanation, not as official Mesa rubric criteria.</p>
