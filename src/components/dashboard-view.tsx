@@ -15,6 +15,7 @@ import {
 import type { DashboardSnapshot } from "@/lib/dashboard-data";
 import { formatOfficialMark } from "@/lib/scoring";
 import { IntelligenceVisual } from "@/components/intelligence-visual";
+import { InsightSummary } from "@/components/insight-summary";
 
 export function DashboardView({ data }: { data: DashboardSnapshot }) {
   const average = data.marks.length
@@ -33,6 +34,8 @@ export function DashboardView({ data }: { data: DashboardSnapshot }) {
         </div>
         <IntelligenceVisual />
       </section>
+
+      <InsightSummary demoMode={data.demoMode} />
 
       {!data.demoMode && data.courses.length === 0 && data.assessmentCount === 0 && data.marks.length === 0 && <div className="info-callout" role="status"><span><strong>No Mesa records have been imported.</strong> LMS sync is not connected. Add a course and its materials to start recording assessment evidence. <Link href="/courses" className="text-link">Open courses <ArrowRight size={14} /></Link></span></div>}
 
