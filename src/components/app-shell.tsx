@@ -50,7 +50,7 @@ export function AppShell({ children, demoMode }: { children: React.ReactNode; de
   const pathname = usePathname();
 
   return (
-    <div className="app-frame">
+    <div className="app-frame" data-theme="dark">
       <aside className="sidebar">
         <Link href="/" className="brand-lockup" aria-label="Mesa Performance Intelligence home">
           <span className="brand-mark"><Activity size={18} strokeWidth={2.5} /></span>

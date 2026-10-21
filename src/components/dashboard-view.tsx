@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import type { DashboardSnapshot } from "@/lib/dashboard-data";
 import { formatOfficialMark } from "@/lib/scoring";
+import { IntelligenceVisual } from "@/components/intelligence-visual";
 
 export function DashboardView({ data }: { data: DashboardSnapshot }) {
   const average = data.marks.length
@@ -23,14 +24,15 @@ export function DashboardView({ data }: { data: DashboardSnapshot }) {
 
   return (
     <div className="dashboard-page page-enter">
-      <div className="page-heading-row">
-        <div>
+      <section className="overview-hero">
+        <div className="overview-hero-copy">
           <div className="eyebrow"><span className="eyebrow-line" /> YOUR LEARNING, IN CONTEXT</div>
-          <h1>Performance overview</h1>
-          <p className="page-subtitle">What you’ve learned, what you’ve shown, and what to work on next.</p>
+          <h1>See the signal in your performance.</h1>
+          <p>Connect what you were taught with the work you’ve shown, then choose what to improve next.</p>
+          <Link href="/courses" className="button button-primary"><Plus size={16} /> Add course material</Link>
         </div>
-        <Link href="/courses" className="button button-primary"><Plus size={16} /> Add course material</Link>
-      </div>
+        <IntelligenceVisual />
+      </section>
 
       {!data.demoMode && data.courses.length === 0 && data.assessmentCount === 0 && data.marks.length === 0 && <div className="info-callout" role="status"><span><strong>No Mesa records have been imported.</strong> LMS sync is not connected. Add a course and its materials to start recording assessment evidence. <Link href="/courses" className="text-link">Open courses <ArrowRight size={14} /></Link></span></div>}
 
