@@ -65,6 +65,14 @@ describe("sourced role benchmarks", () => {
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({ is_verified: false, benchmark_source: "user_confirmed_unverified" }));
   });
 
+  it("does not treat a matching HTML document title as the visible job title", async () => {
+    insert.mockReturnValue({ select: () => ({ single: async () => ({ data: { id: "role-6" }, error: null }) }) }); from.mockReturnValue({ insert });
+    fetchPublicSource.mockResolvedValue({ ...verifiableFetched, text: "Employer: Example Health. The Senior Technical Product Manager team delivers healthcare products. Date posted: 2026-10-01. Required: lead clinical product discovery and healthcare integrations." });
+    const response = await POST(req({ action: "save", title: "Senior Technical Product Manager", employer: "Example Health", sourceUrl: fetched.canonicalUrl, postingDate: "2026-10-01", reviewed: true, reviewedSource: { canonicalUrl: fetched.canonicalUrl, contentHash: verifiableFetched.contentHash }, requirements: [{ title: "Clinical discovery", description: "Lead clinical product discovery", sourceQuote: "lead clinical product discovery", evidenceKind: "required" }] }));
+    expect(response.status).toBe(201);
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ is_verified: false, benchmark_source: "user_confirmed_unverified" }));
+  });
+
   it("rejects saving when the reviewed source content changed before save", async () => {
     fetchPublicSource.mockResolvedValueOnce({ ...verifiableFetched, contentHash: "c".repeat(64) });
     const response = await POST(req({ action: "save", title: "Senior Technical Product Manager", employer: "Example Health", sourceUrl: fetched.canonicalUrl, postingDate: "2026-10-01", reviewed: true, reviewedSource: { canonicalUrl: verifiableFetched.canonicalUrl, contentHash: verifiableFetched.contentHash }, requirements: [{ title: "Clinical discovery", description: "Lead clinical product discovery", sourceQuote: "lead clinical product discovery", evidenceKind: "required" }] }));

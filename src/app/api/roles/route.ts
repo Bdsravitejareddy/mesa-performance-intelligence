@@ -116,7 +116,8 @@ export async function POST(request: NextRequest) {
     retrievedAt = source.retrievedAt;
     sourceHash = source.contentHash;
     finalRequirements = requirements.map((item) => ({ ...item, sourceUrl: source.canonicalUrl, retrievedAt: source.retrievedAt } as Requirement & { sourceUrl: string; retrievedAt: string }));
-    const confirmsTitle = normalizedText(source.title) === normalizedText(title) || hasLabeledValue(source.text, ["role", "job title", "position"], title);
+    // `source.title` is extracted from HTML <title>, not a visible job heading. Only labeled page text is safe to verify here.
+    const confirmsTitle = hasLabeledValue(source.text, ["role", "job title", "position"], title);
     const confirmsEmployer = Boolean(employer && hasLabeledValue(source.text, ["employer", "company", "hiring organization"], employer));
     // Article/page metadata dates describe the page, not necessarily the job posting.
     const confirmsPostingDate = Boolean(postingDate && hasLabeledValue(source.text, ["date posted", "posted on", "job posted"], postingDate));
@@ -142,4 +143,3 @@ export async function POST(request: NextRequest) {
   if (error || !data) return NextResponse.json({ error: "Could not save this private role profile." }, { status: 400 });
   return NextResponse.json({ id: data.id, verified }, { status: 201 });
 }
-
