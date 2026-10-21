@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { selectAssignmentReadTools, toolArgumentVariants } from "./tool-selection";
+import { assignmentDetailArguments, selectAssignmentReadTools, toolArgumentVariants } from "./tool-selection";
 
 describe("Nexus MCP tool selection", () => {
   it("selects only documented plural read tools and excludes writes", () => {
@@ -25,5 +25,12 @@ describe("Nexus MCP tool selection", () => {
 
   it("covers the documented status enum instead of relying on a hidden default filter", () => {
     expect(toolArgumentVariants({ name: "list_assignments", inputSchema: { type: "object", properties: { status: { type: "string", enum: ["due", "submitted", "graded"] } } } })).toEqual([{ status: "due" }, { status: "submitted" }, { status: "graded" }]);
+  });
+
+  it("fills the known required assignment identifier for an exact read-only detail lookup", () => {
+    expect(assignmentDetailArguments({
+      name: "get_assignment",
+      inputSchema: { type: "object", properties: { assignmentId: { type: "string" }, includeGrades: { type: "boolean", default: true } }, required: ["assignmentId"] },
+    }, "assignment-1")).toEqual({ assignmentId: "assignment-1", includeGrades: true });
   });
 });

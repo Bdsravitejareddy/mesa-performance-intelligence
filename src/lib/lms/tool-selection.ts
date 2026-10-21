@@ -25,3 +25,18 @@ export function toolArgumentVariants(tool: McpTool): Record<string, unknown>[] |
   }
   return statusOptions?.length ? statusOptions.map((status) => ({ ...defaults, status })) : [defaults];
 }
+
+export function assignmentDetailArguments(tool: McpTool, assignmentId: string): Record<string, unknown> | null {
+  const schema = tool.inputSchema ?? {};
+  const properties = schema.properties && typeof schema.properties === "object" ? schema.properties as Record<string, unknown> : {};
+  const required = Array.isArray(schema.required) ? schema.required.map(String) : [];
+  const key = required.find((name) => /^assignment_?id$/i.test(name) && Object.hasOwn(properties, name))
+    ?? Object.keys(properties).find((name) => /^assignment_?id$/i.test(name));
+  if (!key) return null;
+  const defaults: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(properties)) {
+    const property = value && typeof value === "object" ? value as Record<string, unknown> : {};
+    if (property.default !== undefined) defaults[name] = property.default;
+  }
+  return { ...defaults, [key]: assignmentId };
+}

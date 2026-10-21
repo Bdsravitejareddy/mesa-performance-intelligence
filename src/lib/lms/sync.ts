@@ -7,7 +7,7 @@ import { matchingCourseId, type CourseIdentity } from "./course-matching";
 import { mergeAssignmentRecords } from "./merge";
 import { assignmentRecordFieldPaths, normalizeAssignmentRecords, unwrapToolResult, type MesaAssignmentRecord } from "./normalize";
 import { toAssessmentRow, toSubmissionRow } from "./records";
-import { selectAssignmentReadTools, toolArgumentVariants } from "./tool-selection";
+import { assignmentDetailArguments, selectAssignmentReadTools, toolArgumentVariants } from "./tool-selection";
 
 type SyncResult = { status: "succeeded" | "partial"; runId: string; courses: number; assessments: number; submissions: number; marks: number; feedback: number; message: string };
 
@@ -144,7 +144,27 @@ export async function syncMesaLms(): Promise<SyncResult> {
       }
     }
     if (!completedReads) throw new Error("All supported Nexus assignment and grade reads failed.");
-    const records = mergeAssignmentRecords(resultGroups);
+    let records = mergeAssignmentRecords(resultGroups);
+    const assignmentDetailTool = availableTools.find((tool) => tool.name.toLowerCase().replace(/[^a-z]/g, "") === "getassignment");
+    if (assignmentDetailTool) {
+      const missingCourseRecords = records.filter((record) => !record.courseId && !record.courseTitle);
+      const details = await Promise.all(missingCourseRecords.map(async (record) => {
+        const args = assignmentDetailArguments(assignmentDetailTool, record.assignmentId);
+        if (!args) return [];
+        try {
+          const result = unwrapToolResult(await mcp.callTool(assignmentDetailTool.name, args));
+          const normalized = normalizeAssignmentRecords(result);
+          readDiagnostics.push({ tool: assignmentDetailTool.name, records: normalized.length, missingCourse: normalized.filter((item) => !item.courseId && !item.courseTitle).length, fields: assignmentRecordFieldPaths(result) });
+          completedReads += 1;
+          return normalized;
+        } catch {
+          failedReads += 1;
+          return [];
+        }
+      }));
+      resultGroups.push(...details);
+      records = mergeAssignmentRecords(resultGroups);
+    }
     if (!records.length) {
       const summary: SyncResult = { status: "partial", runId: run.id, courses: 0, assessments: 0, submissions: 0, marks: 0, feedback: 0, message: failedReads ? `No structured assignment records were returned; ${failedReads} read operation(s) also failed. No records were changed.` : "The read-only MCP connection worked, but its assignment/grade tools returned no structured assignment records. No records were changed." };
       await client.from("sync_runs").update({ status: summary.status, finished_at: new Date().toISOString(), message: summary.message }).eq("id", run.id).eq("user_id", ownerId);

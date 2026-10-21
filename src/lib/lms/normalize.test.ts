@@ -41,6 +41,12 @@ describe("Mesa MCP assignment normalization", () => {
     });
   });
 
+  it("normalizes a single get_assignment detail response", () => {
+    expect(normalizeAssignmentRecords({ id: "a-detail", title: "Assessment", course: "Data Driven Decision Making" })).toMatchObject([
+      { assignmentId: "a-detail", title: "Assessment", courseTitle: "Data Driven Decision Making" },
+    ]);
+  });
+
   it("leaves non-JSON MCP text opaque rather than guessing a mark", () => {
     expect(unwrapToolResult({ content: [{ type: "text", text: "2 assignments · Case Study" }] })).toEqual({ content: [{ type: "text", text: "2 assignments · Case Study" }] });
     expect(normalizeAssignmentRecords({ content: [{ type: "text", text: "92/100" }] })).toEqual([]);

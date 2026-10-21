@@ -55,6 +55,9 @@ function extractRecords(value: unknown): JsonObject[] {
   for (const key of ["assignments", "assessments", "grades", "items", "results", "data", "records"]) {
     if (Array.isArray(root[key])) return extractRecords(root[key]);
   }
+  const hasAssignmentId = firstString(root.assignment_id, root.assignmentId, object(root.assignment)?.id, root.id, root._id);
+  const hasAssignmentTitle = firstString(root.assignment_title, root.assignmentTitle, root.assignment_name, root.title, root.name, typeof root.assignment === "string" ? root.assignment : "");
+  if (hasAssignmentId && hasAssignmentTitle) return [root];
   for (const value of Object.values(root)) {
     const found = extractRecords(value);
     if (found.length) return found;

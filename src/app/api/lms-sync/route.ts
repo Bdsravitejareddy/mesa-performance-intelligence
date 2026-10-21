@@ -3,6 +3,8 @@ import { requireWorkspaceMember } from "@/lib/drive-sync/auth";
 import { HttpError } from "@/lib/drive-sync/http";
 import { syncMesaLms } from "@/lib/lms/sync";
 
+export const maxDuration = 60;
+
 export async function POST() {
   try {
     await requireWorkspaceMember();
