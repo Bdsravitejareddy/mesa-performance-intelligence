@@ -15,6 +15,11 @@ export type EvaluationSummaryItem = {
 };
 export type EvaluationSummaryData = { strengths: EvaluationSummaryItem[]; improvements: EvaluationSummaryItem[]; actions: EvaluationSummaryItem[] };
 export type EvaluationDocument = { id: string; name: string; sourceKind: string; extractionStatus: string; sourceVersion: string };
+export type LmsAttachmentStatus = "unavailable" | "unknown";
+
+export function getLmsAttachmentStatus(markSource: unknown): LmsAttachmentStatus {
+  return markSource === "Mesa LMS (Nexus MCP)" ? "unavailable" : "unknown";
+}
 
 export function isEvaluationSummaryData(value: unknown): value is EvaluationSummaryData {
   if (!value || typeof value !== "object") return false;
@@ -31,14 +36,14 @@ export function getSummaryReferences(value: unknown): SummaryReference[] {
   return value.flatMap((item) => item && typeof item === "object" && typeof (item as Record<string, unknown>).key === "string" && typeof (item as Record<string, unknown>).label === "string" ? [{ key: (item as Record<string, string>).key, label: (item as Record<string, string>).label }] : []);
 }
 
-export function EvaluationSummary({ submissionId, summary, sourceReferences, sampleCount, sampleLabel, documents, attachmentsUnavailable = true }: {
+export function EvaluationSummary({ submissionId, summary, sourceReferences, sampleCount, sampleLabel, documents, lmsAttachmentStatus = "unknown" }: {
   submissionId: string;
   summary: EvaluationSummaryData | null;
   sourceReferences: SummaryReference[];
   sampleCount: number;
   sampleLabel?: string;
   documents: EvaluationDocument[];
-  attachmentsUnavailable?: boolean;
+  lmsAttachmentStatus?: LmsAttachmentStatus;
 }) {
   const labels = new Map(sourceReferences.map((reference) => [reference.key, reference.label]));
   return <section className="evaluation-summary" aria-label="Evidence-linked assessment summary">
@@ -49,7 +54,7 @@ export function EvaluationSummary({ submissionId, summary, sourceReferences, sam
       <SummarySection title="What to do now" items={summary.actions} labels={labels} empty="No evidence-linked next actions were returned." />
     </div> : <p className="summary-empty">No evaluation summary is saved for this submission yet. Add the submitted work, relevant course material, and an official or approved rubric before evaluating it.</p>}
     {documents.length > 0 && <div className="summary-documents"><strong><FileText size={14} /> Submission document provenance</strong>{documents.map((document) => <div key={document.id}><span>{document.name}</span><small>{document.sourceKind.replaceAll("_", " ")} · {document.sourceVersion} · extraction {document.extractionStatus.replaceAll("_", " ")}</small></div>)}</div>}
-    {documents.length === 0 && attachmentsUnavailable && <div className="summary-attachment-state"><p>The LMS connector does not expose submitted attachment content. No file has been read or inferred from its link.</p><a href={`#submission-files-${encodeURIComponent(submissionId)}`}><FileText size={14} /> Upload a PDF or PPTX <span>or link indexed course material</span></a></div>}
+    {lmsAttachmentStatus === "unavailable" && <div className="summary-attachment-state"><p>The LMS connector does not expose submitted attachment content. No file has been read or inferred from its link.</p>{documents.length === 0 && <a href={`#submission-files-${encodeURIComponent(submissionId)}`}><FileText size={14} /> Upload a PDF or PPTX <span>or link indexed course material</span></a>}</div>}
   </section>;
 }
 

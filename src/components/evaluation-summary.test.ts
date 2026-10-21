@@ -2,7 +2,7 @@
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { EvaluationSummary, type EvaluationSummaryData } from "./evaluation-summary";
+import { EvaluationSummary, getLmsAttachmentStatus, type EvaluationSummaryData } from "./evaluation-summary";
 const { refresh } = vi.hoisted(() => ({ refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 import { EvaluationAction } from "./evaluation-action";
@@ -14,7 +14,7 @@ const summary = {
 } satisfies EvaluationSummaryData;
 
 describe("assessment evaluation summary", () => {
-  afterEach(() => { vi.unstubAllGlobals(); refresh.mockReset(); });
+  afterEach(() => { vi.unstubAllGlobals(); refresh.mockReset(); delete (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT; });
 
   it("renders the three separate summary sections with exact provenance and confidence", async () => {
     const host = document.createElement("div");
@@ -32,14 +32,25 @@ describe("assessment evaluation summary", () => {
     await act(async () => root.unmount());
   });
 
-  it("shows evidence gaps and safe upload or indexed-course-material actions when LMS attachments are unavailable", async () => {
+  it("does not make an LMS attachment claim for a manual or unknown-origin submission", async () => {
     const host = document.createElement("div");
     const root = createRoot(host);
     await act(async () => root.render(createElement(EvaluationSummary, { submissionId: "sub-2", summary: null, sourceReferences: [], sampleCount: 0, documents: [] })));
     expect(host.textContent).toContain("No evaluation summary is saved for this submission yet.");
+    expect(host.textContent).not.toContain("LMS connector does not expose");
+    await act(async () => root.unmount());
+  });
+
+  it("claims LMS attachment unavailability only for the exact imported mark-source contract and retains fallback actions without a report", async () => {
+    expect(getLmsAttachmentStatus("Mesa LMS (Nexus MCP)")).toBe("unavailable");
+    expect(getLmsAttachmentStatus("user_entered")).toBe("unknown");
+    expect(getLmsAttachmentStatus(null)).toBe("unknown");
+    const host = document.createElement("div");
+    const root = createRoot(host);
+    await act(async () => root.render(createElement(EvaluationSummary, { submissionId: "sub-4", summary: null, sourceReferences: [], sampleCount: 0, documents: [], lmsAttachmentStatus: "unavailable" })));
     expect(host.textContent).toContain("The LMS connector does not expose submitted attachment content.");
-    expect(host.querySelector('a[href="#submission-files-sub-2"]')?.textContent).toContain("Upload a PDF or PPTX");
-    expect(host.querySelector('a[href="#submission-files-sub-2"]')?.textContent).toContain("link indexed course material");
+    expect(host.querySelector('a[href="#submission-files-sub-4"]')?.textContent).toContain("Upload a PDF or PPTX");
+    expect(host.querySelector('a[href="#submission-files-sub-4"]')?.textContent).toContain("link indexed course material");
     await act(async () => root.unmount());
   });
 

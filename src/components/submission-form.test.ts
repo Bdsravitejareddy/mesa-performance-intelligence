@@ -43,6 +43,21 @@ describe("submission evidence controls", () => {
     expect(markup).toContain("Remove evidence");
   });
 
+  it("shows the LMS-specific upload/link fallback on an imported submission before any evaluation report exists", () => {
+    const markup = renderToStaticMarkup(createElement(SubmissionForm, {
+      assessmentId: "assessment", submissionId: "lms-submission", lmsAttachmentStatus: "unavailable", courseMaterials: [{ id: "material", name: "Course notes.pdf", sourceKind: "drive", version: 2 }],
+    }));
+    expect(markup).toContain("The LMS connector does not expose the submitted file content.");
+    expect(markup).toContain("Attach PDF or PPTX");
+    expect(markup).toContain("Link indexed course material");
+  });
+
+  it("does not claim LMS attachment unavailability for a manual submission", () => {
+    const markup = renderToStaticMarkup(createElement(SubmissionForm, { assessmentId: "assessment", submissionId: "manual-submission" }));
+    expect(markup).not.toContain("LMS connector does not expose");
+    expect(markup).toContain("Attach PDF or PPTX");
+  });
+
   it("reuses the synchronously saved submission id when attachment is retried", async () => {
     const documentRequests: string[] = [];
     const request = vi.fn(async (url: string) => {

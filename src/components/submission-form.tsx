@@ -3,12 +3,13 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FilePlus2, LoaderCircle, Save, Trash2 } from "lucide-react";
+import type { LmsAttachmentStatus } from "./evaluation-summary";
 
 export type SubmissionMaterialOption = { id: string; name: string; sourceKind: string; version: number };
 export type SubmissionDocumentItem = { id: string; name: string; sourceKind: string; extractionStatus: string; sourceVersion: string };
 function label(value: string) { const text = value.replaceAll("_", " "); return text.charAt(0).toUpperCase() + text.slice(1); }
 
-export function SubmissionForm({ assessmentId, submissionId, courseMaterials = [], documents = [] }: { assessmentId: string; submissionId?: string; courseMaterials?: SubmissionMaterialOption[]; documents?: SubmissionDocumentItem[] }) {
+export function SubmissionForm({ assessmentId, submissionId, courseMaterials = [], documents = [], lmsAttachmentStatus = "unknown" }: { assessmentId: string; submissionId?: string; courseMaterials?: SubmissionMaterialOption[]; documents?: SubmissionDocumentItem[]; lmsAttachmentStatus?: LmsAttachmentStatus }) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -69,6 +70,7 @@ export function SubmissionForm({ assessmentId, submissionId, courseMaterials = [
   }
 
   return <form onSubmit={submit} className="submission-form">
+    {lmsAttachmentStatus === "unavailable" && <p className="info-callout submission-lms-fallback">The LMS connector does not expose the submitted file content. Upload the PDF or PPTX here, or select an indexed course material below.</p>}
     {!activeSubmissionId && <><label className="field"><span>Student answer or work notes</span><textarea name="answerText" maxLength={100000} placeholder="Paste your answer or a short evidence note…" /></label><div className="form-row"><label className="field"><span>Official mark <small>(out of 100)</small></span><input type="number" name="officialMark" min="0" max="100" step="0.01" placeholder="Optional" /></label><label className="field"><span>Official feedback</span><input name="officialFeedback" maxLength={10000} placeholder="Optional evaluator feedback" /></label></div></>}
     {documents.length > 0 && <div className="submission-document-list"><strong>Attached evidence</strong>{documents.map((document) => <div className="submission-document-row" key={document.id}><span><b>{document.name}</b><small>{label(document.sourceKind)} · {label(document.extractionStatus)} · {document.sourceVersion}</small></span>{activeSubmissionId && <button className="button button-quiet" type="button" disabled={busy} onClick={() => void removeEvidence(document.id)}><Trash2 size={14} /> Remove evidence</button>}</div>)}</div>}
     <label className="field"><span>{activeSubmissionId ? "Attach PDF or PPTX" : "Attach submission file"} <small>(optional · 20 MiB maximum)</small></span><input name="submission-file" type="file" accept=".pdf,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation" onChange={() => setSelectedMaterial("")} /></label>
