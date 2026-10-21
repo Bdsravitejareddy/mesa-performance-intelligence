@@ -23,7 +23,10 @@ describe("private submission documents migration", () => {
       create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
       create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text,name text);
       alter table storage.objects enable row level security;
-      create function storage.foldername(object_name text) returns text[] language sql immutable as $$ select regexp_split_to_array(object_name,'/') $$;
+      create function storage.foldername(object_name text) returns text[] language sql immutable as $$
+        select parts[1:array_length(parts,1)-1]
+        from (select string_to_array(object_name,'/') as parts) as path;
+      $$;
       grant usage on schema storage to authenticated;
       grant select,insert,update,delete on storage.objects to authenticated;
     `);
@@ -92,6 +95,9 @@ describe("private submission documents migration", () => {
     await db.exec("set role authenticated");
     await db.exec(`insert into storage.objects(bucket_id,name) values ('submission-files','${owner}/${submission}/document/answer.pdf')`);
     await expect(db.exec(`insert into storage.objects(bucket_id,name) values ('submission-files','${member}/${submission}/document/answer.pdf')`)).rejects.toThrow(/row-level security/i);
+    for (const path of ["answer.pdf", owner, `${owner}/${submission}`]) {
+      await expect(db.query("insert into storage.objects(bucket_id,name) values ('submission-files',$1)", [path])).rejects.toThrow(/row-level security/i);
+    }
     expect((await db.query("select id from storage.objects where bucket_id='submission-files'")).rows).toHaveLength(1);
     expect((await db.query("update storage.objects set name=name where bucket_id='submission-files' returning id")).rows).toHaveLength(0);
     await db.exec(`select set_config('request.jwt.claim.sub','${outsider}',false)`);
