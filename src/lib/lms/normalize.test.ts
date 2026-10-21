@@ -30,6 +30,17 @@ describe("Mesa MCP assignment normalization", () => {
     expect(records[1]).toMatchObject({ courseId: "a1b2c3d4-e5f6-4789-8123-aabbccddeeff", courseTitle: "" });
   });
 
+  it("maps the Nexus get_grades record shape without using maxMarks as the earned score", () => {
+    const records = normalizeAssignmentRecords({ structuredContent: { grades: [{
+      assignment: "Mid-Term Assignment", assignmentId: "a-grade-1", course: "Art of Selling",
+      feedback: "Strong application.", marks: "92/100", maxMarks: 100, releasedAt: "2026-10-20T10:00:00Z",
+    }] } });
+    expect(records[0]).toMatchObject({
+      assignmentId: "a-grade-1", title: "Mid-Term Assignment", courseTitle: "Art of Selling",
+      score: 92, maximumMark: 100, feedback: "Strong application.",
+    });
+  });
+
   it("leaves non-JSON MCP text opaque rather than guessing a mark", () => {
     expect(unwrapToolResult({ content: [{ type: "text", text: "2 assignments · Case Study" }] })).toEqual({ content: [{ type: "text", text: "2 assignments · Case Study" }] });
     expect(normalizeAssignmentRecords({ content: [{ type: "text", text: "92/100" }] })).toEqual([]);

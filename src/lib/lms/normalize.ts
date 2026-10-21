@@ -118,11 +118,12 @@ export function normalizeAssignmentRecords(value: unknown): MesaAssignmentRecord
     const rawSubmission = object(record.submission) ?? object(record.my_submission) ?? object(record.mySubmission) ?? (Array.isArray(record.submissions) ? object(record.submissions[0]) : null) ?? {};
     const grade = object(record.grade) ?? {};
     const assignmentId = firstString(record.assignment_id, record.assignmentId, assignment.id, assignment.assignment_id, assignment.assessment_id, record.id, record._id);
-    const title = firstString(record.assignment_title, record.assignmentTitle, record.assignment_name, assignment.title, assignment.name, record.title, record.name);
+    const scalarAssignment = typeof record.assignment === "string" ? record.assignment.trim() : "";
+    const title = firstString(record.assignment_title, record.assignmentTitle, record.assignment_name, assignment.title, assignment.name, scalarAssignment, record.title, record.name);
     if (!assignmentId || !title) return [];
     const score = pickNumber(rawSubmission, ["score", "earned_score", "earned_marks", "marks_obtained", "obtained_marks", "marks_awarded", "grade_score"])
-      ?? pickNumber(grade, ["score", "earned_score", "earned_marks", "marks_obtained", "obtained_marks", "marks_awarded", "grade_score"])
-      ?? pickNumber(record, ["score", "earned_score", "earned_marks", "marks_obtained", "obtained_marks", "marks_awarded", "grade_score"]);
+      ?? pickNumber(grade, ["score", "earned_score", "earned_marks", "marks_obtained", "obtained_marks", "marks_awarded", "grade_score", "marks"])
+      ?? pickNumber(record, ["score", "earned_score", "earned_marks", "marks_obtained", "obtained_marks", "marks_awarded", "grade_score", "marks"]);
     const maximumMark = pickNumber(record, ["max_marks", "maximum_marks", "maxMarks", "maximumMarks", "points_possible", "max_score"])
       ?? pickNumber(assignment, ["max_marks", "maximum_marks", "maxMarks", "maximumMarks", "points_possible", "max_score"]);
     const feedback = firstString(rawSubmission.feedback, rawSubmission.feedback_text, rawSubmission.comments, rawSubmission.evaluator_feedback, grade.feedback, grade.comments, record.feedback, record.feedback_text, record.evaluator_feedback);
