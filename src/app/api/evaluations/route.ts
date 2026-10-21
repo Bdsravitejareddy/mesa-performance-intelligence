@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { validateEvaluation } from "@/lib/ai/contracts";
 import { createEvaluationInputHash } from "@/lib/ai/evaluation-input";
-import { AI_DISCLOSURE_VERSION } from "@/lib/ai/consent";
+import { getAIProcessingConfig, isAIConsentCurrent } from "@/lib/ai/consent";
 import { requestJsonFromProvider } from "@/lib/ai/provider";
 import { retrieveRelevantReferences } from "@/lib/ai/retrieval";
 import { verifyArithmeticStatements } from "@/lib/scoring";
@@ -16,11 +16,11 @@ export async function POST(request: NextRequest) {
   const { data: claimsData } = await supabase.auth.getClaims();
   const userId = claimsData?.claims?.sub;
   if (typeof userId !== "string") return NextResponse.json({ error: "Sign in before requesting an evaluation." }, { status: 401 });
-  const retentionNotice = process.env.AI_DATA_RETENTION_NOTICE?.trim();
-  if (process.env.AI_DATA_PROCESSING_APPROVED !== "true" || !retentionNotice) return NextResponse.json({ error: "AI evaluation is unavailable until excerpt processing and provider retention are configured." }, { status: 503 });
-  const { data: consent, error: consentError } = await supabase.from("ai_processing_consents").select("disclosure_version, revoked_at").eq("user_id", userId).maybeSingle();
+  const aiConfig = getAIProcessingConfig();
+  if (!aiConfig.configured) return NextResponse.json({ error: "AI evaluation is unavailable until excerpt processing and provider retention are configured." }, { status: 503 });
+  const { data: consent, error: consentError } = await supabase.from("ai_processing_consents").select("disclosure_version, configuration_fingerprint, provider_host, provider_model, revoked_at").eq("user_id", userId).maybeSingle();
   if (consentError) return NextResponse.json({ error: "AI consent status is unavailable." }, { status: 503 });
-  if (consent?.disclosure_version !== AI_DISCLOSURE_VERSION || consent.revoked_at !== null) return NextResponse.json({ error: "Review and accept the current AI processing disclosure before evaluating." }, { status: 403 });
+  if (!isAIConsentCurrent(consent, aiConfig)) return NextResponse.json({ error: "Review and accept the current AI processing disclosure and provider configuration before evaluating." }, { status: 403 });
   const { data: submission } = await supabase.from("submissions").select("id, user_id, assessment_id, answer_text, official_mark, official_feedback, official_mark_source, source_original_mark, source_original_max_mark").eq("id", body.submissionId).maybeSingle();
   if (!submission) return NextResponse.json({ error: "Submission was not found in this workspace." }, { status: 404 });
   const { data: assessment } = await supabase.from("assessments").select("id, course_id, title, assessment_format").eq("id", submission.assessment_id).maybeSingle();
