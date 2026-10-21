@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { parseCriterionScores } from "@/lib/feedback/criteria";
+import { recordCompetencySnapshots } from "@/lib/competency/history";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const COMPETENCY_ID = /^[a-z_]+\.[a-z_]+$/;
@@ -25,7 +26,8 @@ export async function PUT(request: NextRequest) {
 
   const supabase = await createClient();
   const { data: claimsData } = await supabase.auth.getClaims();
-  if (typeof claimsData?.claims?.sub !== "string") return NextResponse.json({ error: "Sign in to map assessments." }, { status: 401 });
+  const userId = claimsData?.claims?.sub;
+  if (typeof userId !== "string") return NextResponse.json({ error: "Sign in to map assessments." }, { status: 401 });
 
   // RLS limits this to workspace assessments; the mapping inherits the assessment owner.
   const { data: assessment, error: assessmentError } = await supabase.from("assessments").select("id, user_id").eq("id", assessmentId).maybeSingle();
@@ -68,5 +70,10 @@ export async function PUT(request: NextRequest) {
     const { error } = await supabase.from("assessment_competencies").insert(additions.map((item) => ({ user_id: assessment.user_id, assessment_id: assessmentId, competency_id: item.competencyId, criterion_label: item.label, mapping_source: "user_tagged", review_status: "accepted" })));
     if (error) return NextResponse.json({ error: "Could not update mappings." }, { status: 500 });
   }
-  return NextResponse.json({ ok: true, added: additions.length, removed: removals.length });
+  // The mapping is saved either way; a history failure is reported so the change is not silently unrecorded.
+  let historyRecorded: number | null = null;
+  if (additions.length || removals.length) {
+    try { historyRecorded = await recordCompetencySnapshots(supabase, userId); } catch { historyRecorded = null; }
+  }
+  return NextResponse.json({ ok: true, added: additions.length, removed: removals.length, historyRecorded, ...(historyRecorded === null && (additions.length || removals.length) ? { warning: "Mapping saved, but the competency history could not be updated." } : {}) });
 }

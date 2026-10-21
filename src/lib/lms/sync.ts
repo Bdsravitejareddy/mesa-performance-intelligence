@@ -4,12 +4,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getAllowedEmails } from "@/lib/supabase/config";
 import { MesaMcpClient, getMesaMcpEndpoint } from "./mcp-client";
 import { matchingCourseId, type CourseIdentity } from "./course-matching";
+import { recordCompetencySnapshots } from "@/lib/competency/history";
 import { mergeAssignmentRecords } from "./merge";
 import { normalizeAssignmentRecords, unwrapToolResult, type MesaAssignmentRecord } from "./normalize";
 import { toAssessmentRow, toSubmissionRow } from "./records";
 import { assignmentDetailArguments, selectAssignmentReadTools, toolArgumentVariants } from "./tool-selection";
 
-type SyncResult = { status: "succeeded" | "partial"; runId: string; courses: number; assessments: number; submissions: number; marks: number; feedback: number; message: string };
+type SyncResult = { status: "succeeded" | "partial"; runId: string; courses: number; assessments: number; submissions: number; marks: number; feedback: number; message: string; competencySnapshots?: number | null };
 
 async function workspaceMembers(client: SupabaseClient): Promise<string[]> {
   const emails = new Set(getAllowedEmails());
@@ -167,6 +168,8 @@ export async function syncMesaLms(): Promise<SyncResult> {
     const summary: SyncResult = { status: hasPartialData ? "partial" : "succeeded", runId: run.id, courses: counts.courses, assessments: counts.assessments, submissions: counts.submissions, marks: counts.marks, feedback: counts.feedback, message: hasPartialData ? `Imported ${counts.assessments} assessment(s), ${counts.marks} marks, and ${counts.feedback} feedback records. ${counts.skipped} record(s) were skipped because the LMS provided no course reference; ${failedReads} read operation(s) failed.` : `Synced ${counts.assessments} assessments, ${counts.marks} marks, and ${counts.feedback} feedback records. Scores are converted to the 0–100 scale, and original LMS marks are retained.` };
     const { error } = await client.from("sync_runs").update({ status: summary.status, finished_at: new Date().toISOString(), message: summary.message }).eq("id", run.id).eq("user_id", ownerId);
     if (error) throw new Error("Sync status could not be saved.");
+    // New or regraded marks can change competency conclusions; append history after the sync is recorded.
+    try { summary.competencySnapshots = await recordCompetencySnapshots(client, ownerId); } catch { summary.competencySnapshots = null; }
     return summary;
   } catch (error) {
     await client.from("sync_runs").update({ status: "failed", finished_at: new Date().toISOString(), message: "LMS sync failed. Check connector configuration and try again." }).eq("id", run.id).eq("user_id", ownerId);

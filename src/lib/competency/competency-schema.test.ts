@@ -28,6 +28,7 @@ describe("competency framework migration", () => {
     await db.exec(await migration("20261019063732_shared_workspace_access.sql"));
     await db.exec(await migration("20261022120000_competency_framework.sql"));
     await db.exec(await migration("20261022140000_criterion_competency_mappings.sql"));
+    await db.exec(await migration("20261022150000_competency_history_and_challenges.sql"));
     await db.exec(`
       insert into private.workspace_access(email) values ('first@example.com'),('second@example.com');
       insert into auth.users(id,email,email_confirmed_at) values
@@ -75,7 +76,25 @@ describe("competency framework migration", () => {
     await expect(db.exec(`insert into public.assessment_competencies(user_id,assessment_id,competency_id,mapping_source,review_status)
       values ('11111111-1111-4111-8111-111111111111','a1111111-1111-4111-8111-111111111111','business.finance','ai_suggested','accepted')`)).rejects.toThrow();
 
+    // History is append-only for members.
+    const hash = "a".repeat(64);
+    await db.exec(`insert into public.competency_snapshots(user_id,competency_id,state,confidence,evidence_fingerprint,mapping_fingerprint,rules_version,reason)
+      values ('22222222-2222-4222-8222-222222222222','analytical.numerical_analysis','emerging','low','${hash}','${hash}','v1','initial')`);
+    await expect(db.exec("update public.competency_snapshots set state='demonstrated_strength'")).rejects.toThrow();
+    await expect(db.exec("delete from public.competency_snapshots")).rejects.toThrow();
+
+    // Challenges keep their original statement; resolving needs a note; closed challenges stay closed.
+    await db.exec(`insert into public.competency_challenges(id,user_id,competency_id,disputed_state,statement)
+      values ('c1111111-1111-4111-8111-111111111111','22222222-2222-4222-8222-222222222222','analytical.numerical_analysis','emerging','Two more case studies show this.')`);
+    await expect(db.exec("update public.competency_challenges set statement='Rewritten'")).rejects.toThrow(/cannot be rewritten/);
+    await expect(db.exec("update public.competency_challenges set status='resolved', resolved_at=now()")).rejects.toThrow();
+    await db.exec("update public.competency_challenges set status='resolved', resolution_note='Tagged the case studies.', resolved_at=now()");
+    await expect(db.exec("update public.competency_challenges set status='open', resolved_at=null")).rejects.toThrow(/cannot be reopened/);
+    await expect(db.exec("delete from public.competency_challenges")).rejects.toThrow();
+
     await db.exec("select set_config('request.jwt.claim.sub','33333333-3333-4333-8333-333333333333',false)");
+    expect((await db.query("select id from public.competency_snapshots")).rows).toHaveLength(0);
+    expect((await db.query("select id from public.competency_challenges")).rows).toHaveLength(0);
     expect((await db.query("select id from public.assessment_competencies")).rows).toHaveLength(0);
     expect((await db.query("select id from public.competencies")).rows).toHaveLength(0);
   });

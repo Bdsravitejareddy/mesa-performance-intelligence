@@ -22,6 +22,7 @@ function query(table: string) {
 
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth: { getClaims: async () => ({ data: { claims: state.userId ? { sub: state.userId } : {} } }) }, from: query }) }));
 vi.mock("@/lib/supabase/config", () => ({ hasSupabaseConfig: () => true }));
+vi.mock("@/lib/competency/history", () => ({ recordCompetencySnapshots: async () => 1 }));
 
 const req = (body: unknown) => new NextRequest("https://app.test/api/assessment-competencies", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 const assessmentId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -34,7 +35,7 @@ describe("assessment competency tagging", () => {
     state.existing = [{ competency_id: "business.strategy", mapping_source: "user_tagged" }, { competency_id: "business.finance", mapping_source: "user_tagged" }, { competency_id: "decision.judgement", mapping_source: "official_rubric" }];
     const response = await PUT(req({ assessmentId, competencyIds: ["analytical.numerical_analysis", "business.strategy"] }));
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ ok: true, added: 1, removed: 1 });
+    expect(await response.json()).toEqual({ ok: true, added: 1, removed: 1, historyRecorded: 1 });
     const insert = state.calls.find((call) => call.op === "insert");
     expect(insert?.args[0]).toEqual([expect.objectContaining({ user_id: "owner", competency_id: "analytical.numerical_analysis", mapping_source: "user_tagged", review_status: "accepted" })]);
     const deletes = state.calls.filter((call) => call.table === "assessment_competencies" && call.op === "delete").length;

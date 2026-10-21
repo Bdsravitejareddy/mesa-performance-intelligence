@@ -1,5 +1,8 @@
 // Deterministic, criteria-based competency classification. No AI and no cohort comparison.
 
+// Bump when bands or rules change so history can distinguish a rule change from new evidence.
+export const RULES_VERSION = "competency-rules-2026-10-22.2";
+
 export const HIGH_RESULT = 85;
 export const LOW_RESULT = 65;
 const STALE_AFTER_DAYS = 180;
