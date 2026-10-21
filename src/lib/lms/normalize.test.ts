@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { assignmentRecordFieldPaths, normalizeAssignmentRecords, unwrapToolResult } from "./normalize";
+import { normalizeAssignmentRecords, unwrapToolResult } from "./normalize";
 
 describe("Mesa MCP assignment normalization", () => {
   it("keeps an explicit earned score on the 0–100 scale and preserves feedback", () => {
     const records = normalizeAssignmentRecords({ structuredContent: { assignments: [{ id: "a-1", title: "Mid-Term Assignment", course: { id: "c-1", title: "Art of Selling" }, max_marks: 100, submission: { id: "s-1", score: 92, feedback: "Strong application." } }] } });
-    expect(records).toEqual([{ assignmentId: "a-1", submissionId: "s-1", courseId: "c-1", courseTitle: "Art of Selling", title: "Mid-Term Assignment", maximumMark: 100, score: 92, feedback: "Strong application.", status: "", submittedAt: null, sourceUpdatedAt: null }]);
+    expect(records).toEqual([{ assignmentId: "a-1", submissionId: "s-1", courseId: "c-1", courseTitle: "Art of Selling", title: "Mid-Term Assignment", maximumMark: 100, sourceMaximumMark: 100, sourceScore: 92, score: 92, feedback: "Strong application.", status: "", submittedAt: null, sourceUpdatedAt: null }]);
   });
 
   it("does not treat maximum marks or a pending score label as a student score", () => {
@@ -41,6 +41,20 @@ describe("Mesa MCP assignment normalization", () => {
     });
   });
 
+  it("converts marks out of a smaller maximum to the 100-point scale and retains the source score", () => {
+    const marketing = normalizeAssignmentRecords({ grades: [{
+      assignment: "Marketing case", assignmentId: "marketing-1", course: "Marketing",
+      marks: "14/20", maxMarks: 20,
+    }] });
+    const finance = normalizeAssignmentRecords({ grades: [{
+      assignment: "Finance case", assignmentId: "finance-1", course: "Finance",
+      marks: 30, maxMarks: 40,
+    }] });
+
+    expect(marketing[0]).toMatchObject({ score: 70, sourceScore: 14, maximumMark: 20, sourceMaximumMark: 20 });
+    expect(finance[0]).toMatchObject({ score: 75, sourceScore: 30, maximumMark: 40, sourceMaximumMark: 40 });
+  });
+
   it("normalizes a single get_assignment detail response", () => {
     expect(normalizeAssignmentRecords({ id: "a-detail", title: "Assessment", course: "Data Driven Decision Making" })).toMatchObject([
       { assignmentId: "a-detail", title: "Assessment", courseTitle: "Data Driven Decision Making" },
@@ -52,15 +66,4 @@ describe("Mesa MCP assignment normalization", () => {
     expect(normalizeAssignmentRecords({ content: [{ type: "text", text: "92/100" }] })).toEqual([]);
   });
 
-  it("reports only field names for course-link diagnostics, never source values", () => {
-    const fields = assignmentRecordFieldPaths({ assignments: [{ id: "private-id", course_ref: { id: "private-course-id", label: "Confidential title" } }] });
-    expect(fields).toContain("course_ref.id");
-    expect(fields).toContain("course_ref.label");
-    expect(fields.join(" ")).not.toMatch(/private|Confidential/);
-  });
-
-  it("reports response structure for tools whose output did not normalize", () => {
-    expect(assignmentRecordFieldPaths({ data: { student_grades: [{ earned: 92, assessment_ref: { name: "private title" } }] } }))
-      .toEqual(expect.arrayContaining(["earned", "assessment_ref.name"]));
-  });
 });

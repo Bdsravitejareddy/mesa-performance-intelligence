@@ -10,4 +10,10 @@ describe("MCP assignment and grade joins", () => {
       assignmentId: "assignment-1", courseId: "course-1", courseTitle: "Marketing", score: 88, feedback: "Good analysis.",
     }]);
   });
+
+  it("uses a maximum supplied by another endpoint when joining the same grade", () => {
+    const score = normalizeAssignmentRecords({ grades: [{ assignment: { id: "assignment-2", title: "Finance Case" }, grade: { score: 30 } }] });
+    const maximum = normalizeAssignmentRecords({ assignments: [{ id: "assignment-2", title: "Finance Case", max_marks: 40 }] });
+    expect(mergeAssignmentRecords([score, maximum])).toMatchObject([{ score: 75, sourceScore: 30, sourceMaximumMark: 40 }]);
+  });
 });

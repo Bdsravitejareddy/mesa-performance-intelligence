@@ -1,6 +1,6 @@
 # Implementation status
 
-**Status:** The user-selected Mesaintelligence project in Ravi Org is provisioned for the dashboard. Supabase schema, private Storage, shared workspace invitations, Auth callback URLs, and Vercel production connection variables are configured. The first real Drive collection import completed: 104 documents, nine courses, and 1,467 indexed pages/slides. The user confirmed both dashboard logins work. Their actual addresses are not recorded here. The user reports that the official Nexus MCP service token is saved in Vercel. LMS sync code and its additive database migration are now implemented, but production token validity, actual imported records, and a scheduled run are not yet verified.
+**Status:** The user-selected Mesaintelligence project in Ravi Org is provisioned for the dashboard. Supabase schema, private Storage, shared workspace invitations, Auth callback URLs, and Vercel production connection variables are configured. The first real Drive collection import completed: 104 documents, nine courses, and 1,467 indexed pages/slides. The user confirmed both dashboard logins work. The official Nexus MCP token works in production. The first real LMS sync imported 44 linked assessments, five marks, and two feedback records; seven assignments remain unlinked because the LMS did not return a course reference, including in assignment-detail lookups. LMS marks are now being normalized to /100 while retaining the original score and maximum. A later scheduled run remains unverified.
 
 ## Workspace and original brief recovery
 
@@ -16,9 +16,9 @@
 
 - Authenticated UI observations: navigation includes Courses, My Work, Attendance & Grade, and Documents. The developer page offers Nexus MCP at `https://students.mesaschool.co.in/mcp`, shows 12 tools, and demonstrates `list_assignments`. Service tokens are user-scoped, revocable, and offered with 7–90 day expiry. This official interface supersedes browser scraping; no scraping workaround is used.
 - A released individual LMS assignment was observed with a score of 92/100. The separate Attendance & Grade summary says no grades are published; assignment-level score and gradebook summary are distinct sources. On course cards, “0.00 marks” can be a maximum/placeholder and is never imported as an earned mark.
-- The user reports adding `NEXUS_MCP_TOKEN` in Vercel. A daily Cron route, signed-in manual recovery route, read-only MCP discovery/transport, structured mark mapping, and idempotent course/assessment/submission upserts are implemented locally. The connector imports only explicit earned-score fields, preserves marks on the 0–100 scale, and keeps official feedback source-labeled.
-- Additive migration `20261020070644_nexus_lms_assignment_sync.sql` was applied to Mesaintelligence and its new course/submission columns were verified through the Supabase project schema. Existing 9 courses, 104 materials, and 1,467 pages remain. Assessments/submissions were still empty at the last database inspection.
-- Vercel Cron is scheduled for 03:00 UTC daily. It fails closed without `CRON_SECRET`; production setup and a redeploy are still needed. First structured import, matching LMS score/feedback, and a later automatic execution remain unverified. Service token expiry requires rotation within the LMS's 7–90 day policy.
+- The production MCP sync has been exercised with the real token: 44 assessments, five marks, and two feedback records were imported, with zero failed reads. Seven records lacked course references even after individual assignment-detail lookups and were safely skipped. The live Marks page showed the imported official results.
+- LMS scores with a known source maximum are converted deterministically to /100 (for example 14/20 becomes 70/100); original earned score and maximum are stored separately for traceability. A new additive migration adds those source-scale columns. Existing LMS rows are refreshed with normalized values on the next successful sync.
+- Vercel Cron is scheduled for 03:00 UTC daily. It fails closed without `CRON_SECRET`; a later automatic execution remains unverified. Service token expiry requires rotation within the LMS's 7–90 day policy.
 
 ## Implemented locally
 
@@ -31,7 +31,7 @@
 - Guarded OpenAI-compatible provider workflow for separate Mesa academic, analytical, and professional-readiness evaluations. It retrieves up to eight matching pages/slides, requires citations for scored findings, verifies simple arithmetic deterministically, records official feedback/mark reconciliation, and persists evaluation evidence. Provider use is disabled unless server-only configuration explicitly approves excerpt processing.
 - User-supplied role profiles can be selected for professional evaluation; professional score remains unavailable without a selected profile.
 - Marks, course, assessment, SWOT, and descriptive mark-by-format views. Descriptive summaries display counts and state limitations; they do not assert causality.
-- Official Nexus MCP LMS sync: server-only token, read-only tool selection, assignment/grade structured-data extraction, stable LMS identifiers, idempotent daily writes, visible last-sync status, manual recovery on Marks & feedback, and a 03:00 UTC Vercel cron with a separate bearer secret. It only records explicit earned scores, never maximum-mark or pending-status fields.
+- Official Nexus MCP LMS sync: server-only token, read-only tool selection, assignment/grade structured-data extraction, 0–100 mark normalization with original-score provenance, stable LMS identifiers, idempotent daily writes, visible last-sync status, manual recovery on Marks & feedback, and a 03:00 UTC Vercel cron with a separate bearer secret. It only records explicit earned scores, never maximum-mark or pending-status fields.
 - A browser-local quality checker for simple structure/citation markers and arithmetic, with explicit scope limits. A browser-local resume-to-role phrase checker requires user-supplied criteria and does not claim competency.
 - Source/page references are persisted with extracted pages. PDF table extraction, OCR, and automatic diagram interpretation are not implemented.
 - README provides local and manual Vercel/Supabase setup instructions. The provider is off by default; no answer or course content is sent to an AI service unless the explicit server configuration gate is enabled.
@@ -42,18 +42,18 @@
 - Topic/learning-objective mastery pipeline, course-grounded improvement examples, feedback theme analysis, and coverage correlations beyond descriptive marks by assessment format.
 - Evidence-linked resume gap records and semantic resume analysis; current helper performs local phrase matching, while sourced role profiles are saved for professional evaluation.
 - PDF table extraction, optical character recognition, and image/diagram interpretation beyond manual visual notes.
-- Production verification of daily LMS ingestion, Nexus MCP result shape, feedback mapping, scheduled execution, and token-expiry recovery.
+- Full LMS course-link coverage for seven unresolved assignments, later scheduled execution, and token-expiry recovery.
 - Original A–H details and acceptance tests, which must be recovered before claiming full preservation.
 
 ## Validation run
 
-- `npm test`: 30 test files, 252 tests passing. LMS tests cover MCP session/JSON-SSE transport, read-only tool selection, structured score mapping, explicit-earned-score distinction, and source-key record creation.
+- `npm test`: latest full suite covers MCP session/JSON-SSE transport, read-only tool selection, explicit-earned-score mapping, 0–100 conversion, original-scale retention, and source-key record creation.
 - `npm run lint`: passing.
 - `npm run build`: passing with Next.js production build.
 - Live deployment testing caught an unregistered auth proxy: Next.js requires it beside `src/app`. It is now at `src/proxy.ts`; the production build registers it. `node scripts/check-private-access.mjs <base-url>` checks that anonymous page/API requests redirect to login. The probe reproduced the failure before the fix and passed against the corrected local production build.
 - `npm audit --audit-level=high`: zero vulnerabilities across production and development dependencies.
 - Live database checks confirm 18 app tables with RLS, 18 shared workspace policies, four file-access policies, a private 20 MB bucket, and two private invitations. Auth Site URL and callback point to the deployed Mesa site. The security advisor has no warnings/errors; its one informational item notes the intentionally denied private invitation table has no direct-user policy. Its table grants deny direct application-user access, which is covered by tests.
-- No actual LMS data was imported, and no sign-in emails were sent as part of testing. The user has since confirmed both approved dashboard logins work.
+- Production LMS sync was partially verified with real records; seven unlinked assignments were intentionally skipped. No sign-in emails were sent as part of testing. The user confirmed both approved dashboard logins work.
 
 ## GitHub/Vercel release
 

@@ -12,3 +12,4 @@
 
 .section-heading:has(.lms-sync-action){display:flex;align-items:center;justify-content:space-between;gap:14px}.lms-sync-action{display:flex;flex-direction:column;align-items:flex-end;gap:6px}.lms-sync-action p{max-width:280px;margin:0;color:#6f817e;font-size:10px;line-height:1.45;text-align:right}.lms-sync-action button{white-space:nowrap}.spin{animation:lms-spin .8s linear infinite}@keyframes lms-spin{to{transform:rotate(360deg)}}
 .sync-status>a{color:#8b999d;display:grid;place-items:center;padding:4px}
+.mark-result{display:flex;flex-direction:column;align-items:flex-end;gap:3px}.mark-original{font-size:8px;color:#899699;white-space:nowrap}

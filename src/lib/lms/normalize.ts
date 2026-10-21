@@ -7,6 +7,8 @@ export type MesaAssignmentRecord = {
   courseTitle: string;
   title: string;
   maximumMark: number;
+  sourceMaximumMark: number | null;
+  sourceScore: number | null;
   score: number | null;
   feedback: string;
   status: string;
@@ -29,7 +31,7 @@ function numberValue(value: unknown): number | null {
   if (typeof value !== "string") return null;
   const text = value.trim();
   const fraction = text.match(/^(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)$/);
-  if (fraction) return Number(fraction[2]) === 100 ? Number(fraction[1]) : null;
+  if (fraction) return Number(fraction[1]);
   if (!/^\d+(?:\.\d+)?$/.test(text)) return null;
   return Number(text);
 }
@@ -65,36 +67,6 @@ function extractRecords(value: unknown): JsonObject[] {
   return [];
 }
 
-export function assignmentRecordFieldPaths(value: unknown): string[] {
-  const payload = unwrapToolResult(value);
-  const paths = new Set<string>();
-  function visitPayload(item: unknown, prefix: string, depth: number) {
-    if (depth < 1 || !item || typeof item !== "object") return;
-    if (Array.isArray(item)) {
-      for (const child of item.slice(0, 2)) visitPayload(child, prefix ? `${prefix}[]` : "[]", depth - 1);
-      return;
-    }
-    for (const [key, child] of Object.entries(item as JsonObject)) {
-      const path = prefix ? `${prefix}.${key}` : key;
-      paths.add(path);
-      if (depth > 1) visitPayload(child, path, depth - 1);
-    }
-  }
-  function visit(record: JsonObject, prefix: string, depth: number) {
-    if (depth < 1) return;
-    for (const [key, child] of Object.entries(record)) {
-      const path = prefix ? `${prefix}.${key}` : key;
-      paths.add(path);
-      if (depth > 1 && child && typeof child === "object" && !Array.isArray(child)) visit(child as JsonObject, path, depth - 1);
-    }
-  }
-  const records = extractRecords(payload).slice(0, 3);
-  if (records.length) for (const record of records) visit(record, "", 3);
-  else if (typeof payload === "string") paths.add(`$text(length:${payload.length})`);
-  else visitPayload(payload, "", 4);
-  return [...paths].sort().slice(0, 24);
-}
-
 export function unwrapToolResult(value: unknown): unknown {
   const root = object(value);
   if (!root) return value;
@@ -124,11 +96,24 @@ export function normalizeAssignmentRecords(value: unknown): MesaAssignmentRecord
     const scalarAssignment = typeof record.assignment === "string" ? record.assignment.trim() : "";
     const title = firstString(record.assignment_title, record.assignmentTitle, record.assignment_name, assignment.title, assignment.name, scalarAssignment, record.title, record.name);
     if (!assignmentId || !title) return [];
+    const scoreText = firstString(rawSubmission.score, rawSubmission.earned_score, rawSubmission.earned_marks, rawSubmission.marks_obtained, rawSubmission.obtained_marks, rawSubmission.marks_awarded, rawSubmission.grade_score)
+      || firstString(grade.score, grade.earned_score, grade.earned_marks, grade.marks_obtained, grade.obtained_marks, grade.marks_awarded, grade.grade_score, grade.marks)
+      || firstString(record.score, record.earned_score, record.earned_marks, record.marks_obtained, record.obtained_marks, record.marks_awarded, record.grade_score, record.marks);
+    const fraction = scoreText.match(/^(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)$/);
     const score = pickNumber(rawSubmission, ["score", "earned_score", "earned_marks", "marks_obtained", "obtained_marks", "marks_awarded", "grade_score"])
       ?? pickNumber(grade, ["score", "earned_score", "earned_marks", "marks_obtained", "obtained_marks", "marks_awarded", "grade_score", "marks"])
       ?? pickNumber(record, ["score", "earned_score", "earned_marks", "marks_obtained", "obtained_marks", "marks_awarded", "grade_score", "marks"]);
-    const maximumMark = pickNumber(record, ["max_marks", "maximum_marks", "maxMarks", "maximumMarks", "points_possible", "max_score"])
-      ?? pickNumber(assignment, ["max_marks", "maximum_marks", "maxMarks", "maximumMarks", "points_possible", "max_score"]);
+    const explicitMaximumMark = pickNumber(record, ["max_marks", "maximum_marks", "maxMarks", "maximumMarks", "points_possible", "max_score"])
+      ?? pickNumber(assignment, ["max_marks", "maximum_marks", "maxMarks", "maximumMarks", "points_possible", "max_score"])
+      ?? pickNumber(grade, ["max_marks", "maximum_marks", "maxMarks", "maximumMarks", "points_possible", "max_score"])
+      ?? pickNumber(rawSubmission, ["max_marks", "maximum_marks", "maxMarks", "maximumMarks", "points_possible", "max_score"]);
+    const sourceScore = fraction ? Number(fraction[1]) : score;
+    const reportedMaximumMark = fraction ? Number(fraction[2]) : explicitMaximumMark;
+    const sourceMaximumMark = reportedMaximumMark !== null && reportedMaximumMark > 0 ? reportedMaximumMark : null;
+    const maximumMark = sourceMaximumMark ?? 100;
+    const normalizedScore = fraction && !sourceMaximumMark ? null : sourceScore !== null && sourceScore >= 0 && sourceMaximumMark !== null
+      ? sourceScore <= sourceMaximumMark ? Math.round((sourceScore / sourceMaximumMark) * 10000) / 100 : null
+      : sourceScore !== null && sourceScore >= 0 && sourceScore <= 100 ? sourceScore : null;
     const feedback = firstString(rawSubmission.feedback, rawSubmission.feedback_text, rawSubmission.comments, rawSubmission.evaluator_feedback, grade.feedback, grade.comments, record.feedback, record.feedback_text, record.evaluator_feedback);
     return [{
       assignmentId,
@@ -136,8 +121,10 @@ export function normalizeAssignmentRecords(value: unknown): MesaAssignmentRecord
       courseId: firstString(record.course_id, record.courseId, assignment.course_id, course.id, course.course_id, scalarCourseIsId ? scalarCourse : ""),
       courseTitle: firstString(record.course_title, record.courseTitle, record.course_name, assignment.course_title, course.title, course.name, course.course_name, course.course_title, scalarCourseIsId ? "" : scalarCourse),
       title,
-      maximumMark: maximumMark !== null && maximumMark > 0 ? maximumMark : 100,
-      score: score !== null && score >= 0 && score <= 100 ? score : null,
+      maximumMark,
+      sourceMaximumMark,
+      sourceScore,
+      score: normalizedScore,
       feedback,
       status: firstString(rawSubmission.status, record.status, record.submission_status),
       submittedAt: timestamp(rawSubmission.submitted_at, rawSubmission.submittedAt, rawSubmission.submitted_on),

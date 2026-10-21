@@ -10,7 +10,7 @@ The dashboard uses the MCP JSON-RPC Streamable HTTP transport, initializes a ser
 
 - Course, assessment, and submission IDs use LMS source identifiers for idempotent daily upserts.
 - Scores are imported only from explicit earned-score fields (`score`, `earned_marks`, `marks_obtained`, and similar). Maximum-mark fields and status labels never become student scores.
-- Official marks remain on the confirmed 0–100 scale. Feedback is stored as official LMS feedback with the source labeled `Mesa LMS (Nexus MCP)`.
+- Marks with an explicit LMS maximum are converted deterministically to the platform's 0–100 scale (`14/20` becomes `70/100`). The raw LMS earned mark and maximum are preserved in separate source fields. If no denominator is available, only an explicit 0–100 score is accepted; other values are left ungraded rather than guessed. Feedback is stored as official LMS feedback with the source labeled `Mesa LMS (Nexus MCP)`.
 - Course records link to a unique existing course with the same title; otherwise a new LMS-linked course is created. Ambiguous title matches are not guessed.
 - Missing or non-structured results produce a partial sync record with no imported marks. Failed runs preserve previously imported rows. No deletion is inferred from an incomplete response.
 
@@ -22,4 +22,4 @@ Required Production environment variables are `NEXUS_MCP_TOKEN`, `CRON_SECRET`, 
 
 ## Verification boundary
 
-Unit tests cover the MCP handshake/session transport, JSON/SSE handling, read-only tool selection, structured result extraction, score-vs-maximum distinction, idempotent source keys, and preservation of 0–100 marks. They do not prove production token validity or the Nexus tool output schema. A successful production acceptance run must show structured assignment records, known released scores, matching feedback, and a later scheduled run in Vercel. Until then, imported-record counts and scheduled operation remain unverified.
+Unit tests cover the MCP handshake/session transport, JSON/SSE handling, read-only tool selection, structured result extraction, score-vs-maximum distinction, denominator-based normalization, original-scale retention, idempotent source keys, and preservation of 0–100 marks. A production run using the configured token imported 44 assessments, five marks, and two feedback records with zero failed reads. Seven records remained unlinked because neither list nor assignment-detail results included course references; they were skipped without guessing. The imported marks appeared in the live Marks page. A later scheduled run remains unverified until `CRON_SECRET` is configured and Vercel Cron fires successfully.
