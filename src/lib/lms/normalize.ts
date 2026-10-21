@@ -95,7 +95,11 @@ export function normalizeAssignmentRecords(value: unknown): MesaAssignmentRecord
   const payload = unwrapToolResult(value);
   return extractRecords(payload).flatMap((record) => {
     const assignment = object(record.assignment) ?? object(record.assessment) ?? {};
-    const course = object(record.course) ?? object(record.course_details) ?? object(record.courseDetails) ?? object(assignment.course) ?? {};
+    const rawCourse = record.course ?? record.course_details ?? record.courseDetails ?? assignment.course;
+    const course = object(rawCourse) ?? {};
+    const scalarCourse = typeof rawCourse === "string" ? rawCourse.trim() : "";
+    const scalarCourseIsId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(scalarCourse)
+      || /^(?:course[_:-])?[a-z0-9_-]{20,}$/i.test(scalarCourse);
     const rawSubmission = object(record.submission) ?? object(record.my_submission) ?? object(record.mySubmission) ?? (Array.isArray(record.submissions) ? object(record.submissions[0]) : null) ?? {};
     const grade = object(record.grade) ?? {};
     const assignmentId = firstString(record.assignment_id, record.assignmentId, assignment.id, assignment.assignment_id, assignment.assessment_id, record.id, record._id);
@@ -110,8 +114,8 @@ export function normalizeAssignmentRecords(value: unknown): MesaAssignmentRecord
     return [{
       assignmentId,
       submissionId: firstString(rawSubmission.id, rawSubmission.submission_id, rawSubmission.submissionId, rawSubmission._id),
-      courseId: firstString(record.course_id, record.courseId, assignment.course_id, course.id, course.course_id),
-      courseTitle: firstString(record.course_title, record.courseTitle, record.course_name, assignment.course_title, course.title, course.name),
+      courseId: firstString(record.course_id, record.courseId, assignment.course_id, course.id, course.course_id, scalarCourseIsId ? scalarCourse : ""),
+      courseTitle: firstString(record.course_title, record.courseTitle, record.course_name, assignment.course_title, course.title, course.name, course.course_name, course.course_title, scalarCourseIsId ? "" : scalarCourse),
       title,
       maximumMark: maximumMark !== null && maximumMark > 0 ? maximumMark : 100,
       score: score !== null && score >= 0 && score <= 100 ? score : null,

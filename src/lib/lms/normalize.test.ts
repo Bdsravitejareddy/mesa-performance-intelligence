@@ -21,6 +21,15 @@ describe("Mesa MCP assignment normalization", () => {
     expect(records[0]).toMatchObject({ assignmentId: "a-4", courseTitle: "Marketing", title: "Marketing Case", score: 84, feedback: "Clear analysis." });
   });
 
+  it("maps a scalar course title and treats opaque course IDs as IDs", () => {
+    const records = normalizeAssignmentRecords({ assignments: [
+      { id: "a-course-title", title: "Case", course: "Marketing Strategy" },
+      { id: "a-course-id", title: "Case", course: "a1b2c3d4-e5f6-4789-8123-aabbccddeeff" },
+    ] });
+    expect(records[0]).toMatchObject({ courseId: "", courseTitle: "Marketing Strategy" });
+    expect(records[1]).toMatchObject({ courseId: "a1b2c3d4-e5f6-4789-8123-aabbccddeeff", courseTitle: "" });
+  });
+
   it("leaves non-JSON MCP text opaque rather than guessing a mark", () => {
     expect(unwrapToolResult({ content: [{ type: "text", text: "2 assignments · Case Study" }] })).toEqual({ content: [{ type: "text", text: "2 assignments · Case Study" }] });
     expect(normalizeAssignmentRecords({ content: [{ type: "text", text: "92/100" }] })).toEqual([]);
