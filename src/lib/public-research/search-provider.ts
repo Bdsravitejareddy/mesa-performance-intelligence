@@ -105,15 +105,15 @@ export function createSearchProvider({ session, env = process.env, fetcher = fet
       return session.search(text.toLowerCase(), async () => {
         const url = kind === "tavily" ? "https://api.tavily.com/search" : `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(text)}&count=5`;
         try {
-          return await session.request(new URL(url).hostname, async (signal) => {
-          const response = await fetcher(url, {
+          return await session.request(new URL(url).hostname, async (signal, startTransport) => {
+          const response = await startTransport(() => fetcher(url, {
             method: kind === "tavily" ? "POST" : "GET",
             headers: kind === "tavily" ? { authorization: `Bearer ${key}`, "content-type": "application/json", accept: "application/json" } : { "x-subscription-token": key, accept: "application/json" },
             ...(kind === "tavily" ? { body: JSON.stringify({ query: text, max_results: 5, search_depth: "basic", include_answer: false, include_raw_content: false, include_published_date: true }) } : {}),
             redirect: "error",
             cache: "no-store",
             signal,
-          });
+          }));
           const payload = record(await boundedJson(response, signal));
           const results = kind === "tavily" ? payload.results : record(payload.web).results;
           if (!Array.isArray(results)) throw new Error("invalid-provider-response");

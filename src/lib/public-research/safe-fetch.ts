@@ -124,12 +124,12 @@ async function boundedText(response: Response, signal: AbortSignal): Promise<str
 }
 
 async function retrieve(url: URL, policy: CrawlPolicy, dependencies: FetchDependencies): Promise<DocumentResponse> {
-  return policy.session.request(url.hostname, async (signal) => {
+  return policy.session.request(url.hostname, async (signal, startTransport) => {
     const addresses = await dependencies.resolve(url.hostname);
     signal.throwIfAborted();
     if (!addresses.length || addresses.some(({ address, family }) => !isPublicAddress(address) || isIP(address) !== family)) throw new PublicResearchError("unsafe-address");
     const { address, family } = addresses[0];
-    const response = await dependencies.request(url, { address, family, signal });
+    const response = await startTransport(() => dependencies.request(url, { address, family, signal }));
     signal.throwIfAborted();
     if ([301, 302, 303, 307, 308].includes(response.status)) {
       cancel(response);

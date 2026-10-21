@@ -181,6 +181,41 @@ describe("safe public retrieval", () => {
     expect(started[2] - started[1]).toBeGreaterThanOrEqual(1000);
   });
 
+  it("spaces actual transport starts after unequal concurrent DNS delays", async () => {
+    vi.useFakeTimers();
+    const h = harness();
+    const started: number[] = [];
+    let lookups = 0;
+    h.dependencies.resolve = async () => {
+      lookups++;
+      // Robots resolves immediately; the first page resolves 499ms after its peer.
+      if (lookups === 2) await new Promise<void>((resolve) => setTimeout(resolve, 499));
+      return [{ address: "93.184.216.34", family: 4 }];
+    };
+    const original = h.dependencies.request;
+    h.dependencies.request = async (...args) => { started.push(Date.now()); return original(...args); };
+    const pending = Promise.all([fetchPublicSource(page, h.policy, h.dependencies), fetchPublicSource(`https://${host}/second`, h.policy, h.dependencies)]);
+    await vi.runAllTimersAsync();
+    expect((await pending).every((result) => result.status === "fetched")).toBe(true);
+    expect(started).toHaveLength(3);
+    expect(started[1] - started[0]).toBeGreaterThanOrEqual(1000);
+    expect(started[2] - started[1]).toBeGreaterThanOrEqual(1000);
+  });
+
+  it("times out DNS within the request budget without starting a late transport", async () => {
+    vi.useFakeTimers();
+    const h = harness();
+    let lookups = 0;
+    h.dependencies.resolve = async () => {
+      if (++lookups === 2) await new Promise<void>((resolve) => setTimeout(resolve, 8001));
+      return [{ address: "93.184.216.34", family: 4 }];
+    };
+    const pending = fetchPublicSource(page, h.policy, h.dependencies);
+    await vi.runAllTimersAsync();
+    expect(await pending).toMatchObject({ status: "unavailable", reason: "request-failed" });
+    expect(h.request).toHaveBeenCalledTimes(1);
+  });
+
   it("bounds active requests at three and request lifetime at eight seconds", async () => {
     vi.useFakeTimers();
     const h = harness();

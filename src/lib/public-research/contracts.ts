@@ -35,6 +35,8 @@ export class PublicResearchError extends Error {
   }
 }
 
+type StartTransport = <T>(operation: () => Promise<T>) => Promise<T>;
+
 /** One instance per user-initiated discovery, shared across all its searches. */
 export class ResearchSession {
   readonly deadline = Date.now() + 30_000;
@@ -43,6 +45,7 @@ export class ResearchSession {
   private activeRequests = 0;
   private readonly waiting: Array<() => void> = [];
   private readonly nextHostStart = new Map<string, number>();
+  private readonly hostTurns = new Map<string, Promise<void>>();
 
   reservePage(url: string): void {
     if (Date.now() >= this.deadline) throw new PublicResearchError("discovery-deadline");
@@ -65,14 +68,44 @@ export class ResearchSession {
     });
   }
 
-  /** Includes DNS, redirects/robots transport, and full body consumption. */
-  async request<T>(hostname: string, operation: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  private startTransport<T>(hostname: string, signal: AbortSignal, operation: () => Promise<T>): Promise<T> {
+    const previous = this.hostTurns.get(hostname) ?? Promise.resolve();
+    const pending = previous.then(async () => {
+      for (;;) {
+        signal.throwIfAborted();
+        if (Date.now() >= this.deadline) throw new PublicResearchError("discovery-deadline");
+        const wait = (this.nextHostStart.get(hostname) ?? 0) - Date.now();
+        if (wait <= 0) {
+          // Record and invoke together after DNS, in FIFO order. Wrapping the
+          // transport promise releases the host turn at start, not at body finish.
+          this.nextHostStart.set(hostname, Date.now() + 1000);
+          return { transport: operation() };
+        }
+        await new Promise<void>((resolve, reject) => {
+          const abort = () => {
+            clearTimeout(timer);
+            signal.removeEventListener("abort", abort);
+            reject(new PublicResearchError("request-failed"));
+          };
+          const timer = setTimeout(() => {
+            signal.removeEventListener("abort", abort);
+            resolve();
+          }, wait);
+          signal.addEventListener("abort", abort, { once: true });
+          if (signal.aborted) abort();
+        });
+      }
+    });
+    this.hostTurns.set(hostname, pending.then(() => undefined, () => undefined));
+    return pending.then(({ transport }) => transport);
+  }
+
+  /** Includes DNS, transport-start throttling, and full body consumption.
+   * Callers validate DNS first and invoke HTTP only through startTransport.
+   */
+  async request<T>(hostname: string, operation: (signal: AbortSignal, startTransport: StartTransport) => Promise<T>): Promise<T> {
     await this.acquire();
     try {
-      const start = Math.max(Date.now(), this.nextHostStart.get(hostname) ?? 0);
-      if (start >= this.deadline) throw new PublicResearchError("discovery-deadline");
-      this.nextHostStart.set(hostname, start + 1000);
-      if (start > Date.now()) await new Promise<void>((resolve) => setTimeout(resolve, start - Date.now()));
       const remaining = Math.min(8000, this.deadline - Date.now());
       if (remaining <= 0) throw new PublicResearchError("discovery-deadline");
       const controller = new AbortController();
@@ -81,7 +114,10 @@ export class ResearchSession {
         timer = setTimeout(() => { controller.abort(); reject(new PublicResearchError("request-failed")); }, remaining);
       });
       try {
-        return await Promise.race([operation(controller.signal), timeout]);
+        return await Promise.race([
+          operation(controller.signal, (start) => this.startTransport(hostname, controller.signal, start)),
+          timeout,
+        ]);
       } finally {
         clearTimeout(timer);
         controller.abort();
