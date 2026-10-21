@@ -146,14 +146,18 @@ export async function syncMesaLms(): Promise<SyncResult> {
     if (!completedReads) throw new Error("All supported Nexus assignment and grade reads failed.");
     let records = mergeAssignmentRecords(resultGroups);
     const assignmentDetailTool = availableTools.find((tool) => tool.name.toLowerCase().replace(/[^a-z]/g, "") === "getassignment");
+    let detailLookupsAttempted = 0;
+    let detailRecordsReturned = 0;
     if (assignmentDetailTool) {
       const missingCourseRecords = records.filter((record) => !record.courseId && !record.courseTitle);
       const details = await Promise.all(missingCourseRecords.map(async (record) => {
         const args = assignmentDetailArguments(assignmentDetailTool, record.assignmentId);
         if (!args) return [];
+        detailLookupsAttempted += 1;
         try {
           const result = unwrapToolResult(await mcp.callTool(assignmentDetailTool.name, args));
           const normalized = normalizeAssignmentRecords(result);
+          detailRecordsReturned += normalized.length;
           readDiagnostics.push({ tool: assignmentDetailTool.name, records: normalized.length, missingCourse: normalized.filter((item) => !item.courseId && !item.courseTitle).length, fields: assignmentRecordFieldPaths(result) });
           completedReads += 1;
           return normalized;
@@ -180,8 +184,9 @@ export async function syncMesaLms(): Promise<SyncResult> {
       const required = Array.isArray(tool.inputSchema?.required) ? tool.inputSchema.required.map(String) : [];
       return `${tool.name}(args:${properties.join(",") || "none"};required:${required.join(",") || "none"})`;
     }).join(" | ").slice(0, 1200);
+    const courseDetailSummary = `Course detail lookup: tool ${assignmentDetailTool ? "available" : "not available"}, attempted ${detailLookupsAttempted}, records ${detailRecordsReturned}, unresolved ${counts.skipped}.`;
     const hasPartialData = failedReads || counts.skipped || !counts.assessments || !counts.marks;
-    const summary: SyncResult = { status: hasPartialData ? "partial" : "succeeded", runId: run.id, courses: counts.courses, assessments: counts.assessments, submissions: counts.submissions, marks: counts.marks, feedback: counts.feedback, message: hasPartialData ? `Imported ${counts.assessments} assessment(s), ${counts.marks} marks, and ${counts.feedback} feedback records; ${failedReads} read operation(s) failed and ${counts.skipped} record(s) lacked a course reference.${missingCourseDiagnostics.length ? ` Tool field diagnostics: ${missingCourseDiagnostics.join(" | ")}` : ""}${emptyReadDiagnostics.length ? ` Empty-tool diagnostics: ${emptyReadDiagnostics.join(" | ")}` : ""} Available tool schemas: ${toolInventory}` : `Synced ${counts.assessments} assessments, ${counts.marks} marks, and ${counts.feedback} feedback records. Only explicit earned scores were saved as official marks.` };
+    const summary: SyncResult = { status: hasPartialData ? "partial" : "succeeded", runId: run.id, courses: counts.courses, assessments: counts.assessments, submissions: counts.submissions, marks: counts.marks, feedback: counts.feedback, message: hasPartialData ? `Imported ${counts.assessments} assessment(s), ${counts.marks} marks, and ${counts.feedback} feedback records; ${failedReads} read operation(s) failed and ${counts.skipped} record(s) lacked a course reference. ${courseDetailSummary}${missingCourseDiagnostics.length ? ` Tool field diagnostics: ${missingCourseDiagnostics.join(" | ")}` : ""}${emptyReadDiagnostics.length ? ` Empty-tool diagnostics: ${emptyReadDiagnostics.join(" | ")}` : ""} Available tool schemas: ${toolInventory}` : `Synced ${counts.assessments} assessments, ${counts.marks} marks, and ${counts.feedback} feedback records. Only explicit earned scores were saved as official marks.` };
     const { error } = await client.from("sync_runs").update({ status: summary.status, finished_at: new Date().toISOString(), message: summary.message }).eq("id", run.id).eq("user_id", ownerId);
     if (error) throw new Error("Sync status could not be saved.");
     return summary;
