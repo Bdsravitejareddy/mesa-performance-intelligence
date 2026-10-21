@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const { from, records } = vi.hoisted(() => ({ from: vi.fn(), records: {} as Record<string, unknown[]> }));
+vi.mock("@/lib/courses/links", () => ({ loadRelatedCourseIds: async (_client: unknown, courseId: string) => [courseId] }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth: { getClaims: async () => ({ data: { claims: { sub: "member-1" } } }) }, from }) }));
 vi.mock("@/lib/supabase/config", () => ({ hasSupabaseConfig: () => true }));
 vi.mock("next/navigation", () => ({ usePathname: () => "/courses/course-1", useRouter: () => ({ refresh: vi.fn() }), notFound: () => { throw new Error("not found"); } }));

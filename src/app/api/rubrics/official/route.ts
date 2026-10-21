@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { loadRelatedCourseIds } from "@/lib/courses/links";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest) {
   const { data: existing } = await supabase.from("rubrics").select("id").eq("assessment_id", assessment.id).eq("source_kind", "official").limit(1).maybeSingle();
   if (existing) return NextResponse.json({ error: "An official rubric is already recorded. Edit that record through the established faculty source instead." }, { status: 409 });
   if (body.sourceMaterialId) {
-    const { data: source } = await supabase.from("course_materials").select("id").eq("id", body.sourceMaterialId).eq("course_id", assessment.course_id).maybeSingle();
+    const { data: source } = await supabase.from("course_materials").select("id").eq("id", body.sourceMaterialId).in("course_id", await loadRelatedCourseIds(supabase, assessment.course_id)).maybeSingle();
     if (!source) return NextResponse.json({ error: "Selected source material is not part of this course." }, { status: 400 });
   }
   const { data: rubric, error } = await supabase.from("rubrics").insert({ user_id: assessment.user_id, assessment_id: assessment.id, source_kind: "official", approval_status: "approved", maximum_marks: body.maximumMarks, source_material_id: body.sourceMaterialId || null, approved_at: new Date().toISOString() }).select("id").single();

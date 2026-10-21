@@ -10,5 +10,7 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],
+    // In-process Postgres (PGlite) tests can exceed the 5s default when the full suite runs in parallel.
+    testTimeout: 20000,
   },
 });

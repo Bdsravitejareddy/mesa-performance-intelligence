@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { loadRelatedCourseIds } from "@/lib/courses/links";
 import { parseJsonObject, validateRubricDraft } from "@/lib/ai/contracts";
 import { requestJsonFromProvider } from "@/lib/ai/provider";
 import { retrieveRelevantReferences } from "@/lib/ai/retrieval";
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest) {
   if (!assessment) return NextResponse.json({ error: "Assessment was not found in this workspace." }, { status: 404 });
   const { data: official } = await supabase.from("rubrics").select("id").eq("assessment_id", assessment.id).eq("source_kind", "official").limit(1).maybeSingle();
   if (official) return NextResponse.json({ error: "An official rubric is already recorded. Preserve and use its criteria instead of drafting a replacement." }, { status: 409 });
-  const { data: linkedMaterials } = await supabase.from("course_materials").select("id, source_kind").eq("course_id", assessment.course_id).or(`assessment_id.is.null,assessment_id.eq.${assessment.id}`).in("source_kind", ["rubric", "assignment", "syllabus", "slides", "notes", "faculty_example"]);
+  const { data: linkedMaterials } = await supabase.from("course_materials").select("id, source_kind").in("course_id", await loadRelatedCourseIds(supabase, assessment.course_id)).or(`assessment_id.is.null,assessment_id.eq.${assessment.id}`).in("source_kind", ["rubric", "assignment", "syllabus", "slides", "notes", "faculty_example"]);
   const refs = await retrieveRelevantReferences(supabase, assessment.course_id, assessment.id, `${assessment.title} ${assessment.assessment_format} marking criteria learning objectives course requirements`);
   if (!refs.length) return NextResponse.json({ error: "There are no relevant indexed course sections. Upload assignment requirements, a rubric, syllabus, or lecture content before drafting a course-grounded rubric." }, { status: 422 });
   const referenceText = refs.map((ref) => `[${ref.key}] ${ref.label} (${ref.sourceKind})\n${ref.excerpt}`).join("\n\n");

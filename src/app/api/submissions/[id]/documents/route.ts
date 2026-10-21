@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { loadRelatedCourseIds } from "@/lib/courses/links";
 import { NextResponse, type NextRequest } from "next/server";
 import { extractPdfPages, extractPptxSlides } from "@/lib/documents";
 import { SUBMISSION_DOCUMENT_MIME_TYPES } from "@/lib/lms/submission-documents";
@@ -40,7 +41,7 @@ export async function POST(request: NextRequest, context: SubmissionDocumentCont
       .select("id, course_id, assessment_id, name, mime_type, file_size, version, extraction_status, drive_source_id")
       .eq("id", body.courseMaterialId).maybeSingle();
     if (!material) return NextResponse.json({ error: "Indexed course material was not found in this workspace." }, { status: 404 });
-    if (material.course_id !== assessment.course_id || (material.assessment_id && material.assessment_id !== assessment.id)) {
+    if (!(await loadRelatedCourseIds(supabase, assessment.course_id)).includes(material.course_id) || (material.assessment_id && material.assessment_id !== assessment.id)) {
       return NextResponse.json({ error: "The selected course material does not match this assessment." }, { status: 400 });
     }
     if (material.extraction_status !== "complete" && material.extraction_status !== "needs_visual_review") {

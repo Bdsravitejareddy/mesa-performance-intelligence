@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { loadRelatedCourseIds } from "@/lib/courses/links";
 import { ArrowLeft, BookOpen, FileText, Plus } from "lucide-react";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
@@ -26,9 +27,10 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
   const supabase = await createClient();
   const { data: claimsData } = await supabase.auth.getClaims();
   const userId = typeof claimsData?.claims?.sub === "string" ? claimsData.claims.sub : undefined;
+  const relatedIds = await loadRelatedCourseIds(supabase, id);
   const [{ data: course }, { data: materials }, { data: assessments }] = await Promise.all([
     supabase.from("courses").select("id, code, title, term").eq("id", id).maybeSingle(),
-    supabase.from("course_materials").select("id, name, version, drive_source_id, source_kind, assessment_id, extraction_status, created_at").eq("course_id", id).order("created_at", { ascending: false }),
+    supabase.from("course_materials").select("id, name, version, drive_source_id, source_kind, assessment_id, extraction_status, created_at").in("course_id", relatedIds).order("created_at", { ascending: false }),
     supabase.from("assessments").select("id, title, assessment_format, official_max_mark").eq("course_id", id).order("created_at", { ascending: false }),
   ]);
   if (!course) notFound();

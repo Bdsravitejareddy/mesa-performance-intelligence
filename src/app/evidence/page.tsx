@@ -74,6 +74,7 @@ function EvidenceContent({ data }: { data: Awaited<ReturnType<typeof loadData>> 
     </section>
 
     <section className="content-panel"><h2>Course materials <span className="panel-count">{data.materials.length}</span></h2>
+      <p className="empty-hint">{data.linkCount ? `${data.linkCount} Drive course${data.linkCount > 1 ? "s are" : " is"} linked and shown under the LMS course.` : "Drive courses are not linked to LMS courses yet, so assessments cannot use their materials."} <Link className="text-link" href="/courses">Review course links</Link></p>
       {data.courses.length ? <div className="evidence-materials">{data.courses.map((course) => {
         const counts = materialsByCourse.get(course.id);
         return <Link href={`/courses/${course.id}`} className="evidence-material-row" key={course.id}><strong>{course.title}</strong><small>{counts ? `${counts.total} documents · ${counts.complete} extracted${counts.review ? ` · ${counts.review} need review` : ""}${counts.failed ? ` · ${counts.failed} failed` : ""}` : "No materials"}</small></Link>;
@@ -92,21 +93,26 @@ function EvidenceContent({ data }: { data: Awaited<ReturnType<typeof loadData>> 
 
 async function loadData() {
   const supabase = await createClient();
-  const [courses, assessments, submissions, materials, runs] = await Promise.all([
+  const [courses, assessments, submissions, materials, links, runs] = await Promise.all([
     supabase.from("courses").select("id, title").order("title"),
     supabase.from("assessments").select("id, course_id, title, assessment_format, source_record_id, created_at").order("created_at", { ascending: false }),
     supabase.from("submissions").select("id, assessment_id, official_mark, source_original_mark, source_original_max_mark, official_feedback, official_mark_source, lms_submission_status, source_record_id, source_updated_at, submitted_at, created_at"),
     supabase.from("course_materials").select("course_id, extraction_status"),
+    supabase.from("course_links").select("assessment_course_id, material_course_id"),
     supabase.from("sync_runs").select("status, started_at, finished_at, message").eq("source_name", "Mesa Nexus MCP").order("started_at", { ascending: false }).limit(20),
   ]);
-  const error = courses.error ?? assessments.error ?? submissions.error ?? materials.error ?? runs.error;
+  const error = courses.error ?? assessments.error ?? submissions.error ?? materials.error ?? links.error ?? runs.error;
   if (error) throw new Error("Could not load evidence records.");
   const syncRuns = (runs.data ?? []) as SyncRun[];
+  // Show linked Drive materials under the LMS course they were confirmed for.
+  const linkedTo = new Map((links.data ?? []).map((link) => [link.material_course_id as string, link.assessment_course_id as string]));
+  const linkedMaterialCourses = new Set(linkedTo.keys());
   return {
-    courses: (courses.data ?? []) as { id: string; title: string }[],
     assessments: (assessments.data ?? []) as Assessment[],
     submissions: (submissions.data ?? []) as Submission[],
-    materials: (materials.data ?? []) as Material[],
+    materials: ((materials.data ?? []) as Material[]).map((material) => ({ ...material, course_id: linkedTo.get(material.course_id) ?? material.course_id })),
+    courses: ((courses.data ?? []) as { id: string; title: string }[]).filter((course) => !linkedMaterialCourses.has(course.id)),
+    linkCount: linkedTo.size,
     runs: syncRuns.slice(0, 10),
     syncHealth: describeSyncHealth(syncRuns),
   };

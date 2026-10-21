@@ -7,6 +7,11 @@ const { from, auth, insert, storageUpload, storageRemove, authUser } = vi.hoiste
 }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth, from, storage: { from: () => ({ upload: storageUpload, remove: storageRemove }) } }) }));
 vi.mock("@/lib/supabase/config", () => ({ hasSupabaseConfig: () => true }));
+const { courseLinks } = vi.hoisted(() => ({ courseLinks: { value: [] as { assessment_course_id: string; material_course_id: string }[] } }));
+vi.mock("@/lib/courses/links", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/courses/links")>();
+  return { ...actual, loadRelatedCourseIds: async (_client: unknown, courseId: string) => actual.relatedCourseIds(courseId, courseLinks.value) };
+});
 vi.mock("@/lib/documents", () => ({
   extractPdfPages: vi.fn(async () => [{ pageNumber: 1, text: "Synthetic answer", tables: [], hasVisuals: false }]),
   extractPptxSlides: vi.fn(async () => [{ slideNumber: 1, text: "Synthetic answer slide", tables: [], hasVisuals: true }]),
@@ -122,6 +127,13 @@ describe("private submission evidence route", () => {
     assessmentRow = { ...assessment, course_id: "other-course" };
     expect((await POST(materialRequest("material"), context())).status).toBe(400);
     expect(insert).not.toHaveBeenCalled();
+  });
+
+  it("accepts material from a member-confirmed linked Drive course", async () => {
+    materialRow = { ...material, course_id: "drive-course" };
+    courseLinks.value = [{ assessment_course_id: "course", material_course_id: "drive-course" }];
+    expect((await POST(materialRequest("material"), context())).status).toBe(201);
+    courseLinks.value = [];
   });
 
   it("rejects a course material that does not match the assessment course", async () => {
