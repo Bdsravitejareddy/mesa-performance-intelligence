@@ -62,6 +62,21 @@ function extractRecords(value: unknown): JsonObject[] {
   return [];
 }
 
+export function assignmentRecordFieldPaths(value: unknown): string[] {
+  const payload = unwrapToolResult(value);
+  const paths = new Set<string>();
+  function visit(record: JsonObject, prefix: string, depth: number) {
+    if (depth < 1) return;
+    for (const [key, child] of Object.entries(record)) {
+      const path = prefix ? `${prefix}.${key}` : key;
+      paths.add(path);
+      if (depth > 1 && child && typeof child === "object" && !Array.isArray(child)) visit(child as JsonObject, path, depth - 1);
+    }
+  }
+  for (const record of extractRecords(payload).slice(0, 3)) visit(record, "", 3);
+  return [...paths].sort().slice(0, 24);
+}
+
 export function unwrapToolResult(value: unknown): unknown {
   const root = object(value);
   if (!root) return value;

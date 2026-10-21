@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeAssignmentRecords, unwrapToolResult } from "./normalize";
+import { assignmentRecordFieldPaths, normalizeAssignmentRecords, unwrapToolResult } from "./normalize";
 
 describe("Mesa MCP assignment normalization", () => {
   it("keeps an explicit earned score on the 0–100 scale and preserves feedback", () => {
@@ -24,5 +24,12 @@ describe("Mesa MCP assignment normalization", () => {
   it("leaves non-JSON MCP text opaque rather than guessing a mark", () => {
     expect(unwrapToolResult({ content: [{ type: "text", text: "2 assignments · Case Study" }] })).toEqual({ content: [{ type: "text", text: "2 assignments · Case Study" }] });
     expect(normalizeAssignmentRecords({ content: [{ type: "text", text: "92/100" }] })).toEqual([]);
+  });
+
+  it("reports only field names for course-link diagnostics, never source values", () => {
+    const fields = assignmentRecordFieldPaths({ assignments: [{ id: "private-id", course_ref: { id: "private-course-id", label: "Confidential title" } }] });
+    expect(fields).toContain("course_ref.id");
+    expect(fields).toContain("course_ref.label");
+    expect(fields.join(" ")).not.toMatch(/private|Confidential/);
   });
 });

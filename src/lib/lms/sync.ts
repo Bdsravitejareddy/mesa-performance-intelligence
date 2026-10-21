@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getAllowedEmails } from "@/lib/supabase/config";
 import { MesaMcpClient, getMesaMcpEndpoint } from "./mcp-client";
 import { matchingCourseId, type CourseIdentity } from "./course-matching";
-import { normalizeAssignmentRecords, unwrapToolResult, type MesaAssignmentRecord } from "./normalize";
+import { assignmentRecordFieldPaths, normalizeAssignmentRecords, unwrapToolResult, type MesaAssignmentRecord } from "./normalize";
 import { toAssessmentRow, toSubmissionRow } from "./records";
 import { selectAssignmentReadTools, toolArgumentVariants } from "./tool-selection";
 
@@ -136,6 +136,7 @@ export async function syncMesaLms(): Promise<SyncResult> {
     const tools = selectAssignmentReadTools(await mcp.listTools());
     if (!tools.length) throw new Error("No read-only assignment or grade list tools are available.");
     const resultGroups: MesaAssignmentRecord[][] = [];
+    const readDiagnostics: Array<{ tool: string; records: number; missingCourse: number; fields: string[] }> = [];
     let failedReads = 0;
     let completedReads = 0;
     for (const tool of tools) {
@@ -144,7 +145,14 @@ export async function syncMesaLms(): Promise<SyncResult> {
       for (const args of variants) {
         try {
           const result = unwrapToolResult(await mcp.callTool(tool.name, args));
-          resultGroups.push(normalizeAssignmentRecords(result));
+          const normalized = normalizeAssignmentRecords(result);
+          resultGroups.push(normalized);
+          readDiagnostics.push({
+            tool: tool.name,
+            records: normalized.length,
+            missingCourse: normalized.filter((record) => !record.courseId && !record.courseTitle).length,
+            fields: assignmentRecordFieldPaths(result),
+          });
           completedReads += 1;
         } catch {
           failedReads += 1;
@@ -160,7 +168,9 @@ export async function syncMesaLms(): Promise<SyncResult> {
     }
     const counts = await persistRecords(client, ownerId, members, records);
     const status = failedReads || counts.skipped || !counts.assessments ? "partial" : "succeeded";
-    const summary: SyncResult = { status, runId: run.id, courses: counts.courses, assessments: counts.assessments, submissions: counts.submissions, marks: counts.marks, feedback: counts.feedback, message: failedReads || counts.skipped || !counts.assessments ? `Imported ${counts.assessments} assessment(s); ${failedReads} read operation(s) failed and ${counts.skipped} record(s) lacked a course reference.` : `Synced ${counts.assessments} assessments, ${counts.marks} marks, and ${counts.feedback} feedback records. Only explicit earned scores were saved as official marks.` };
+    const missingCourseDiagnostics = readDiagnostics.filter((item) => item.missingCourse > 0).slice(0, 3)
+      .map((item) => `${item.tool}: ${item.missingCourse}/${item.records} missing course; fields=${item.fields.join(",") || "none"}`);
+    const summary: SyncResult = { status, runId: run.id, courses: counts.courses, assessments: counts.assessments, submissions: counts.submissions, marks: counts.marks, feedback: counts.feedback, message: failedReads || counts.skipped || !counts.assessments ? `Imported ${counts.assessments} assessment(s); ${failedReads} read operation(s) failed and ${counts.skipped} record(s) lacked a course reference.${missingCourseDiagnostics.length ? ` Tool field diagnostics: ${missingCourseDiagnostics.join(" | ")}` : ""}` : `Synced ${counts.assessments} assessments, ${counts.marks} marks, and ${counts.feedback} feedback records. Only explicit earned scores were saved as official marks.` };
     const { error } = await client.from("sync_runs").update({ status: summary.status, finished_at: new Date().toISOString(), message: summary.message }).eq("id", run.id).eq("user_id", ownerId);
     if (error) throw new Error("Sync status could not be saved.");
     return summary;
