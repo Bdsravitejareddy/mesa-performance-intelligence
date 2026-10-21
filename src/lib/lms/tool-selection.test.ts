@@ -7,11 +7,12 @@ describe("Nexus MCP tool selection", () => {
       { name: "list_assignments", inputSchema: { type: "object", properties: {} } },
       { name: "list_grades", inputSchema: { type: "object", properties: {} } },
       { name: "get_course_grades", inputSchema: { type: "object", properties: {} } },
+      { name: "get_grades", inputSchema: { type: "object", properties: {} } },
       { name: "submit_assignment", inputSchema: { type: "object", properties: {} } },
       { name: "grade_submission", inputSchema: { type: "object", properties: {} } },
       { name: "get_assignment", inputSchema: { type: "object", properties: { assignment_id: { type: "string" } }, required: ["assignment_id"] } },
     ]);
-    expect(selected.map((tool) => tool.name)).toEqual(["list_assignments", "list_grades", "get_course_grades"]);
+    expect(selected.map((tool) => tool.name)).toEqual(["list_assignments", "list_grades", "get_course_grades", "get_grades"]);
   });
 
   it("calls only tools that do not require unknown identifying arguments", () => {

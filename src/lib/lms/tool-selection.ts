@@ -3,7 +3,7 @@ import type { McpTool } from "./mcp-client";
 export function selectAssignmentReadTools(tools: McpTool[]): McpTool[] {
   return tools.filter((tool) => {
     const name = tool.name.toLowerCase().replace(/[^a-z]/g, "");
-    const isReadCollection = /^(list|fetch|search|getmy|getcourse|listmy|fetchmy).*(assignments?|grades?|marks?)$/.test(name);
+    const isReadCollection = /^(list|fetch|search|get|getmy|getcourse|listmy|fetchmy).*(assignments?|grades?|marks?)$/.test(name);
     if (!isReadCollection) return false;
     const schema = tool.inputSchema;
     const required = schema && Array.isArray(schema.required) ? schema.required : [];

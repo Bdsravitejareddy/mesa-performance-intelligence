@@ -4,29 +4,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getAllowedEmails } from "@/lib/supabase/config";
 import { MesaMcpClient, getMesaMcpEndpoint } from "./mcp-client";
 import { matchingCourseId, type CourseIdentity } from "./course-matching";
+import { mergeAssignmentRecords } from "./merge";
 import { assignmentRecordFieldPaths, normalizeAssignmentRecords, unwrapToolResult, type MesaAssignmentRecord } from "./normalize";
 import { toAssessmentRow, toSubmissionRow } from "./records";
 import { selectAssignmentReadTools, toolArgumentVariants } from "./tool-selection";
 
 type SyncResult = { status: "succeeded" | "partial"; runId: string; courses: number; assessments: number; submissions: number; marks: number; feedback: number; message: string };
-
-function mergeRecords(groups: MesaAssignmentRecord[][]): MesaAssignmentRecord[] {
-  const records = new Map<string, MesaAssignmentRecord>();
-  for (const group of groups) for (const record of group) {
-    const key = `${record.courseId || record.courseTitle.toLowerCase()}::${record.assignmentId}`;
-    const current = records.get(key);
-    records.set(key, current ? {
-      ...current,
-      ...record,
-      submissionId: record.submissionId || current.submissionId,
-      courseTitle: record.courseTitle || current.courseTitle,
-      score: record.score ?? current.score,
-      feedback: record.feedback || current.feedback,
-      status: record.status || current.status,
-    } : record);
-  }
-  return [...records.values()];
-}
 
 async function workspaceMembers(client: SupabaseClient): Promise<string[]> {
   const emails = new Set(getAllowedEmails());
@@ -161,7 +144,7 @@ export async function syncMesaLms(): Promise<SyncResult> {
       }
     }
     if (!completedReads) throw new Error("All supported Nexus assignment and grade reads failed.");
-    const records = mergeRecords(resultGroups);
+    const records = mergeAssignmentRecords(resultGroups);
     if (!records.length) {
       const summary: SyncResult = { status: "partial", runId: run.id, courses: 0, assessments: 0, submissions: 0, marks: 0, feedback: 0, message: failedReads ? `No structured assignment records were returned; ${failedReads} read operation(s) also failed. No records were changed.` : "The read-only MCP connection worked, but its assignment/grade tools returned no structured assignment records. No records were changed." };
       await client.from("sync_runs").update({ status: summary.status, finished_at: new Date().toISOString(), message: summary.message }).eq("id", run.id).eq("user_id", ownerId);
