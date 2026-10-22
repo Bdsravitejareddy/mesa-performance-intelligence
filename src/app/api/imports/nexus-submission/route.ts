@@ -76,11 +76,12 @@ export async function POST(request: NextRequest) {
       const { error } = await supabase.from("submission_documents").insert({
         user_id: submission.user_id, submission_id: submission.id, source_kind: "lms", source_id: sourceId, name,
         mime_type: MIME[format], file_size: bytes.byteLength, storage_path: objectPath,
-        extracted_text: pages.map((page) => `[Page or slide ${page.pageNumber}]\n${page.text}`).join("\n\n").slice(0, 500_000),
+        // Postgres text cannot hold NUL characters, which some PDFs produce.
+        extracted_text: pages.map((page) => `[Page or slide ${page.pageNumber}]\n${page.text}`).join("\n\n").replace(/\u0000/g, "").slice(0, 500_000),
         extraction_status: pages.some((page) => "hasVisuals" in page && page.hasVisuals) ? "needs_visual_review" : "complete",
         source_version: sourceVersion,
       });
-      if (error) throw new Error("The file was read but could not be saved as evidence.");
+      if (error) throw new Error(`The file was read but could not be saved as evidence (${error.code ?? "error"}).`);
       objectPath = null;
       return { name, status: "attached" };
     } catch (reason) {
