@@ -166,3 +166,9 @@
 - Overview: animated progress rings (weighted average, assessments marked, competencies evidenced, Stage 1 readiness), target-role readiness panel, live "Next best focus" from the roadmap, rotating hero word.
 - App shell: ⌘K command palette (pages and actions), cursor spotlight on cards, aurora background. Reduced motion is respected throughout.
 - Caching: per-user read models keyed by workspace data version and deployment; functions run in icn1 next to the database. Cached page loads take 0.4–0.8 s, against 1–2.3 s before.
+
+## Liquid glass story pass (2026-10-22)
+- Liquid-glass UI: a fixed landscape backdrop (sky, sun, drifting light, parallax ridges) whose palette follows the act (gold → moss → dusk); floating translucent sidebar, top bar and cards with specular rims and a cursor sheen; Instrument Serif editorial headings (reference: tengilemalamala.com).
+- One continuous story: the 16 pages are ordered chapters in three acts (`src/components/navigation.ts`). Each page ends in a next-chapter band; scrolling past the end fills a meter and opens the next chapter (momentum-guarded, also wheel/touch/keyboard or click). A right-hand rail shows position and reading progress.
+- First-visit guided tour (`src/components/guided-tour.tsx`): a full-screen cover page summarising the three acts, then six spotlight steps (chapters, scroll-on, rail, ⌘K, nightly sync, replay). Stored per browser; replay from the compass button in the top bar.
+- Build note: Lightning CSS drops `backdrop-filter` written with `var()` or with a hand-written `-webkit-` duplicate; write literal unprefixed values.
