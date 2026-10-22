@@ -482,3 +482,4 @@ html[data-story-enter="from-below"] .main-content{animation:storyDrop .28s cubic
   html[data-edge-reveal][data-nav-open] .edge-handle-left,html[data-edge-reveal][data-rail-open] .edge-handle-right{opacity:0;transform:scaleY(.5)}
 }
 @media (prefers-reduced-motion: reduce){html[data-edge-reveal] .glass-ui .sidebar,html[data-edge-reveal] .chapter-rail{transition:none}}
+.nexus-importer{display:flex;flex-direction:column;gap:14px;max-width:760px}.nexus-importer textarea{font:12px 'DM Mono',monospace}.import-result{white-space:pre-wrap;font:11px 'DM Mono',monospace;max-height:320px;overflow:auto;background:rgba(255,255,255,.5);padding:12px;border-radius:12px}

@@ -25,7 +25,16 @@ export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const { data: claims } = await supabase.auth.getClaims();
   if (typeof claims?.claims?.sub !== "string") return NextResponse.json({ error: "Sign in first." }, { status: 401 });
-  const body = (await request.json().catch(() => null)) as Body | null;
+  // JSON carries page details and links; multipart adds files downloaded from the page's View buttons.
+  let body: Body | null;
+  const uploads: { name: string; bytes: Uint8Array }[] = [];
+  if ((request.headers.get("content-type") ?? "").includes("multipart/form-data")) {
+    const form = await request.formData().catch(() => null);
+    body = form ? JSON.parse(String(form.get("payload") ?? "{}")) as Body : null;
+    for (const entry of form?.getAll("file") ?? []) {
+      if (entry instanceof File && entry.size > 0 && entry.size <= MAX_FILE_BYTES) uploads.push({ name: entry.name.slice(0, 240), bytes: new Uint8Array(await entry.arrayBuffer()) });
+    }
+  } else body = (await request.json().catch(() => null)) as Body | null;
   const assignmentId = typeof body?.assignmentId === "string" && /^[0-9a-f-]{36}$/i.test(body.assignmentId) ? body.assignmentId : null;
   if (!assignmentId) return NextResponse.json({ error: "A Nexus assignment id is required." }, { status: 400 });
 
@@ -45,47 +54,48 @@ export async function POST(request: NextRequest) {
   }
 
   const outcomes: Outcome[] = [];
-  const files = (Array.isArray(body?.files) ? body.files : []).slice(0, 10) as { name?: unknown; url?: unknown }[];
-  for (const file of files) {
-    const name = typeof file.name === "string" && file.name.trim() ? file.name.trim().slice(0, 240) : "submission";
-    const url = typeof file.url === "string" ? submittedFileUrl(file.url, assignmentId) : null;
-    if (!url) { outcomes.push({ name, status: "rejected", note: "Not a Nexus submission file for this assignment." }); continue; }
+  const store = async (name: string, bytes: Uint8Array, sourceId: string): Promise<Outcome> => {
     let objectPath: string | null = null;
     try {
-      const response = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(60_000) });
-      if (!response.ok) throw new Error(`The signed link returned HTTP ${response.status}; it may have expired — capture the page again.`);
-      const declared = Number(response.headers.get("content-length") ?? 0);
-      if (declared > MAX_FILE_BYTES) throw new Error("File is larger than 20 MiB.");
-      const bytes = new Uint8Array(await response.arrayBuffer());
-      if (!bytes.byteLength || bytes.byteLength > MAX_FILE_BYTES) throw new Error("File is empty or larger than 20 MiB.");
-      const format = detectFormat(url.pathname, bytes) ?? detectFormat(name, bytes);
+      const format = detectFormat(name, bytes);
       if (!format) throw new Error("Only PDF, PowerPoint, Word and Excel files can be read.");
       const sourceVersion = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
       const { data: existing } = await supabase.from("submission_documents").select("id").eq("submission_id", submission.id).eq("source_version", sourceVersion).maybeSingle();
-      if (existing) { outcomes.push({ name, status: "duplicate" }); continue; }
+      if (existing) return { name, status: "duplicate" };
       const pages = await extract(format, bytes);
       if (!pages.length) throw new Error("The file has no readable text.");
       objectPath = `${submission.user_id}/${submission.id}/${randomUUID()}/${name.replace(/[^a-zA-Z0-9._-]+/g, "-").slice(-150) || "submission"}`;
       const { error: uploadError } = await supabase.storage.from("submission-files").upload(objectPath, bytes, { contentType: MIME[format], upsert: false });
       if (uploadError) throw new Error("The private copy could not be stored.");
       const { error } = await supabase.from("submission_documents").insert({
-        user_id: submission.user_id,
-        submission_id: submission.id,
-        source_kind: "lms",
-        source_id: storedSourceId(url),
-        name,
-        mime_type: MIME[format],
-        file_size: bytes.byteLength,
-        storage_path: objectPath,
+        user_id: submission.user_id, submission_id: submission.id, source_kind: "lms", source_id: sourceId, name,
+        mime_type: MIME[format], file_size: bytes.byteLength, storage_path: objectPath,
         extracted_text: pages.map((page) => `[Page or slide ${page.pageNumber}]\n${page.text}`).join("\n\n").slice(0, 500_000),
         extraction_status: pages.some((page) => "hasVisuals" in page && page.hasVisuals) ? "needs_visual_review" : "complete",
         source_version: sourceVersion,
       });
       if (error) throw new Error("The file was read but could not be saved as evidence.");
       objectPath = null;
-      outcomes.push({ name, status: "attached" });
+      return { name, status: "attached" };
     } catch (reason) {
       if (objectPath) await supabase.storage.from("submission-files").remove([objectPath]).catch(() => undefined);
+      return { name, status: "rejected", note: reason instanceof Error ? reason.message.slice(0, 200) : "Could not import." };
+    }
+  };
+  for (const upload of uploads) outcomes.push(await store(upload.name, upload.bytes, `nexus-view:${assignmentId}:${upload.name}`));
+  const files = (Array.isArray(body?.files) ? body.files : []).slice(0, 10) as { name?: unknown; url?: unknown }[];
+  for (const file of files) {
+    const name = typeof file.name === "string" && file.name.trim() ? file.name.trim().slice(0, 240) : "submission";
+    const url = typeof file.url === "string" ? submittedFileUrl(file.url, assignmentId) : null;
+    if (!url) { outcomes.push({ name, status: "rejected", note: "Not a Nexus submission file for this assignment." }); continue; }
+    try {
+      const response = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(60_000) });
+      if (!response.ok) throw new Error(`The signed link returned HTTP ${response.status}; it may have expired — capture the page again.`);
+      if (Number(response.headers.get("content-length") ?? 0) > MAX_FILE_BYTES) throw new Error("File is larger than 20 MiB.");
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      if (!bytes.byteLength || bytes.byteLength > MAX_FILE_BYTES) throw new Error("File is empty or larger than 20 MiB.");
+      outcomes.push(await store(detectFormat(name, bytes) ? name : url.pathname.split("/").pop() ?? name, bytes, storedSourceId(url)));
+    } catch (reason) {
       outcomes.push({ name, status: "rejected", note: reason instanceof Error ? reason.message.slice(0, 200) : "Could not import." });
     }
   }
