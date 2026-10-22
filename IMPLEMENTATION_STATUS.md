@@ -160,3 +160,9 @@
 - **Self-assessments**: seeded reasoning test (answers never sent to the browser; verified live) feeding Numerical analysis / Logical reasoning as practice evidence; Mini-IPIP scored on its own scale, used as context only. Not taken on the user's behalf.
 - **Live AI checks**: Quality Checker blind run on a synthetic text (verified quotes, deterministic overall 86.7); the synthetic run was then deleted so it is not evidence about the student. Behaviour analysis (split into two requests after a timeout) observed 3/12 dimensions from 2 official feedback records.
 - Validation: 622 tests, lint, type-check and production build pass; migration history matches production.
+
+## Dynamic UI and caching pass (2026-10-22)
+- Login: cinematic parallax scene, rotating headline, 3D network sphere, glass sign-in card, feature marquee.
+- Overview: animated progress rings (weighted average, assessments marked, competencies evidenced, Stage 1 readiness), target-role readiness panel, live "Next best focus" from the roadmap, rotating hero word.
+- App shell: ⌘K command palette (pages and actions), cursor spotlight on cards, aurora background. Reduced motion is respected throughout.
+- Caching: per-user read models keyed by workspace data version and deployment; functions run in icn1 next to the database. Cached page loads take 0.4–0.8 s, against 1–2.3 s before.
