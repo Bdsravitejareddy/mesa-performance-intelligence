@@ -68,7 +68,8 @@ export async function POST(request: NextRequest) {
       const sourceVersion = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
       const { data: existing } = await supabase.from("submission_documents").select("id").eq("submission_id", submission.id).eq("source_version", sourceVersion).maybeSingle();
       if (existing) return { name, status: "duplicate" };
-      const pages = await extract(format, bytes);
+      // The PDF reader transfers (empties) the buffer it is given, so it reads a copy.
+      const pages = await extract(format, bytes.slice());
       if (!pages.length) throw new Error("The file has no readable text.");
       objectPath = `${submission.user_id}/${submission.id}/${randomUUID()}/${name.replace(/[^a-zA-Z0-9._-]+/g, "-").slice(-150) || "submission"}`;
       const { error: uploadError } = await supabase.storage.from("submission-files").upload(objectPath, bytes, { contentType: MIME[format], upsert: false });
