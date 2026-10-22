@@ -38,6 +38,18 @@ describe("course standing", () => {
 describe("mixed standing", () => {
   it("uses the official mark where released and the AI grade elsewhere", () => {
     const rows = courseStanding({ courses: [{ id: "e", title: "E101", term: "Term 1" }], assessments: [{ id: "mid", course_id: "e", official_max_mark: 100 }, { id: "end", course_id: "e", official_max_mark: 100 }], marks: [{ assessment_id: "mid", mark: 51, weight: 100 }], gradings: [{ assessment_id: "end", ai_score: 83.5 }, { assessment_id: "mid", ai_score: 40 }], mappings: [], roles: [] });
-    expect(rows[0]).toMatchObject({ standing: 67.3, basis: "mixed", official: 51 });
+    expect(rows[0]).toMatchObject({ standing: 51, projected: 67.3, basis: "mixed", official: 51 });
+  });
+});
+
+describe("course context", () => {
+  it("reads MRS scores against the cohort ceiling and marks unreleased results as awaited", () => {
+    const pm = { key: "PM", name: "PM", tier: "primary" as const, postings: [], competencies: ["x"], requirements: [{ quote: "x", kind: "required" as never, competencyIds: ["x"], eligibility: false, source: { employer: "", title: "", url: "" } }] };
+    const context = { assessedBy: "MRS", expected: "November 2026", scaleMax: 79, note: "" };
+    const base = { courses: [{ id: "ai", title: "AI", term: "Term 1", context }], assessments: [{ id: "a", course_id: "ai", official_max_mark: 100 }], gradings: [], mappings: [{ assessment_id: "a", competency_id: "x" }], roles: [pm] };
+    expect(courseStanding({ ...base, marks: [] })[0].roles[0].verdict).toBe("awaiting_results");
+    const scored = courseStanding({ ...base, marks: [{ assessment_id: "a", mark: 70, weight: 100 }] })[0];
+    expect(scored).toMatchObject({ standing: 70, relative: 88.6 });
+    expect(scored.roles[0].verdict).toBe("sufficient");
   });
 });

@@ -9,7 +9,7 @@ const SYSTEM = [
   "You write the opening summary of a student's performance dashboard from computed figures only.",
   "Interpret each course against the student's target roles: a course marked core for a role must reach its threshold; a supporting course only needs its lower threshold. Say plainly when a mark is good enough for a role and when it is not.",
   "Never quote or paraphrase faculty feedback, and never restate a figure without saying what it means.",
-  "State evidence limits: a course with little of its weight demonstrated, or a standing that rests partly (basis mixed) or wholly (basis ai) on AI grades rather than official marks, is provisional. Do not speculate about what future marks must be.",
+  "Standing is the official weighted average; projectedWithAi is only an estimate including AI grades for unmarked work — never present it as the student's mark. Courses assessed via MRS are read against the cohort high (readAgainstCeiling), and courses whose results are expected later are pending, not weak. State evidence limits: a course with little of its weight demonstrated, or a standing that rests partly (basis mixed) or wholly (basis ai) on AI grades rather than official marks, is provisional. Do not speculate about what future marks must be.",
   "Be specific (course names, numbers), calibrated and brief. No flattery, no generic advice.",
   "Return JSON {\"headline\":string (max 14 words),\"summary\":string (max 2 sentences),\"insights\":[{\"title\":string,\"detail\":string (max 2 sentences),\"kind\":\"strength\"|\"gap\"|\"risk\"|\"opportunity\"|\"context\"}] (3 to 5),\"focus\":[string] (up to 3 concrete next steps)}.",
 ].join(" ");
@@ -23,7 +23,8 @@ export async function briefInput(client: SupabaseClient, term: TermChoice) {
     assessments: snapshot.assessmentCount,
     courses: snapshot.standings.map((course) => ({
       course: course.title.replace(/\s+with\s+.*$/i, ""),
-      standing: course.standing, basis: course.basis, official: course.official, ai: course.ai,
+      standing: course.standing, basis: course.basis, official: course.official, ai: course.ai, projectedWithAi: course.projected, readAgainstCeiling: course.relative,
+      assessedVia: course.context?.assessedBy || null, resultsExpected: course.context?.expected || null, cohortHigh: course.context?.scaleMax ?? null,
       demonstratedShare: course.demonstratedShare, evidenced: `${course.evidenced}/${course.assessments}`,
       roles: course.roles.map((role) => ({ role: role.role, relevance: role.relevance, threshold: role.threshold, verdict: role.verdict })),
     })),

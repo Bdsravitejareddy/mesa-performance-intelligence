@@ -68,7 +68,7 @@ export async function gradeSubmissions(client: SupabaseClient, budgetMs: number,
     client.from("submissions").select("id, user_id, assessment_id, answer_text, official_mark, official_feedback"),
     client.from("assessments").select("id, course_id, title, assessment_format, brief"),
     client.from("ai_processing_consents").select("user_id, disclosure_version, configuration_fingerprint, provider_host, provider_model, revoked_at"),
-    client.from("submission_gradings").select("submission_id, input_hash, ai_status").order("created_at", { ascending: false }),
+    client.from("submission_gradings").select("submission_id, input_hash, ai_status, ai_report, comparison").order("created_at", { ascending: false }),
   ]);
   if (documents.error || submissions.error || assessments.error) throw new Error("Grading inputs could not be loaded.");
   const docsBySubmission = new Map<string, DocumentRow[]>();
@@ -78,42 +78,53 @@ export async function gradeSubmissions(client: SupabaseClient, budgetMs: number,
   const consentOk = new Map((consents.data ?? []).map((row) => [row.user_id as string, isAIConsentCurrent(row, config)]));
   const done = new Map<string, string>();
   for (const row of latest.data ?? []) if (row.ai_status !== "failed" && row.ai_status !== "pending") done.set(`${row.submission_id}:${row.input_hash}`, row.ai_status as string);
+  // The latest completed AI grade per submission, reused while its inputs (work, criteria, brief) are unchanged.
+  const previousAi = new Map<string, { aiHash: string; report: Awaited<ReturnType<typeof blindEvaluate>> }>();
+  for (const row of latest.data ?? []) {
+    const aiHash = (row.comparison as { aiHash?: string } | null)?.aiHash;
+    if (row.ai_status === "complete" && row.ai_report && aiHash && !previousAi.has(row.submission_id as string)) previousAi.set(row.submission_id as string, { aiHash, report: row.ai_report as Awaited<ReturnType<typeof blindEvaluate>> });
+  }
+  const graded = new Set((latest.data ?? []).map((row) => row.submission_id as string));
   const model = config.configured ? resolveProviderSettings().model.slice(0, 120) : "";
   const outcomes: GradingOutcome[] = [];
 
-  const candidates = ((submissions.data ?? []) as SubmissionRow[]).filter((row) => !options.submissionIds || options.submissionIds.includes(row.id));
-  for (const submission of candidates) {
+  // Work never graded goes first, so new submissions are not starved by re-grades.
+  const candidates = ((submissions.data ?? []) as SubmissionRow[]).filter((row) => !options.submissionIds || options.submissionIds.includes(row.id)).sort((a, b) => Number(graded.has(a.id)) - Number(graded.has(b.id)));
+  const gradeOne = async (submission: SubmissionRow): Promise<void> => {
     const assessment = assessmentById.get(submission.assessment_id);
-    if (!assessment) continue;
+    if (!assessment) return;
     const docs = docsBySubmission.get(submission.id) ?? [];
     // Files whose images still await review are graded on their text; the note says visuals were not read.
     const readable = (doc: DocumentRow) => doc.extraction_status === "complete" || doc.extraction_status === "needs_visual_review";
     const pending = docs.filter((doc) => !readable(doc));
     const visualsUnread = docs.some((doc) => doc.extraction_status === "needs_visual_review");
     const text = [submission.answer_text ?? "", ...docs.filter(readable).map((doc) => `[${doc.name} · version ${doc.source_version}]\n${doc.extracted_text}`)].filter((part) => part.trim()).join("\n\n").trim();
-    if (!text) { if (docs.length || submission.answer_text) outcomes.push({ submissionId: submission.id, assessment: assessment.title, status: "skipped", note: "No readable text in the submitted files." }); continue; }
-    if (pending.length) { outcomes.push({ submissionId: submission.id, assessment: assessment.title, status: "skipped", note: `${pending.length} attached file${pending.length === 1 ? " is" : "s are"} not fully extracted; grading waits so no submitted work is left out.` }); continue; }
-    if (Date.now() > deadline - 15_000) break;
+    if (!text) { if (docs.length || submission.answer_text) outcomes.push({ submissionId: submission.id, assessment: assessment.title, status: "skipped", note: "No readable text in the submitted files." }); return; }
+    if (pending.length) { outcomes.push({ submissionId: submission.id, assessment: assessment.title, status: "skipped", note: `${pending.length} attached file${pending.length === 1 ? " is" : "s are"} not fully extracted; grading waits so no submitted work is left out.` }); return; }
+    if (Date.now() > deadline - 15_000) { outcomes.push({ submissionId: submission.id, assessment: assessment.title, status: "skipped", note: "Out of time in this run; it continues on the next run." }); return; }
 
     // The member who asked for grading may consent for the shared workspace; the nightly run uses the owner's consent.
     const aiAllowed = config.configured && (consentOk.get(submission.user_id) === true || (options.actorUserId !== undefined && consentOk.get(options.actorUserId) === true));
     let standard: Standard | null;
     try { standard = await standardFor(client, assessment, aiAllowed && Date.now() < deadline - AI_RESERVE_MS); }
-    catch (error) { outcomes.push({ submissionId: submission.id, assessment: assessment.title, status: "skipped", note: error instanceof Error ? error.message : "No criteria could be established." }); continue; }
-    if (!standard) { outcomes.push({ submissionId: submission.id, assessment: assessment.title, status: "skipped", note: aiAllowed ? "Out of time in this run to derive criteria; it continues on the next run." : "No rubric yet, and AI is unavailable to derive criteria from the brief." }); continue; }
+    catch (error) { outcomes.push({ submissionId: submission.id, assessment: assessment.title, status: "skipped", note: error instanceof Error ? error.message : "No criteria could be established." }); return; }
+    if (!standard) { outcomes.push({ submissionId: submission.id, assessment: assessment.title, status: "skipped", note: aiAllowed ? "Out of time in this run to derive criteria; it continues on the next run." : "No rubric yet, and AI is unavailable to derive criteria from the brief." }); return; }
 
     const refs = await retrieveRelevantReferences(client, assessment.course_id, assessment.id, `${assessment.title} ${standard.criteria.map((criterion) => criterion.name).join(" ")} ${text.slice(0, 3000)}`).catch(() => []);
     const official = submission.official_mark === null ? null : Number(submission.official_mark);
     const feedback = submission.official_feedback ?? "";
     const inputHash = createHash("sha256").update(JSON.stringify({ text, standard, brief: assessment.brief ?? "", refs: refs.map((ref) => ref.key + ref.excerpt.length), official, feedback, rules: CODE_RULES_VERSION })).digest("hex");
-    if (done.has(`${submission.id}:${inputHash}`)) { outcomes.push({ submissionId: submission.id, assessment: assessment.title, status: "unchanged", note: "Already graded with these inputs." }); continue; }
+    if (done.has(`${submission.id}:${inputHash}`)) { outcomes.push({ submissionId: submission.id, assessment: assessment.title, status: "unchanged", note: "Already graded with these inputs." }); return; }
 
     const code = codeGradeV2(text, standard.criteria, refs.map((ref) => ref.excerpt), assessment.brief ?? "");
     let aiReport: Awaited<ReturnType<typeof blindEvaluate>> | null = null;
     let aiStatus: "complete" | "failed" | "skipped" = "skipped";
     let note = aiAllowed ? "" : "AI grading needs the current AI consent for this account; only the code score was computed.";
+    const aiHash = createHash("sha256").update(JSON.stringify({ text, standard, brief: assessment.brief ?? "" })).digest("hex");
+    const reusable = previousAi.get(submission.id);
     if (visualsUnread) note = `${note} Images and charts in the submitted file were not read; only its text was graded.`.trim();
-    if (aiAllowed && Date.now() < deadline - AI_RESERVE_MS) {
+    if (reusable && reusable.aiHash === aiHash) { aiReport = reusable.report; aiStatus = "complete"; }
+    else if (aiAllowed && Date.now() < deadline - AI_RESERVE_MS) {
       try { aiReport = await blindEvaluate(text, standard, workKind(assessment.title, assessment.assessment_format), assessment.brief ?? ""); aiStatus = "complete"; }
       catch (error) { aiStatus = "failed"; note = error instanceof Error ? error.message.slice(0, 300) : "AI grading failed; it will retry on the next run."; }
     } else if (aiAllowed) { aiStatus = "failed"; note = "Out of time for AI grading in this run; it will continue on the next run."; }
@@ -149,11 +160,14 @@ export async function gradeSubmissions(client: SupabaseClient, budgetMs: number,
       ai_report: aiReport,
       ai_status: aiStatus,
       official_mark: official,
-      comparison: { ...comparison, reasons, documents, note: note ? `${comparison.note} ${note}` : comparison.note },
+      comparison: { ...comparison, reasons, documents, aiHash, note: note ? `${comparison.note} ${note}` : comparison.note },
       provider_model: aiReport ? model : "",
       rules_version: CODE_RULES_VERSION,
     }, { onConflict: "submission_id,input_hash" });
     outcomes.push({ submissionId: submission.id, assessment: assessment.title, status: error ? "skipped" : aiReport ? "graded" : "code_only", note: error ? "The grading could not be saved." : note || "Graded." });
-  }
+  };
+  // Three at a time: each AI grade takes up to a minute, and the provider spreads calls across keys.
+  const queue = [...candidates];
+  await Promise.all(Array.from({ length: 3 }, async () => { for (let next = queue.shift(); next; next = queue.shift()) await gradeOne(next); }));
   return outcomes;
 }

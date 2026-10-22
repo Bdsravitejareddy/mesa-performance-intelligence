@@ -193,15 +193,17 @@ async function gradingSummary(supabase: SupabaseClient): Promise<{ graded: numbe
 async function loadStandings(supabase: SupabaseClient, courses: { id: string; title: string; term: string | null }[], assessments: { id: string; course_id: string; official_max_mark: number | null }[]): Promise<CourseStanding[]> {
   try {
     const ids = assessments.map((row) => row.id);
-    const [gradings, mappings, submissions] = await Promise.all([
+    const [gradings, mappings, submissions, contexts] = await Promise.all([
       supabase.from("submission_gradings").select("assessment_id, ai_score, created_at").order("created_at", { ascending: false }),
       supabase.from("assessment_competencies").select("assessment_id, competency_id"),
       supabase.from("submissions").select("id, assessment_id, official_mark, source_original_max_mark").not("official_mark", "is", null),
+      supabase.from("course_context").select("course_id, assessed_by, expected, scale_max, note"),
     ]);
+    const contextOf = new Map((contexts.data ?? []).map((row) => [row.course_id as string, { assessedBy: row.assessed_by as string, expected: row.expected as string, scaleMax: row.scale_max === null ? null : Number(row.scale_max), note: row.note as string }]));
     const latest = new Map<string, number | null>();
     for (const row of gradings.data ?? []) if (!latest.has(row.assessment_id as string)) latest.set(row.assessment_id as string, row.ai_score === null ? null : Number(row.ai_score));
     return courseStanding({
-      courses,
+      courses: courses.map((course) => ({ ...course, context: contextOf.get(course.id) ?? null })),
       assessments: assessments.map((row) => ({ ...row, official_max_mark: row.official_max_mark === null ? null : Number(row.official_max_mark) })),
       marks: (submissions.data ?? []).filter((row) => ids.includes(row.assessment_id as string)).map((row) => ({ assessment_id: row.assessment_id as string, mark: Number(row.official_mark), weight: row.source_original_max_mark === null ? 100 : Number(row.source_original_max_mark) })),
       gradings: [...latest.entries()].map(([assessment_id, ai_score]) => ({ assessment_id, ai_score })),

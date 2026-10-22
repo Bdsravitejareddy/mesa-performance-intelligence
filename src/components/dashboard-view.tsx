@@ -6,13 +6,14 @@ import { IntelligenceVisual } from "@/components/intelligence-visual";
 import { CountUp, ParallaxHero } from "@/components/motion";
 import { Why } from "@/components/why";
 import { BriefRefresh } from "@/components/brief-refresh";
+import { WeeklyQuest } from "@/components/weekly-quest";
 import type { CourseStanding } from "@/lib/insights/course-standing";
 
 const shortCourse = (name: string) => name.replace(/\s+with\s+.*$/i, "");
 
 // The overview reads top-down: a one-line summary, four highlights, then the breakdown. Reasoning sits
 // behind "Why?" so the page leads with what the evidence shows rather than how it was worked out.
-export function DashboardView({ data }: { data: DashboardSnapshot }) {
+export function DashboardView({ data, name = "there" }: { data: DashboardSnapshot; name?: string }) {
   const average = data.averageMark;
   const marked = data.coursePerformance.filter((row) => row.weighted !== null).sort((a, b) => b.weighted! - a.weighted!);
   const best = marked[0];
@@ -47,6 +48,8 @@ export function DashboardView({ data }: { data: DashboardSnapshot }) {
 
       {!data.demoMode && data.courses.length === 0 && data.assessmentCount === 0 && data.marks.length === 0 && <div className="info-callout" role="status"><span><strong>No Mesa records yet.</strong> Run an LMS sync from Marks & feedback to begin.</span></div>}
 
+      {!data.demoMode && <WeeklyQuest name={name} suggestions={[...(brief?.focus ?? []).map((title) => ({ title: title.slice(0, 200), reason: "From your AI summary" })), ...(data.insights?.focus ?? []).map((item) => ({ title: item.title.slice(0, 200), reason: item.why.slice(0, 300) }))]} />}
+
       {brief && <section className="brief-insights" aria-label="Insights">{brief.insights.map((item) => <article key={item.title} className={`brief-card kind-${item.kind}`}><span className="brief-kind">{item.kind}</span><h3>{item.title}</h3><p>{item.detail}</p></article>)}</section>}
       {brief && brief.focus.length > 0 && <section className="brief-focus"><span className="eyebrow"><span className="eyebrow-line" /> Focus next</span><ol>{brief.focus.map((item) => <li key={item}>{item}</li>)}</ol><small>AI-written from the figures below · {data.brief?.model} · {new Date(data.brief!.createdAt).toLocaleString()}</small></section>}
 
@@ -75,7 +78,7 @@ export function DashboardView({ data }: { data: DashboardSnapshot }) {
         <article className="panel performance-panel">
           <div className="panel-heading"><div><h2>By course, for your target roles</h2></div><Link className="text-link" href="/grading">Graded work <ArrowRight size={14} /></Link></div>
           {data.standings.length ? <div className="standing-table">{data.standings.sort((a, b) => (b.standing ?? -1) - (a.standing ?? -1)).map((row) => <StandingRow key={row.courseId} row={row} />)}</div> : <p className="empty-hint">No courses in this term yet.</p>}
-          <Why>Standing combines, per assessment, the official mark where released and the blind AI grade where not, weighted by maximum marks (“+AI” when mixed, “AI” when no official mark exists). “Shown” is how much of the course's assessment weight has a mark or a grading. A course is core for a role when it assesses a large share of that role's skills (bar 75) and supporting otherwise (bar 65).</Why>
+          <Why>Standing is your official weighted average; where some work is graded only by the AI, the estimate including those grades is shown beneath it, never instead. Courses without any official mark show the AI grade, marked “AI”. Courses assessed through MRS are read against the cohort's highest score. “Shown” is how much of the course's assessment weight has a mark or a grading. A course is core for a role when it assesses a large share of that role's skills (bar 75) and supporting otherwise (bar 65).</Why>
         </article>
 
         <article className="panel focus-panel">
@@ -119,13 +122,13 @@ function Highlight({ label, value, unit, insight, ring, tone, href, children }: 
   </article>;
 }
 
-const VERDICT_LABEL = { sufficient: "enough", needs_work: "needs work", not_yet_evidenced: "not yet shown" } as const;
+const VERDICT_LABEL = { sufficient: "enough", needs_work: "needs work", not_yet_evidenced: "not yet shown", awaiting_results: "results due" } as const;
 const shortRole = (role: string) => role.replace(/Senior Technical Product Manager/i, "Sr TPM").replace(/Forward Deployed Engineer/i, "FDE");
 
 function StandingRow({ row }: { row: CourseStanding }) {
   return <div className="standing-row">
-    <span className="standing-name"><strong>{row.title.replace(/\s+with\s+.*$/i, "")}</strong><small>{row.evidenced} of {row.assessments} assessed · {Math.round(row.demonstratedShare * 100)}% shown</small></span>
-    <span className={`standing-value basis-${row.basis}`}>{row.standing === null ? "—" : row.standing}{row.basis === "ai" && <em>AI</em>}{row.basis === "mixed" && <em>+AI</em>}</span>
+    <span className="standing-name"><strong>{row.title.replace(/\s+with\s+.*$/i, "")}</strong><small>{row.context?.assessedBy ? `assessed via ${row.context.assessedBy}${row.context.expected ? ` · due ${row.context.expected}` : ""}${row.context.scaleMax ? ` · cohort high ${row.context.scaleMax}` : ""}` : `${row.evidenced} of ${row.assessments} assessed · ${Math.round(row.demonstratedShare * 100)}% shown`}</small></span>
+    <span className={`standing-value basis-${row.basis}`}>{row.standing === null ? "—" : row.standing}{row.basis === "ai" && <em>AI</em>}{row.basis === "mixed" && row.projected !== null && row.projected !== row.standing && <small className="standing-projected">with AI estimates {row.projected}</small>}</span>
     <span className="standing-roles">{row.roles.map((role) => <span key={role.role} className={`role-chip verdict-${role.verdict}`} title={`${role.relevance} for ${role.role}: bar ${role.threshold}`}>{shortRole(role.role)} · {role.relevance} · {VERDICT_LABEL[role.verdict]}</span>)}</span>
   </div>;
 }

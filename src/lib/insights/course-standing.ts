@@ -4,10 +4,11 @@ import type { LibraryRole } from "@/lib/roles/library";
 // the same records always give the same verdicts, and every verdict names the figures it rests on.
 export const ROLE_THRESHOLDS = { core: 75, supporting: 65, peripheral: 50 } as const;
 export type Relevance = keyof typeof ROLE_THRESHOLDS;
-export type Verdict = "sufficient" | "needs_work" | "not_yet_evidenced";
+export type Verdict = "sufficient" | "needs_work" | "not_yet_evidenced" | "awaiting_results";
+export type CourseContext = { assessedBy: string; expected: string; scaleMax: number | null; note: string };
 
 export type StandingInput = {
-  courses: { id: string; title: string; term: string | null }[];
+  courses: { id: string; title: string; term: string | null; context?: CourseContext | null }[];
   assessments: { id: string; course_id: string; official_max_mark: number | null }[];
   marks: { assessment_id: string; mark: number; weight: number }[];
   gradings: { assessment_id: string; ai_score: number | null }[];
@@ -20,6 +21,8 @@ export type CourseStanding = {
   courseId: string; title: string; term: string | null;
   assessments: number; evidenced: number; demonstratedShare: number;
   official: number | null; ai: number | null; standing: number | null; basis: "official" | "mixed" | "ai" | "none";
+  // Official marks first; "projected" adds AI estimates for unmarked work and is shown beside, never instead.
+  projected: number | null; relative: number | null; context: CourseContext | null;
   roles: RoleView[];
 };
 
@@ -63,18 +66,23 @@ export function courseStanding(input: StandingInput): CourseStanding[] {
     const aiOf = new Map(gradings.map((row) => [row.assessment_id, row.ai_score!]));
     const parts = [...evidencedIds].map((id) => ({ value: officialOf.get(id) ?? aiOf.get(id)!, weight: weightOf(id), official: officialOf.has(id) }));
     const partWeight = parts.reduce((sum, part) => sum + part.weight, 0);
-    const standing = parts.length && partWeight ? round1(parts.reduce((sum, part) => sum + part.value * part.weight, 0) / partWeight) : null;
-    const basis: CourseStanding["basis"] = !parts.length ? "none" : parts.every((part) => part.official) ? "official" : parts.some((part) => part.official) ? "mixed" : "ai";
+    const projected = parts.length && partWeight ? round1(parts.reduce((sum, part) => sum + part.value * part.weight, 0) / partWeight) : null;
+    const standing = official ?? ai;
+    const basis: CourseStanding["basis"] = official !== null ? (parts.some((part) => !part.official) ? "mixed" : "official") : ai !== null ? "ai" : "none";
+    // Scores on a scale whose observed ceiling is below 100 (e.g. MRS, cohort high 79) are read against that ceiling.
+    const context = course.context ?? null;
+    const relative = standing !== null && context?.scaleMax ? round1(Math.min(100, (standing / context.scaleMax) * 100)) : standing;
     const roleViews: RoleView[] = roles.map((role) => {
       const share = overlap(course.id, role.required);
       const relevance: Relevance = share >= 0.2 || topThree.get(role.name)?.has(course.id) ? "core" : share > 0 ? "supporting" : "peripheral";
       const threshold = ROLE_THRESHOLDS[relevance];
-      return { role: role.name, relevance, overlap: Math.round(share * 100) / 100, threshold, verdict: standing === null ? "not_yet_evidenced" : standing >= threshold ? "sufficient" : "needs_work" };
+      const verdict: Verdict = relative === null ? (context?.expected ? "awaiting_results" : "not_yet_evidenced") : relative >= threshold ? "sufficient" : "needs_work";
+      return { role: role.name, relevance, overlap: Math.round(share * 100) / 100, threshold, verdict };
     });
     return {
       courseId: course.id, title: course.title, term: course.term,
       assessments: assessments.length, evidenced: evidencedIds.size, demonstratedShare: totalWeight ? Math.round((evidencedWeight / totalWeight) * 100) / 100 : 0,
-      official, ai, standing, basis, roles: roleViews,
+      official, ai, standing, basis, projected, relative, context, roles: roleViews,
     } satisfies CourseStanding;
   }).filter((row): row is CourseStanding => row !== null);
 }
