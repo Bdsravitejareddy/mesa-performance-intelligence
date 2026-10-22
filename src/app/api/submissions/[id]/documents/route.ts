@@ -102,8 +102,9 @@ export async function POST(request: NextRequest, context: SubmissionDocumentCont
     objectPath = `${submission.user_id}/${submission.id}/${randomUUID()}/${safeName}`;
     const { error: uploadError } = await supabase.storage.from("submission-files").upload(objectPath, bytes, { contentType: mimeType, upsert: false });
     if (uploadError) throw new Error("Private submission file upload failed.");
+    // The PDF reader transfers (empties) the buffer it is given, so it reads a copy.
     const pages = mimeType === pdfMime
-      ? await extractPdfPages(bytes, uploadExtractionLimits)
+      ? await extractPdfPages(bytes.slice(), uploadExtractionLimits)
       : (await extractPptxSlides(bytes, uploadExtractionLimits)).map((slide) => ({ pageNumber: slide.slideNumber, text: slide.text, hasVisuals: slide.hasVisuals }));
     if (!pages.length) throw new Error("The file contains no readable pages or slides.");
     const extractedText = pages.map((page) => `[Page or slide ${page.pageNumber}]\n${page.text}`).join("\n\n").slice(0, 500_000);
