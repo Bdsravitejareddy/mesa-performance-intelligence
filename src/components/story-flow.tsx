@@ -53,9 +53,9 @@ export function StorySeams({ pathname }: { pathname: string }) {
     };
     const relax = () => {
       if (leaving.current) return;
-      if (performance.now() - lastInput < 220) { decay = requestAnimationFrame(relax); return; }
-      amount.down = amount.down < 1 ? 0 : amount.down * 0.85;
-      amount.up = amount.up < 1 ? 0 : amount.up * 0.85;
+      if (performance.now() - lastInput < 700) { decay = requestAnimationFrame(relax); return; }
+      amount.down = amount.down < 1 ? 0 : amount.down * 0.9;
+      amount.up = amount.up < 1 ? 0 : amount.up * 0.9;
       publish();
       if (amount.down || amount.up) decay = requestAnimationFrame(relax);
     };
