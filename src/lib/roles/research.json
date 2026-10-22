@@ -1,0 +1,442 @@
+[
+  {
+    "role": "Senior Technical Product Manager",
+    "title": "Senior Technical Product Manager - Vehicle Experience",
+    "employer": "Zoox",
+    "url": "https://jobs.lever.co/zoox/82349ccb-1e23-4124-866b-bb235a702513",
+    "postingDate": null,
+    "retrievedAt": "2026-10-22",
+    "requirements": [
+      {
+        "quote": "Define your product areas across our current vehicle and future platform",
+        "kind": "responsibility"
+      },
+      {
+        "quote": "Own the successful execution of the product across its lifecycle",
+        "kind": "responsibility"
+      },
+      {
+        "quote": "Ruthlessly prioritize features and ensure priorities are clearly communicated at all times",
+        "kind": "responsibility"
+      },
+      {
+        "quote": "Be the Product Owner in a highly cross-functional product development process spanning HW, FW, SW, and operations",
+        "kind": "responsibility"
+      },
+      {
+        "quote": "Bachelor's degree in a technical discipline (engineering, computer science, or related field) required, with the technical fluency to engage credibly with HW, FW, and SW teams",
+        "kind": "required"
+      },
+      {
+        "quote": "8+ years of direct product management experience bringing 0->1 products to market in the automotive or AV space",
+        "kind": "required"
+      },
+      {
+        "quote": "You are a shrewd negotiator and can influence a wide array of stakeholders to quickly drive decisions and consensus",
+        "kind": "required"
+      },
+      {
+        "quote": "You’re a self-starter who has a track record of taking action and delivering",
+        "kind": "required"
+      },
+      {
+        "quote": "Experience with both 0->1 products and scaling",
+        "kind": "preferred"
+      },
+      {
+        "quote": "Experience with both physical and digital products",
+        "kind": "preferred"
+      }
+    ]
+  },
+  {
+    "role": "Senior Technical Product Manager",
+    "title": "Senior Technical Product Manager",
+    "employer": "Relativity Space",
+    "url": "https://boards.greenhouse.io/relativity/jobs/8862040002?gh_jid=8862040002",
+    "postingDate": null,
+    "retrievedAt": "2026-10-22",
+    "requirements": [
+      {
+        "quote": "Architect and own end-to-end enterprise workflows across planning and execution, MRP, procure-to-pay, material movement, and change control—ensuring alignment with business needs and scalable technical solutions",
+        "kind": "responsibility"
+      },
+      {
+        "quote": "Develop and maintain technical infrastructure that supports process-as-a-product workflows, with a focus on data integrity, reliability, automation, and integration with enterprise systems",
+        "kind": "responsibility"
+      },
+      {
+        "quote": "Bachelor's degree in Computer Science, Engineering, Supply Chain/Operations Management, or a related discipline",
+        "kind": "required"
+      },
+      {
+        "quote": "3+ years of working in a supply chain engineering, product engineering, software engineering",
+        "kind": "required"
+      },
+      {
+        "quote": "with a focus on MRP or ERP systems within an advanced manufacturing environment",
+        "kind": "required"
+      },
+      {
+        "quote": "Proficiency in programming languages such as Python, SQL, Javascript, Java, C#",
+        "kind": "required"
+      },
+      {
+        "quote": "Advanced knowledge of supply chain and/or manufacturing processes",
+        "kind": "required"
+      },
+      {
+        "quote": "Strong working knowledge of at least one of the following enterprise processes/workflows:",
+        "kind": "required"
+      },
+      {
+        "quote": "Experience with cloud platforms and distributed systems",
+        "kind": "preferred"
+      },
+      {
+        "quote": "Strong understanding of a variety of codebased technical infrastructure and information systems / database architecture",
+        "kind": "preferred"
+      }
+    ]
+  },
+  {
+    "role": "Forward Deployed Engineer",
+    "title": "Forward Deployed Software Engineer",
+    "employer": "Palantir",
+    "url": "https://jobs.lever.co/palantir/dab396d4-2f14-4796-aac0-0d82883dccf0",
+    "postingDate": null,
+    "retrievedAt": "2026-10-22",
+    "requirements": [
+      {
+        "quote": "1+ years of relevant, post-college work experience.",
+        "kind": "required"
+      },
+      {
+        "quote": "Strong engineering background, preferred in fields such as Computer Science, Mathematics, Software Engineering, Physics, and Data Science.",
+        "kind": "required"
+      },
+      {
+        "quote": "Strong coder with shown proficiency in programming languages such as Python, Java, C++, TypeScript/JavaScript, or similar.",
+        "kind": "required"
+      },
+      {
+        "quote": "Ability and interest to travel up to 25%, as needed to client sites, but flexible based on personal preferences.",
+        "kind": "required"
+      },
+      {
+        "quote": "A highly analytical approach and eagerness to solve technical problems with data structures, storage systems, cloud infrastructure, front-end frameworks, and other technical tools.",
+        "kind": "preferred"
+      },
+      {
+        "quote": "Experience or curiosity about working with and using large scale data to take on valuable business problems.",
+        "kind": "preferred"
+      },
+      {
+        "quote": "Ability to collaborate efficiently in teams of technical and non-technical individuals, and comfortable working in a dynamic environment with evolving objectives and iteration with users.",
+        "kind": "preferred"
+      }
+    ]
+  },
+  {
+    "role": "Forward Deployed Engineer",
+    "title": "Forward Deployed Engineer",
+    "employer": "Anthropic",
+    "url": "https://job-boards.greenhouse.io/anthropic/jobs/5391016008",
+    "postingDate": null,
+    "retrievedAt": "2026-10-22",
+    "requirements": [
+      {
+        "quote": "Work within customer systems to build production applications with Claude models, ensuring that these products meet customer requirements.",
+        "kind": "responsibility"
+      },
+      {
+        "quote": "Deliver technical artifacts for customers like MCP servers, sub-agents, and agent skills that will be used in production workflows.",
+        "kind": "responsibility"
+      },
+      {
+        "quote": "Travel frequently (25-50%) to customer sites to build in person with customers.",
+        "kind": "responsibility"
+      },
+      {
+        "quote": "8+ years of experience in a technical, customer facing role such as Forward Deployed Engineer, or as a Software Engineer with consulting experience.",
+        "kind": "required"
+      },
+      {
+        "quote": "Production experience with LLMs including advanced prompt engineering, agent development, evaluation frameworks, and deployment at scale.",
+        "kind": "required"
+      },
+      {
+        "quote": "Strong programming skills with proficiency in Python (and ideally in one or more additional languages like TypeScript, Java, etc) and experience shipping production applications",
+        "kind": "required"
+      },
+      {
+        "quote": "High agency with an ability to navigate ambiguity present in complex organizations.",
+        "kind": "required"
+      },
+      {
+        "quote": "A background in financial services, healthcare/life sciences, or another enterprise vertical is a plus.",
+        "kind": "preferred"
+      },
+      {
+        "quote": "Experience with enterprise IT systems and/or AI deployment patterns is a plus.",
+        "kind": "preferred"
+      }
+    ]
+  },
+  {
+    "role": "Head of Product",
+    "title": "Head of Product, New Customer Experience",
+    "employer": "Gusto",
+    "url": "https://job-boards.greenhouse.io/gusto/jobs/8144242",
+    "postingDate": null,
+    "retrievedAt": "2026-10-22",
+    "requirements": [
+      {
+        "quote": "You will own the end-to-end new customer experience, including determining the best way to natively include AI throughout to assist customers.",
+        "kind": "responsibility"
+      },
+      {
+        "quote": "You will lead a team of product managers and partner daily with Engineering, Design, Data, Marketing, Sales, and Finance.",
+        "kind": "responsibility"
+      },
+      {
+        "quote": "Directly coach and lead a talented team of senior product managers.",
+        "kind": "responsibility"
+      },
+      {
+        "quote": "10+ years of direct Product Management experience, including 4+ years leading and managing product managers.",
+        "kind": "required"
+      },
+      {
+        "quote": "A track record owning a growth, acquisition, or onboarding funnel with direct accountability for a conversion or revenue number, not just shipping features.",
+        "kind": "required"
+      },
+      {
+        "quote": "Hands-on experience shipping AI-powered customer experiences.",
+        "kind": "required"
+      },
+      {
+        "quote": "Experience in selling to SMBs, and experience in a multi-product company with shared platforms and real cross-team dependencies",
+        "kind": "required"
+      },
+      {
+        "quote": "Strong experimentation instincts and the judgment to know when a flat result means iterate and when it means stop.",
+        "kind": "required"
+      },
+      {
+        "quote": "Experience owning a public web surface (e.g. marketing site, CMS) a plus.",
+        "kind": "preferred"
+      }
+    ]
+  },
+  {
+    "role": "Head of Product",
+    "title": "Head of Product - Business Banking",
+    "employer": "Mercury",
+    "url": "https://job-boards.greenhouse.io/mercury/jobs/6187763004",
+    "postingDate": null,
+    "retrievedAt": "2026-10-22",
+    "requirements": [
+      {
+        "quote": "Own the P&L, strategy, and product offering: accounts, user experience, payments, new rails, and agents",
+        "kind": "responsibility"
+      },
+      {
+        "quote": "Build and scale the org: recruit and lead a high-performing PM team, instill strong build discipline, develop future leaders, and set an operating cadence and culture that drives pace and quality",
+        "kind": "responsibility"
+      },
+      {
+        "quote": "Make reliability and trust product features: own uptime, correctness, latency, and support outcomes, and be measured on them",
+        "kind": "responsibility"
+      },
+      {
+        "quote": "10+ years' experience, ideally in banking, payments, platforms, or financial products",
+        "kind": "required"
+      },
+      {
+        "quote": "5+ years leading product managers: hiring, coaching, org design, and performance management",
+        "kind": "required"
+      },
+      {
+        "quote": "Experience launching and scaling 0-1 financial products, ideally in fintech or another high-growth environment, alongside operating a large product with real customers on it",
+        "kind": "required"
+      },
+      {
+        "quote": "Exceptional cross-functional leadership across engineering, design, risk, compliance, finance, and partners",
+        "kind": "required"
+      },
+      {
+        "quote": "Command of how business banking works: account opening and KYB, deposits and liquidity, payment rails (ACH, wire, check, international, FedNow, RTP)",
+        "kind": "required"
+      }
+    ]
+  },
+  {
+    "role": "Technical Program Manager",
+    "title": "Technical Program Manager (TPM)",
+    "employer": "Palantir",
+    "url": "https://jobs.lever.co/palantir/7eb0dedb-37ee-4175-b29f-10a9e4340076",
+    "postingDate": null,
+    "retrievedAt": "2026-10-22",
+    "requirements": [
+      {
+        "quote": "Partner with Palantir software engineers, product managers, quality engineers, and business leadership to drive key product deliverables through the entire software development cycle.",
+        "kind": "responsibility"
+      },
+      {
+        "quote": "Synthesize concrete technical goals from product vision, mapping global product strategy to granular team tasks and issues.",
+        "kind": "responsibility"
+      },
+      {
+        "quote": "Work with customer-facing engineering teams on implementation, roll out, and support of your product.",
+        "kind": "responsibility"
+      },
+      {
+        "quote": "Relevant technical degree or experience in a software-related field (Systems Engineering, Computer Science, Computer Engineering, etc.)",
+        "kind": "required"
+      },
+      {
+        "quote": "2+ years of project/program management experience, preferably in a fast-paced or dynamic environment",
+        "kind": "required"
+      },
+      {
+        "quote": "Demonstrated success managing complex software development projects for an enterprise software company or startup.",
+        "kind": "preferred"
+      },
+      {
+        "quote": "An ability to engage in technical discussion and invest in learning technical concepts.",
+        "kind": "preferred"
+      }
+    ]
+  },
+  {
+    "role": "Solutions Architect",
+    "title": "Solutions Architect, Enterprise",
+    "employer": "Scale AI",
+    "url": "https://job-boards.greenhouse.io/scaleai/jobs/4554440005",
+    "postingDate": null,
+    "retrievedAt": "2026-10-22",
+    "requirements": [
+      {
+        "quote": "Lead technical discovery and complete the Technical Qualification Checklist, evaluating feasibility, data readiness, integration requirements, security/compliance, evaluation readiness, and stakeholder alignment.",
+        "kind": "responsibility"
+      },
+      {
+        "quote": "Define performance metrics and evaluation criteria before proposal stage, including quality dimensions, baselines, evaluation datasets, and subject-matter expert access requirements.",
+        "kind": "responsibility"
+      },
+      {
+        "quote": "Lead executive technical workshops for target use cases.",
+        "kind": "responsibility"
+      },
+      {
+        "quote": "Engineering background with customer-facing experience in solutions architecture, sales engineering, forward-deployed engineering, or technical consulting. Hands-on proficiency in Python or equivalent language.",
+        "kind": "required"
+      },
+      {
+        "quote": "Experience managing technical discovery and evaluation for enterprise sales cycles, including security reviews and technical qualification.",
+        "kind": "required"
+      },
+      {
+        "quote": "Practical knowledge of Generative AI and LLM architecture in production environments, including system design and reliability considerations.",
+        "kind": "required"
+      },
+      {
+        "quote": "Ability to rapidly build proof-of-concept prototypes for customer requirements.",
+        "kind": "required"
+      },
+      {
+        "quote": "Background in forward-deployed engineering or shipping production ML systems.",
+        "kind": "preferred"
+      },
+      {
+        "quote": "Experience building or scaling a solutions engineering practice or playbook.",
+        "kind": "preferred"
+      }
+    ]
+  },
+  {
+    "role": "Group Product Manager",
+    "title": "Group Product Manager - Bring Your Own Cloud",
+    "employer": "Datadog",
+    "url": "https://careers.datadoghq.com/detail/8024863/?gh_jid=8024863",
+    "postingDate": null,
+    "retrievedAt": "2026-10-22",
+    "requirements": [
+      {
+        "quote": "Define the vision, strategy, and product roadmap for BYOC and make it immediately valuable to customers in an AI-first environment",
+        "kind": "responsibility"
+      },
+      {
+        "quote": "Gather insights from customers, partners, and internal data to become an expert on how customers want to store, analyze, and report on data for long term needs",
+        "kind": "responsibility"
+      },
+      {
+        "quote": "Recommend and launch new offerings with BYOC based on use cases for Security and Compliance",
+        "kind": "responsibility"
+      },
+      {
+        "quote": "7+ years of experience in B2B SaaS Product Management, including 2+ years managing other product managers",
+        "kind": "required"
+      },
+      {
+        "quote": "At least 3+ years of experience with databases, data warehouses, SQL concepts & language, BI products, and/or distributed systems",
+        "kind": "required"
+      },
+      {
+        "quote": "Hands on experience using multiple services from one or more of the major cloud providers (AWS, Microsoft Azure, Google Cloud)",
+        "kind": "required"
+      },
+      {
+        "quote": "Demonstrated track record of working with executives and engineers alike",
+        "kind": "required"
+      },
+      {
+        "quote": "Prior experience with Snowflake, Databricks, Splunk, or ClickHouse is a strong plus",
+        "kind": "preferred"
+      },
+      {
+        "quote": "MBA is a strong plus",
+        "kind": "preferred"
+      }
+    ]
+  },
+  {
+    "role": "Chief of Staff",
+    "title": "Chief of Staff to Chief Strategy Officer",
+    "employer": "Cloudflare",
+    "url": "https://boards.greenhouse.io/cloudflare/jobs/8076815?gh_jid=8076815",
+    "postingDate": null,
+    "retrievedAt": "2026-10-22",
+    "requirements": [
+      {
+        "quote": "Act as a high-leverage surrogate for the CSO, attending key meetings and customer discussions on her behalf when she requires added executive coverage.",
+        "kind": "responsibility"
+      },
+      {
+        "quote": "Partner closely with the CSO as a strategic sounding board, leveraging data and sharp business instincts to simplify complex problems and keep executive focus on high-impact priorities.",
+        "kind": "responsibility"
+      },
+      {
+        "quote": "Translate high-level strategic vision, enterprise narratives, and complex technical data into executive and client-ready slide decks and comprehensive prep materials for high-stakes meetings.",
+        "kind": "responsibility"
+      },
+      {
+        "quote": "Relevant Experience: 10+ years of combined experience across Investment Banking or Management Consulting and Big Tech, holding roles such as Technical Assistant, Product Manager, Business Development, Chief of Staff or similar.",
+        "kind": "preferred"
+      },
+      {
+        "quote": "Executive Presence & Surrogate Authority: Proven track record of stepping into high-stakes meetings on behalf of executives, building instant credibility with C-suite stakeholders, enterprise customers, and board members.",
+        "kind": "preferred"
+      },
+      {
+        "quote": "Master-Level Communication & Writing Skills: Exceptional written and verbal skills; proven ability to write across multiple formats.",
+        "kind": "preferred"
+      },
+      {
+        "quote": "Technical Aptitude & Product Fluency: Deep technical foundation with the ability to quickly grasp and translate complex technical concepts and products, effectively collaborating with engineering and technical product leaders.",
+        "kind": "preferred"
+      }
+    ]
+  }
+]

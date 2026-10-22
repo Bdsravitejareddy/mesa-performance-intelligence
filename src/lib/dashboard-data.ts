@@ -5,10 +5,12 @@ import { describeSyncHealth, type SyncHealth, type SyncRun } from "@/lib/lms/syn
 export type DashboardSnapshot = {
   demoMode: boolean;
   courses: { id: string; code: string; title: string; term: string; materials?: number }[];
-  marks: { id: string; title: string; course: string; date: string; mark: number; format: string }[];
+  marks: { id: string; title: string; course: string; date: string; mark: number; format: string; weight?: number; courseId?: string }[];
   markSeries: { label: string; value: number }[];
-  // Unweighted mean of every official mark (not just the recent rows shown); null when no marks exist.
+  // Mean of every official mark weighted by each assessment's original maximum marks; null when no marks exist.
   averageMark: number | null;
+  unweightedAverage: number | null;
+  coursePerformance: { course: string; weighted: number | null; marked: number; total: number; maxMarks: number }[];
   markCount: number;
   // value is null when a topic has no scored evidence; never coerce that to 0.
   mastery: { topic: string; value: number | null; state: string }[];
@@ -30,6 +32,8 @@ const demoSnapshot: DashboardSnapshot = {
   })),
   markSeries: demoMarkSeries,
   averageMark: averageOf(demoData.assessments.map((assessment) => assessment.mark)),
+  unweightedAverage: averageOf(demoData.assessments.map((assessment) => assessment.mark)),
+  coursePerformance: [...new Set(demoData.assessments.map((assessment) => assessment.course))].map((course) => { const rows = demoData.assessments.filter((assessment) => assessment.course === course); return { course, weighted: averageOf(rows.map((row) => row.mark)), marked: rows.length, total: rows.length, maxMarks: rows.length * 100 }; }),
   markCount: demoData.assessments.length,
   mastery: demoData.mastery,
   assessmentCount: 12,
@@ -47,7 +51,7 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
   const [courseResult, assessmentResult, submissionResult, competencyResult, syncResult] = await Promise.all([
     supabase.from("courses").select("id, code, title, term").order("created_at", { ascending: false }),
     supabase.from("assessments").select("id, course_id, title, assessment_format, due_at"),
-    supabase.from("submissions").select("id, assessment_id, official_mark, submitted_at").not("official_mark", "is", null).order("submitted_at", { ascending: false }),
+    supabase.from("submissions").select("id, assessment_id, official_mark, source_original_max_mark, submitted_at").not("official_mark", "is", null).order("submitted_at", { ascending: false }),
     supabase.from("topic_competencies").select("topic, state, score"),
     supabase.from("sync_runs").select("status, started_at, finished_at, message").eq("source_name", "Mesa Nexus MCP").order("started_at", { ascending: false }).limit(20),
   ]);
@@ -70,6 +74,9 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
       date: submission.submitted_at ? new Date(submission.submitted_at).toLocaleDateString("en", { day: "2-digit", month: "short" }) : "Date unavailable",
       mark: Number(submission.official_mark),
       format: assessment?.assessment_format ?? "Assessment",
+      // Original LMS maximum; marks entered on the 0–100 scale weigh as 100.
+      weight: submission.source_original_max_mark === null || submission.source_original_max_mark === undefined ? 100 : Number(submission.source_original_max_mark),
+      courseId: assessment?.course_id ?? "",
     };
   });
 
@@ -86,7 +93,12 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
     courses: courses.map((course) => ({ ...course, term: course.term ?? "" })),
     marks: marks.slice(0, 6),
     markSeries,
-    averageMark: averageOf(marks.map((item) => item.mark)),
+    averageMark: weightedAverage(marks),
+    unweightedAverage: averageOf(marks.map((item) => item.mark)),
+    coursePerformance: courses.map((course) => {
+      const courseMarks = marks.filter((item) => item.courseId === course.id);
+      return { course: course.title, weighted: weightedAverage(courseMarks), marked: courseMarks.length, total: assessments.filter((assessment) => assessment.course_id === course.id).length, maxMarks: courseMarks.reduce((sum, item) => sum + item.weight, 0) };
+    }).filter((row) => row.total > 0).sort((a, b) => (b.weighted ?? -1) - (a.weighted ?? -1)),
     markCount: marks.length,
     mastery: competencies.slice(0, 6),
     assessmentCount: assessments.length,
@@ -109,4 +121,11 @@ function stateLabel(state: string): string {
 export function averageOf(values: number[]): number | null {
   if (!values.length) return null;
   return Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10;
+}
+
+// Each mark counts in proportion to the marks it was out of (e.g. a 40-mark paper counts twice a 20-mark one).
+export function weightedAverage(rows: { mark: number; weight: number }[]): number | null {
+  const total = rows.reduce((sum, row) => sum + row.weight, 0);
+  if (!rows.length || total <= 0) return null;
+  return Math.round((rows.reduce((sum, row) => sum + row.mark * row.weight, 0) / total) * 10) / 10;
 }

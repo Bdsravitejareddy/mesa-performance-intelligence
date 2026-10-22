@@ -63,7 +63,9 @@ describe("dashboard snapshot from private records", () => {
     const snapshot = await getDashboardSnapshot();
     expect(snapshot.marks).toHaveLength(6);
     expect(snapshot.markCount).toBe(8);
+    // All marks out of 100 here, so weighted and unweighted agree.
     expect(snapshot.averageMark).toBe(65);
+    expect(snapshot.unweightedAverage).toBe(65);
     expect(snapshot.mastery[0].value).toBeNull();
     expect(snapshot.syncHealth?.level).toBe("warning");
   });
@@ -71,5 +73,14 @@ describe("dashboard snapshot from private records", () => {
   it("does not invent an average when no marks exist", async () => {
     const { averageOf } = await import("./dashboard-data");
     expect(averageOf([])).toBeNull();
+  });
+});
+
+describe("weighted average", () => {
+  it("weights each mark by its maximum marks", async () => {
+    const { weightedAverage } = await import("./dashboard-data");
+    // 90/100 on a 20-mark paper and 78.75/100 on a 40-mark paper.
+    expect(weightedAverage([{ mark: 90, weight: 20 }, { mark: 78.75, weight: 40 }])).toBe(82.5);
+    expect(weightedAverage([])).toBeNull();
   });
 });

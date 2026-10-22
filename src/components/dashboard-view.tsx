@@ -5,7 +5,6 @@ import {
   ArrowRight,
   ArrowUpRight,
   BookOpenCheck,
-  CircleDot,
   FileText,
   Layers3,
   Plus,
@@ -44,7 +43,7 @@ export function DashboardView({ data }: { data: DashboardSnapshot }) {
       {!data.demoMode && data.courses.length === 0 && data.assessmentCount === 0 && data.marks.length === 0 && <div className="info-callout" role="status"><span><strong>No Mesa records have been imported.</strong> Run an LMS sync from Marks & feedback, or add a course and its materials to start recording assessment evidence. <Link href="/courses" className="text-link">Open courses <ArrowRight size={14} /></Link></span></div>}
 
       <section className="metric-grid" aria-label="Performance summary">
-        <MetricCard label="Average assessment mark" value={average === null ? "—" : formatOfficialMark(average)} meta={data.markCount ? `${data.markCount} marked submissions · unweighted` : "No marks recorded"} icon={<TrendingUp size={17} />} accent="mint" />
+        <MetricCard label="Average assessment mark" value={average === null ? "—" : formatOfficialMark(average)} meta={data.markCount ? `${data.markCount} marks · weighted by maximum marks${data.unweightedAverage !== null && data.unweightedAverage !== data.averageMark ? ` (unweighted ${data.unweightedAverage})` : ""}` : "No marks recorded"} icon={<TrendingUp size={17} />} accent="mint" />
         <MetricCard label="Courses in view" value={String(data.courses.length)} meta="Course-linked evidence" icon={<BookOpenCheck size={17} />} accent="blue" />
         <MetricCard label="Assessments" value={String(data.assessmentCount)} meta="Across linked courses" icon={<FileText size={17} />} accent="violet" />
         <MetricCard label="Topics demonstrated" value={`${demonstrated} / ${data.topicCount}`} meta="Evidence-weighted view" icon={<Target size={17} />} accent="amber" />
@@ -53,11 +52,14 @@ export function DashboardView({ data }: { data: DashboardSnapshot }) {
       <section className="insight-grid">
         <article className="panel performance-panel">
           <div className="panel-heading">
-            <div><h2>Marks over time</h2><p>Official scores on the 100-point scale</p></div>
-            <div className="select-pill">All courses <CircleDot size={13} /></div>
+            <div><h2>Course performance</h2><p>Weighted by each assessment&apos;s maximum marks · how much of each course is marked</p></div>
           </div>
-          {data.markSeries.length > 1 ? <MarkChart points={data.markSeries} /> : <div className="chart-empty"><span className="empty-icon"><TrendingUp size={18} /></span><p>More marked work will reveal your trend.</p></div>}
-          <div className="chart-footnote"><span><i className="legend-dot" /> Marks out of 100</span><span>Unweighted marks; course grading rules are shown separately.</span></div>
+          <div className="course-performance">{data.coursePerformance.map((row) => <div className="course-bar" key={row.course}>
+            <span className="course-bar-name"><strong>{row.course.replace(/\s+with\s+.*$/i, "")}</strong><small>{row.marked} of {row.total} assessment{row.total === 1 ? "" : "s"} marked{row.marked ? ` · ${row.maxMarks} marks` : ""}</small></span>
+            <span className="course-bar-track" aria-hidden><i style={{ width: `${row.weighted ?? 0}%` }} className={row.weighted === null ? "" : row.weighted >= 85 ? "bar-good" : row.weighted < 65 ? "bar-review" : "bar-muted"} /><b style={{ width: `${Math.round((row.marked / Math.max(row.total, 1)) * 100)}%` }} /></span>
+            <span className="course-bar-value">{row.weighted === null ? "No marks yet" : `${row.weighted}/100`}</span>
+          </div>)}</div>
+          <div className="chart-footnote"><span><i className="legend-dot" /> Weighted course average</span><span>The thin line under each bar shows how much of the course has released marks.</span></div>
         </article>
 
         <article className="panel focus-panel">
@@ -103,29 +105,6 @@ function MetricCard({ label, value, meta, icon, accent, trend }: { label: string
     <div className="metric-value-row"><strong><CountUp value={value} /></strong>{trend && <span className="metric-trend"><ArrowUpRight size={13} /> {trend}</span>}</div>
     <small>{meta}</small>
   </article>;
-}
-
-function MarkChart({ points }: { points: { label: string; value: number }[] }) {
-  const width = 660;
-  const height = 205;
-  const pad = { top: 12, right: 14, bottom: 28, left: 33 };
-  const x = (index: number) => pad.left + (index / Math.max(points.length - 1, 1)) * (width - pad.left - pad.right);
-  const y = (value: number) => pad.top + ((100 - value) / 100) * (height - pad.top - pad.bottom);
-  const line = points.map((point, index) => `${index === 0 ? "M" : "L"} ${x(index)} ${y(point.value)}`).join(" ");
-  const area = `${line} L ${x(points.length - 1)} ${height - pad.bottom} L ${x(0)} ${height - pad.bottom} Z`;
-  const ticks = [0, 25, 50, 75, 100];
-  const change = Math.round((points.at(-1)!.value - points[0].value) * 10) / 10;
-
-  return <div className="chart-wrap">
-    <div className="chart-summary"><strong>{formatOfficialMark(points.at(-1)!.value)}</strong><span>{change > 0 ? <ArrowUpRight size={13} /> : change < 0 ? <ArrowDownRight size={13} /> : <CircleDot size={12} />} {change > 0 ? "+" : ""}{change} pts from first shown mark</span></div>
-    <svg className="mark-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Official marks over time on a 0 to 100 scale">
-      <defs><linearGradient id="mark-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#35b49d" stopOpacity=".23" /><stop offset="100%" stopColor="#35b49d" stopOpacity="0" /></linearGradient></defs>
-      {ticks.map((tick) => <g key={tick}><line x1={pad.left} y1={y(tick)} x2={width - pad.right} y2={y(tick)} className="chart-grid-line" /><text x={0} y={y(tick) + 4} className="chart-axis-label">{tick}</text></g>)}
-      <path d={area} fill="url(#mark-fill)" />
-      <path d={line} className="chart-line" />
-      {points.map((point, index) => <g key={`${point.label}-${index}`}><circle cx={x(index)} cy={y(point.value)} r="4.5" className="chart-point" /><text x={x(index)} y={height - 4} textAnchor="middle" className="chart-x-label">{point.label}</text></g>)}
-    </svg>
-  </div>;
 }
 
 function FocusRow({ number, title, detail, tag }: { number: string; title: string; detail: string; tag: string }) {
