@@ -9,6 +9,14 @@ const PPTX = "application/vnd.openxmlformats-officedocument.presentationml.prese
 // Failed documents are retried after a cool-down rather than on every run; quota exhaustion only waits for the next daily run.
 const RETRY_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
 const QUOTA_RETRY_AFTER_MS = 12 * 60 * 60 * 1000;
+const PAGES_PER_REQUEST = 4;
+export const VECTOR_ONLY = "The flagged slides contain only vector graphics or shapes that cannot be extracted as images.";
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let index = 0; index < items.length; index += size) out.push(items.slice(index, index + size));
+  return out;
+}
 
 export type VisionOutcome = { materialId: string; status: "succeeded" | "failed" | "skipped"; requested: number; described: number; message: string; quotaExhausted?: boolean };
 
@@ -44,37 +52,50 @@ export async function describeMaterial(client: SupabaseClient, materialId: strin
   const bytes = new Uint8Array(await file.arrayBuffer());
 
   const textBy = new Map(((pages ?? []) as ReviewPage[]).map((page) => [page.page_number, page.extracted_text.replace(/\s+/g, " ").trim()]));
-  const parts: VisionPart[] = [];
-  let requested: number[] = [];
+  // Requests carry at most a few pages each so the structured reply stays complete.
+  const batches: { parts: VisionPart[]; pages: number[] }[] = [];
   if (material.mime_type === PDF) {
     if (bytes.byteLength > MAX_INLINE_BYTES) return record({ materialId, status: "failed", requested: pending.length, described: 0, message: "The PDF is too large to send inline." });
-    requested = pending.map((item) => item.pageNumber);
-    parts.push({ text: `Document "${material.name}". Describe only pages ${requested.join(", ")}.` }, { inlineData: { mimeType: PDF, data: toBase64(bytes) } });
+    const pdfPart = { inlineData: { mimeType: PDF, data: toBase64(bytes) } };
+    for (const group of chunk(pending.map((item) => item.pageNumber), PAGES_PER_REQUEST * 2)) batches.push({ pages: group, parts: [{ text: `Document "${material.name}". Describe only pages ${group.join(", ")}.` }, pdfPart] });
   } else if (material.mime_type === PPTX) {
-    const assets = await extractSlideAssets(bytes, pending.map((item) => item.pageNumber));
-    for (const slide of assets) {
-      if (!slide.images.length && !slide.chartText.length && !slide.diagramText.length) continue;
-      requested.push(slide.slideNumber);
-      const context = [`Slide ${slide.slideNumber} of "${material.name}".`, `Text on the slide: ${(textBy.get(slide.slideNumber) ?? "").slice(0, 600) || "(none)"}.`, slide.chartText.length ? `Chart data: ${slide.chartText.join(" | ")}.` : "", slide.diagramText.length ? `Diagram labels: ${slide.diagramText.join(", ")}.` : "", slide.images.length ? `${slide.images.length} image(s) from this slide follow.` : ""].filter(Boolean).join(" ");
-      parts.push({ text: context }, ...slide.images.map((image) => ({ inlineData: { mimeType: image.mimeType, data: toBase64(image.data) } })));
+    const assets = (await extractSlideAssets(bytes, pending.map((item) => item.pageNumber))).filter((slide) => slide.images.length || slide.chartText.length || slide.diagramText.length);
+    for (const group of chunk(assets, PAGES_PER_REQUEST)) {
+      const parts: VisionPart[] = [];
+      for (const slide of group) {
+        const context = [`Slide ${slide.slideNumber} of "${material.name}".`, `Text on the slide: ${(textBy.get(slide.slideNumber) ?? "").slice(0, 600) || "(none)"}.`, slide.chartText.length ? `Chart data: ${slide.chartText.join(" | ")}.` : "", slide.diagramText.length ? `Diagram labels: ${slide.diagramText.join(", ")}.` : "", slide.images.length ? `${slide.images.length} image(s) from this slide follow.` : ""].filter(Boolean).join(" ");
+        parts.push({ text: context }, ...slide.images.map((image) => ({ inlineData: { mimeType: image.mimeType, data: toBase64(image.data) } })));
+      }
+      batches.push({ pages: group.map((slide) => slide.slideNumber), parts });
     }
-    if (!requested.length) return record({ materialId, status: "skipped", requested: pending.length, described: 0, message: "The flagged slides contain only vector graphics or shapes that cannot be extracted as images." });
+    if (!batches.length) return record({ materialId, status: "skipped", requested: pending.length, described: 0, message: VECTOR_ONLY });
   } else {
     return record({ materialId, status: "skipped", requested: 0, described: 0, message: "Only PDF and PPTX materials can be described." });
   }
+  const requested = batches.flatMap((batch) => batch.pages);
+  const unreadable = pending.length - requested.length;
 
-  try {
-    const result = await describeVisualPages(parts, requested, process.env, options.keys);
-    const rows = result.pages.map((page) => ({ user_id: material.user_id, material_id: material.id, page_number: page.page, author_kind: "ai_vision", provider_model: result.model, note: composeNote(page), colour_meaning: page.colourMeaning, decorative: page.decorative, updated_at: new Date().toISOString() })).filter((row) => row.note);
-    if (rows.length) {
-      const { error: saveError } = await client.from("material_page_notes").upsert(rows, { onConflict: "material_id,page_number,author_kind" });
-      if (saveError) return record({ materialId, status: "failed", requested: requested.length, described: 0, message: "Descriptions could not be saved." }, result.model);
+  let described = 0;
+  let model: string = available.model;
+  const errors: string[] = [];
+  for (const batch of batches) {
+    try {
+      const result = await describeVisualPages(batch.parts, batch.pages, process.env, options.keys);
+      model = result.model;
+      const rows = result.pages.map((page) => ({ user_id: material.user_id, material_id: material.id, page_number: page.page, author_kind: "ai_vision", provider_model: result.model, note: composeNote(page), colour_meaning: page.colourMeaning, decorative: page.decorative, updated_at: new Date().toISOString() })).filter((row) => row.note);
+      if (rows.length) {
+        const { error: saveError } = await client.from("material_page_notes").upsert(rows, { onConflict: "material_id,page_number,author_kind" });
+        if (saveError) { errors.push("Descriptions could not be saved."); continue; }
+      }
+      described += rows.length;
+    } catch (failure) {
+      if (failure instanceof QuotaExhaustedError) return { ...(await record({ materialId, status: "failed", requested: requested.length, described, message: failure.message }, model)), quotaExhausted: true };
+      errors.push(failure instanceof Error ? failure.message : "Description failed.");
     }
-    return record({ materialId, status: "succeeded", requested: requested.length, described: rows.length, message: `Described ${rows.length} of ${requested.length} page(s).` }, result.model);
-  } catch (failure) {
-    if (failure instanceof QuotaExhaustedError) return { ...(await record({ materialId, status: "failed", requested: requested.length, described: 0, message: failure.message }, available.model)), quotaExhausted: true };
-    return record({ materialId, status: "failed", requested: requested.length, described: 0, message: failure instanceof Error ? failure.message : "Description failed." }, available.model);
   }
+  const vectorNote = unreadable > 0 ? ` ${unreadable} slide(s) contain only vector graphics or shapes.` : "";
+  if (errors.length && !described) return record({ materialId, status: "failed", requested: requested.length, described: 0, message: `${errors[0]}${vectorNote}` }, model);
+  return record({ materialId, status: "succeeded", requested: requested.length, described, message: `Described ${described} of ${requested.length} page(s).${errors.length ? ` ${errors.length} request(s) failed: ${errors[0]}` : ""}${vectorNote}` }, model);
 }
 
 // Works through current flagged materials until the time budget runs out. Recently failed documents wait for a cool-down.

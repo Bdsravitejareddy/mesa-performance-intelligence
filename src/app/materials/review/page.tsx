@@ -11,7 +11,8 @@ export const dynamic = "force-dynamic";
 export default async function MaterialReviewListPage() {
   const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
   const rows = demoMode || !hasSupabaseConfig() ? [] : await loadQueue();
-  const covered = (row: (typeof rows)[number]) => row.summary.attention.every((item) => row.describedPages.has(item.pageNumber));
+  // Slides drawn only with vector graphics or shapes have nothing more to read automatically once the rest are described.
+  const covered = (row: (typeof rows)[number]) => row.summary.attention.every((item) => row.describedPages.has(item.pageNumber)) || Boolean(row.lastRun?.message.includes("vector graphics"));
   const open = rows.filter((row) => !row.review && row.summary.attention.length > 0 && !covered(row));
   const nothing = rows.filter((row) => !row.review && row.summary.attention.length === 0);
   const done = rows.filter((row) => row.review || (row.summary.attention.length > 0 && covered(row)));
@@ -32,7 +33,7 @@ export default async function MaterialReviewListPage() {
     {[["Slides still to describe", open], ["Described by AI or reviewed", done], ["Flagged only for decoration — nothing to add", nothing]].map(([label, list]) => (list as typeof rows).length > 0 && <section className="content-panel" key={label as string}><h2>{label as string} <span className="panel-count">{(list as typeof rows).length}</span></h2>
       <div className="review-list">{(list as typeof rows).map((row) => <Link href={`/materials/${row.id}`} className="review-row" key={row.id}>
         <span><strong>{row.name}</strong><small>{row.course}</small></span>
-        <span className="review-stats"><small>{row.summary.pages} slides · {row.summary.noText} without text · {row.summary.attention.length - row.summary.noText} mostly image</small><small>{row.aiNotes ? `${row.aiNotes} described by AI` : "Not described yet"}{row.notes ? ` · ${row.notes} member note${row.notes > 1 ? "s" : ""}` : ""}{row.review ? ` · ${row.review === "reviewed" ? "Reviewed" : "Marked not needed"}` : ""}</small>{row.lastRun && row.lastRun.status !== "succeeded" && <small className="review-run-issue">Last attempt {row.lastRun.status}: {row.lastRun.message}</small>}</span>
+        <span className="review-stats"><small>{row.summary.pages} slides · {row.summary.noText} without text · {row.summary.attention.length - row.summary.noText} mostly image</small><small>{row.aiNotes ? `${row.aiNotes} described by AI` : "Not described yet"}{row.notes ? ` · ${row.notes} member note${row.notes > 1 ? "s" : ""}` : ""}{row.review ? ` · ${row.review === "reviewed" ? "Reviewed" : "Marked not needed"}` : ""}</small>{row.lastRun && row.lastRun.message.includes("vector graphics") && <small>Some slides use vector graphics or shapes only; their text is already indexed.</small>}{row.lastRun && row.lastRun.status === "failed" && <small className="review-run-issue">Last attempt {row.lastRun.status}: {row.lastRun.message}</small>}</span>
       </Link>)}</div>
     </section>)}
     {!rows.length && <section className="content-panel"><p className="empty-hint">{demoMode ? "Preview mode has no imported materials." : "No imported materials are flagged for review."}</p></section>}

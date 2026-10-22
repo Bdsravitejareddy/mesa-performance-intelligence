@@ -93,3 +93,32 @@ describe("parallel key workers", () => {
     expect(workerKeySets(["a"])).toEqual([["a"]]);
   });
 });
+
+describe("batched slide requests", () => {
+  beforeEach(() => { vi.stubEnv("AI_DATA_PROCESSING_APPROVED", "true"); vi.stubEnv("GEMINI_API_KEY", "g-key"); vi.stubEnv("AI_API_BASE_URL", ""); vi.stubEnv("AI_API_KEY", ""); });
+  afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
+
+  it("splits six image slides into requests of at most four and saves every page", async () => {
+    const JSZip = (await import("jszip")).default;
+    const zip = new JSZip();
+    for (let slide = 1; slide <= 6; slide += 1) {
+      zip.file(`ppt/slides/slide${slide}.xml`, "<p:sld/>");
+      zip.file(`ppt/slides/_rels/slide${slide}.xml.rels`, `<Relationships><Relationship Id="r1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image${slide}.png"/></Relationships>`);
+      zip.file(`ppt/media/image${slide}.png`, new Uint8Array(10 * 1024).fill(slide));
+    }
+    const bytes = await zip.generateAsync({ type: "uint8array" });
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const requested = String(JSON.parse(String(init.body)).contents[0].parts[0].text).match(/\d+/g)!.map(Number);
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({ pages: requested.map((page) => ({ page, readable_text: "", visual_description: `Photo ${page}`, colour_meaning: "", decorative: false })) }) }] } }] }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = fakeClient({
+      course_materials: [{ id: "m1", user_id: "owner", name: "Deck.pptx", mime_type: "application/vnd.openxmlformats-officedocument.presentationml.presentation", storage_path: "p" }],
+      material_pages: [1, 2, 3, 4, 5, 6].map((page) => ({ material_id: "m1", page_number: page, extracted_text: "", table_data: [], has_visuals: true })),
+      material_page_notes: [],
+    }, bytes);
+    const outcome = await describeMaterial(client as never, "m1");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(outcome).toMatchObject({ status: "succeeded", requested: 6, described: 6 });
+  });
+});
