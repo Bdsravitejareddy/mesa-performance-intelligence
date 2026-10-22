@@ -65,7 +65,9 @@ describe("signed-in Drive connection management", () => {
     expect(mocks.configure).toHaveBeenCalledWith("actor", null, [{ driveFolderId: mapping.driveFolderId, mode: "course", courseId: null, rootCourseTitle: "Finance" }], "Personal", true);
     const body = await response.json();
     expect(Object.keys(body).sort()).toEqual(["connection", "expiresAt", "pairingCode", "setup"]);
-    expect(JSON.stringify(body)).not.toMatch(/SECRET|hash/);
+    // No secret or stored hash in the response; the script source itself mentions hashing by name.
+    expect(JSON.stringify({ ...body, setup: { ...body.setup, code: undefined } })).not.toMatch(/SECRET|hash/);
+    expect(body.setup.code).not.toMatch(/SECRET|[a-f0-9]{64}/);
   });
   it.each([
     { label: "x", mappings: [] },
