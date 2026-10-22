@@ -30,11 +30,15 @@ function tokenClient(accessToken: string): SupabaseClient {
   });
 }
 
+// Vercel's data cache outlives deployments, so the build is part of the key: a deploy that changes a
+// read model's shape never serves results computed by the previous code.
+const BUILD = process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.VERCEL_DEPLOYMENT_ID ?? "local";
+
 // Runs `load` with an RLS-scoped client and caches the (JSON-serialisable) result for this user and data version.
 export async function cachedRead<T>(name: string, load: (client: SupabaseClient) => Promise<T>): Promise<T> {
   const session = await workspaceSession();
   if (!session) return load(await createClient());
   // The arguments (user, data version) form the cache key; the loader itself only needs the client.
-  const run = unstable_cache(async (...key: string[]) => { void key; return load(tokenClient(session.accessToken)); }, ["mesa-read", name], { revalidate: 86_400, tags: [`user:${session.userId}`] });
+  const run = unstable_cache(async (...key: string[]) => { void key; return load(tokenClient(session.accessToken)); }, ["mesa-read", BUILD, name], { revalidate: 86_400, tags: [`user:${session.userId}`] });
   return run(session.userId, session.version);
 }
