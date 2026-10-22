@@ -113,7 +113,7 @@ export function buildBlindReport(raw: Record<string, unknown>, standard: Standar
 }
 
 export async function blindEvaluate(work: string, standard: Standard, workKind: WorkKind): Promise<BlindReport> {
-  const raw = await requestJsonFromProvider(BLIND_SYSTEM, JSON.stringify({ workKind, standard: { provenance: standard.label, criteria: standard.criteria }, work: work.slice(0, 60000) }));
+  const raw = await requestJsonFromProvider(BLIND_SYSTEM, JSON.stringify({ workKind, standard: { provenance: standard.label, criteria: standard.criteria }, work: work.slice(0, 60000) }), { timeoutMs: 100_000 });
   return buildBlindReport(raw, standard, work);
 }
 

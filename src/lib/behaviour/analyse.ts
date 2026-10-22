@@ -102,6 +102,14 @@ export function validateAnalysis(raw: Record<string, unknown>, sources: Source[]
 export async function analyseBehaviour(sources: Source[]): Promise<{ dimensions: DimensionAnalysis[]; inputHash: string }> {
   const inputHash = createHash("sha256").update(JSON.stringify(sources)).digest("hex");
   if (!sources.length) return { dimensions: validateAnalysis({}, sources), inputHash };
-  const raw = await requestJsonFromProvider(SYSTEM, JSON.stringify({ dimensions: DIMENSIONS, sources: sources.map(({ id, kind, label, text }) => ({ id, kind, label, text })) }));
-  return { dimensions: validateAnalysis(raw, sources), inputHash };
+  // Two parallel requests of six dimensions each keep replies short enough to finish reliably.
+  const payloadSources = sources.map(({ id, kind, label, text }) => ({ id, kind, label, text }));
+  const halves = [DIMENSIONS.slice(0, 6), DIMENSIONS.slice(6)];
+  const replies = await Promise.all(halves.map((dimensions) => requestJsonFromProvider(SYSTEM, JSON.stringify({ dimensions, sources: payloadSources }), { timeoutMs: 110_000 })));
+  const merged = { dimensions: replies.flatMap((reply, index) => {
+    const rows = Array.isArray(reply.dimensions) ? reply.dimensions as Record<string, unknown>[] : [];
+    // Fall back to position within the half when the model omits the dimension name.
+    return halves[index].map((dimension, position) => rows.find((row) => String(row.dimension ?? "").toLowerCase() === dimension.toLowerCase()) ?? { ...(rows[position] ?? {}), dimension });
+  }) };
+  return { dimensions: validateAnalysis(merged, sources), inputHash };
 }

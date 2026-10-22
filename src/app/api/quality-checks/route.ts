@@ -5,7 +5,7 @@ import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { getAIProcessingConfig, isAIConsentCurrent } from "@/lib/ai/consent";
 import { blindEvaluate, contextualAssessment, resolveStandard, type WorkKind } from "@/lib/quality/engine";
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const WORK_KINDS = new Set<WorkKind>(["written_answer", "case_solution", "presentation", "resume", "project", "proposal", "interview_response", "other"]);
 

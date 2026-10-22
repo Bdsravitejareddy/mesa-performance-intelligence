@@ -18,7 +18,7 @@ function RoleCard({ item, overlap }: { item: RoleReadiness; overlap?: number }) 
   return <article className="content-panel role-card">
     <header><div><strong>{item.role.name}</strong><small>{item.role.postings.map((posting) => posting.employer).join(" · ")} · retrieved {item.role.postings[0]?.retrievedAt}</small></div>{overlap !== undefined && <span className="competency-state state-emerging">{overlap}% overlap</span>}</header>
     <div className="role-meter" aria-label={`${item.evidenced} of ${item.skillRequirements} skill requirements evidenced`}><i style={{ width: `${share}%` }} /></div>
-    <p className="role-counts"><b>{item.evidenced}</b> of {item.skillRequirements} skill requirements evidenced · <b>{item.gaps}</b> demonstrated gaps · <b>{item.unknown}</b> without evidence</p>
+    <p className="role-counts"><b>{item.evidenced}</b> of {item.skillRequirements} skill requirements evidenced · <b>{item.gaps}</b> gaps or conflicting results · <b>{item.unknown}</b> without evidence</p>
     <p className="scope-note">Interview readiness reflects evidenced skills only. Eligibility (experience, degree) is listed separately for you to judge; no offer likelihood is implied.</p>
     <details className="competency-why"><summary>Requirements and evidence</summary><ul className="role-requirements">{item.requirements.filter((requirement) => requirement.status !== "eligibility").map((requirement, index) => <li key={`${requirement.quote}-${index}`} className={`req-${requirement.status}`}>
       <span className="req-status">{STATUS_LABELS[requirement.status]}</span><q>{requirement.quote}</q><small>{requirement.kind} · <a className="text-link" href={requirement.source.url} target="_blank" rel="noreferrer noopener">{requirement.source.employer}</a></small>

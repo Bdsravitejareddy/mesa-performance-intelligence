@@ -4,7 +4,7 @@ import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { getAIProcessingConfig, isAIConsentCurrent } from "@/lib/ai/consent";
 import { analyseBehaviour, gatherSources } from "@/lib/behaviour/analyse";
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 // Runs a new behaviour analysis; earlier runs are kept for comparison.
 export async function POST(request: NextRequest) {
