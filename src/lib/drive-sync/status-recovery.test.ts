@@ -38,7 +38,7 @@ describe('Drive status source isolation and recovery',()=>{
   it.each(['invitation removed','verification removed'])('hides a course owner’s source details and every source count when %s',async(reason)=>{
     const c=await configure(true),first=await start(c);
     for(const [id,index] of [['visible_file',0],['hidden_changed',1],['hidden_unchanged',1]] as const)await publish(c,first.scanId,source(c,id,'v1',index));
-    await reserve(c,first.scanId,source(c,'hidden_unsupported','v1',1,'application/vnd.google-apps.spreadsheet'));
+    await reserve(c,first.scanId,source(c,'hidden_unsupported','v1',1,'image/png'));
     const failed=await reserve(c,first.scanId,source(c,'hidden_failed','v1',1));
     await rpc('parse_failure',c.id,failed.itemId,'parse_pdf');
     await finish(c,first.scanId);

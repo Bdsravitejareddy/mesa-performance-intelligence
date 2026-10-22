@@ -3,7 +3,7 @@ import { PGlite } from "@electric-sql/pglite";
 export const owner = "11111111-1111-4111-8111-111111111111";
 const member = "22222222-2222-4222-8222-222222222222", outsider = "33333333-3333-4333-8333-333333333333", pending = "44444444-4444-4444-8444-444444444444";
 export const course = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-export async function createTestDatabase() {
+export async function createTestDatabase(options: { submissionSearch?: boolean } = {}) {
     const db = new PGlite();
     await db.exec(`
     create role anon; create role authenticated; create role service_role bypassrls;
@@ -23,6 +23,9 @@ export async function createTestDatabase() {
     const directory = new URL("../../../supabase/migrations/", import.meta.url);
     for (const file of (await readdir(directory)).filter(f => f.endsWith(".sql")).sort())
         await db.exec(await readFile(new URL(file, directory), "utf8"));
+    // Folder-traversal tests run without the submitted-work search root unless a test opts in.
+    if (!options.submissionSearch)
+        await db.exec("alter table public.drive_connections alter column find_submissions set default false");
     await db.exec(`
     insert into private.workspace_access(email) values('first@example.com'),('second@example.com'),('pending@example.com');
     insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data) values

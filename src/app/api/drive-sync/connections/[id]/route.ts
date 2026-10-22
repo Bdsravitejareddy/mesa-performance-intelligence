@@ -14,7 +14,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     onlyKeys(body, ["label", "enabled", "mappings"]);
     if (!Object.keys(body).length || (body.enabled !== undefined && typeof body.enabled !== "boolean")) throw new HttpError(400, "Provide a valid connection update.");
     const title = body.label === undefined ? current.label : label(body.label);
-    const folders = body.mappings === undefined ? current.mappings.map(({ driveFolderId, resourceKey, mode, courseId, rootCourseTitle }) => ({ driveFolderId, resourceKey, mode, courseId, rootCourseTitle })) : await mappings(body.mappings);
+    const folders = body.mappings === undefined ? current.mappings.filter((mapping) => mapping.mode !== "submissions").map(({ driveFolderId, resourceKey, mode, courseId, rootCourseTitle }) => ({ driveFolderId, resourceKey, mode, courseId, rootCourseTitle })) : await mappings(body.mappings);
     const enabled = body.enabled === undefined ? current.enabled : body.enabled as boolean;
     const connection = await new DriveSyncStore(createAdminClient()).configure(userId, id, folders, title, enabled, current.mappingRevision);
     return jsonResponse({ connection: safeConnection(connection) });

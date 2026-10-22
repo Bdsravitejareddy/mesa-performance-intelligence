@@ -10,6 +10,9 @@ var DRIVE_AGENT_CONFIG = /*__DRIVE_AGENT_CONFIG__*/null;
 var DRIVE_FIELDS = "id,name,mimeType,version,modifiedTime,size,resourceKey,shortcutDetails(targetId,targetMimeType,targetResourceKey)";
 var DRIVE_FOLDER = "application/vnd.google-apps.folder";
 var DRIVE_SHORTCUT = "application/vnd.google-apps.shortcut";
+var DRIVE_SHEET = "application/vnd.google-apps.spreadsheet";
+// Submitted-work search: only files this account owns, of importable types, whose names contain every term.
+var DRIVE_SEARCH_TYPES = ["application/vnd.google-apps.document", "application/vnd.google-apps.presentation", DRIVE_SHEET, "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.openxmlformats-officedocument.presentationml.presentation"];
 var DRIVE_MAX_BYTES = 20971520;
 var DRIVE_PLATFORM_MS = 360000;
 var DRIVE_DAILY_MS = 2700000;
@@ -94,7 +97,18 @@ function driveRun() {
     DRIVE_RUN.scanId = session.scanId;
     DRIVE_RUN.checkpoint = session.checkpoint || { roots: {} };
     session.mappings.forEach(function(mapping) {
-      if (!driveString(mapping.id) || !driveString(mapping.driveFolderId) || !driveString(mapping.rootCourseTitle) || ["course", "collection"].indexOf(mapping.mode) < 0) throw driveError("Invalid folder mapping", true);
+      if (!driveString(mapping.id) || !driveString(mapping.driveFolderId) || !driveString(mapping.rootCourseTitle) || ["course", "collection", "submissions"].indexOf(mapping.mode) < 0) throw driveError("Invalid folder mapping", true);
+      if (mapping.mode === "submissions") {
+        if (!Array.isArray(mapping.searches)) throw driveError("Invalid submission search", true);
+        if (!Object.prototype.hasOwnProperty.call(DRIVE_RUN.checkpoint.roots, mapping.id)) {
+          var searches = mapping.searches.map(function(search) {
+            if (!search || !driveString(search.id) || !driveString(search.courseFolderId) || !driveString(search.courseFolderTitle) || !Array.isArray(search.terms) || !search.terms.length || search.terms.some(function(term) { return !driveString(term) || term.length > 60; })) throw driveError("Invalid submission search", true);
+            return { id: search.id, courseFolderId: search.courseFolderId, courseFolderTitle: search.courseFolderTitle, terms: search.terms.slice(0, 4) };
+          });
+          DRIVE_RUN.checkpoint.roots[mapping.id] = { pendingFolders: searches, visitedFolderIds: [], completed: false, failed: false };
+        }
+        return;
+      }
       if (!Object.prototype.hasOwnProperty.call(DRIVE_RUN.checkpoint.roots, mapping.id)) {
         var rootFolder = { id: mapping.driveFolderId, courseFolderId: mapping.driveFolderId, courseFolderTitle: mapping.rootCourseTitle };
         if (mapping.resourceKey !== null && mapping.resourceKey !== undefined) {
@@ -168,7 +182,11 @@ function driveCheckpoint(errors) {
 function driveLoadPage(mapping, root) {
   var current = root.pendingFolders[0], page;
   try {
-    var query = { q: "'" + current.id.replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "' in parents and trashed = false", fields: "nextPageToken,incompleteSearch,files(" + DRIVE_FIELDS + ")", pageSize: 100, supportsAllDrives: true, includeItemsFromAllDrives: true };
+    var quote = function(value) { return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'"); };
+    var filter = Array.isArray(current.terms)
+      ? "trashed = false and 'me' in owners and (" + DRIVE_SEARCH_TYPES.map(function(type) { return "mimeType = '" + type + "'"; }).join(" or ") + ")" + current.terms.map(function(term) { return " and name contains '" + quote(term) + "'"; }).join("")
+      : "'" + quote(current.id) + "' in parents and trashed = false";
+    var query = { q: filter, fields: "nextPageToken,incompleteSearch,files(" + DRIVE_FIELDS + ")", pageSize: 100, supportsAllDrives: true, includeItemsFromAllDrives: true };
     if (current.pageToken) query.pageToken = current.pageToken;
     page = driveGoogleJson("files", query, current.id, current.resourceKey);
     if (!Array.isArray(page.files) || (page.nextPageToken !== undefined && typeof page.nextPageToken !== "string")) throw driveError("Invalid Drive listing", true);
@@ -262,6 +280,7 @@ function driveTransfer(file, itemId) {
   var contentType = file.mimeType, parameters = {}, suffix = "files/" + encodeURIComponent(file.driveFileId);
   if (contentType === "application/vnd.google-apps.document") { contentType = "application/pdf"; suffix += "/export"; parameters.mimeType = contentType; }
   else if (contentType === "application/vnd.google-apps.presentation") { contentType = "application/vnd.openxmlformats-officedocument.presentationml.presentation"; suffix += "/export"; parameters.mimeType = contentType; }
+  else if (contentType === DRIVE_SHEET) { contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"; suffix += "/export"; parameters.mimeType = contentType; }
   else { parameters.alt = "media"; parameters.supportsAllDrives = true; }
   var keyMatch = /[?&]resourcekey=([^&#]*)/.exec(file.sourceUrl), key = keyMatch ? decodeURIComponent(keyMatch[1]) : undefined;
   var download = driveGoogle(suffix, parameters, file.driveFileId, key);

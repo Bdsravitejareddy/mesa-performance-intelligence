@@ -4,6 +4,7 @@ import { DriveSyncStore } from '@/lib/drive-sync/store';
 import { HttpError, jsonError, jsonResponse, readJsonBody } from '@/lib/drive-sync/http';
 import { createImportUpload, finalizeImport, requireId, reserveSource, validateSource, type ImportContext } from '@/lib/drive-sync/importer';
 import type { ScanCheckpoint } from '@/lib/drive-sync/contracts';
+import { buildSubmissionSearches } from '@/lib/drive-sync/submission-search';
 type Operation = 'session' | 'inventory' | 'upload' | 'finalize' | 'checkpoint';
 function exact(body: Record<string, unknown>, keys: string[]) { if (Object.keys(body).some(k => !keys.includes(k)))
     throw new HttpError(400, 'Unexpected request field.'); }
@@ -51,8 +52,14 @@ export function machineHandler(operation: Operation) {
                 }
             }
             const client = createAdminClient(), store = new DriveSyncStore(client), context: ImportContext = { ...identity, client, store };
-            if (operation === 'session')
-                return jsonResponse(await store.startScan(identity.connectionId));
+            if (operation === 'session') {
+                const session = await store.startScan(identity.connectionId);
+                // The submitted-work root carries its title searches; folder roots are unchanged.
+                if (!session.mappings.some(mapping => mapping.mode === 'submissions'))
+                    return jsonResponse(session);
+                const searches = await buildSubmissionSearches(client);
+                return jsonResponse({ ...session, mappings: session.mappings.map(mapping => mapping.mode === 'submissions' ? { ...mapping, searches } : mapping) });
+            }
             if (operation === 'inventory') {
                 context.scanId = requireId(body.scanId);
                 const files = (body.files as unknown[]).map(validateSource), decisions = [];

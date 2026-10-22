@@ -12,7 +12,7 @@ const columns = "id,user_id,label,enabled,mapping_revision,last_error,last_scan_
 type ConnectionRow = {
   id: string; user_id: string; label: string; enabled: boolean; mapping_revision: number;
   last_error?: string | null; last_scan_at?: string | null; created_at?: string;
-  drive_folder_mappings: Array<{ id: string; drive_folder_id: string; resource_key?: string | null; mode: "course" | "collection"; course_id: string | null; root_course_title: string; enabled: boolean }>;
+  drive_folder_mappings: Array<{ id: string; drive_folder_id: string; resource_key?: string | null; mode: "course" | "collection" | "submissions"; course_id: string | null; root_course_title: string; enabled: boolean }>;
 };
 
 export function isConfigured(): boolean {

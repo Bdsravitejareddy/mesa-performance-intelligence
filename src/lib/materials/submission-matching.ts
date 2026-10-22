@@ -53,14 +53,17 @@ export type MatchOutcome = { materialId: string; kind: Classification["kind"]; a
 // Recognises the student's own submissions among imported materials of linked courses and attaches them as evidence.
 export async function matchDriveSubmissions(client: SupabaseClient, budgetMs: number): Promise<MatchOutcome[]> {
   const deadline = Date.now() + budgetMs;
-  const [links, current, existing, held] = await Promise.all([
+  const [links, current, existing, held, lmsCourses] = await Promise.all([
     client.from("course_links").select("assessment_course_id, material_course_id"),
     client.from("current_course_materials").select("id"),
     client.from("material_submission_matches").select("material_id"),
     client.from("lms_unassigned_assignments").select("id, title, record, resolved_course_id").is("resolved_course_id", null),
+    client.from("assessments").select("course_id"),
   ]);
   if (links.error || current.error || existing.error || held.error) throw new Error("Drive submission matching could not load its inputs.");
   const assessmentCourseOf = new Map((links.data ?? []).map((row) => [row.material_course_id as string, row.assessment_course_id as string]));
+  // Drive title-search hits are filed straight under the LMS course of the assessment they matched.
+  for (const row of lmsCourses.data ?? []) if (!assessmentCourseOf.has(row.course_id as string)) assessmentCourseOf.set(row.course_id as string, row.course_id as string);
   if (!assessmentCourseOf.size) return [];
   const done = new Set((existing.data ?? []).map((row) => row.material_id as string));
   const ids = (current.data ?? []).map((row) => row.id as string).filter((id) => !done.has(id));

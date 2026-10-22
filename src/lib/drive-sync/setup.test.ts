@@ -35,7 +35,7 @@ describe('Drive setup metadata', () => {
       const c=configured.rows[0].value;
       const started=await db.query<{value:{scanId:string}}>(`select public.drive_sync_start_scan($1) value`,[c.id]);
       const scanId=started.rows[0].value.scanId;
-      for(const [id,mime] of [['unsupported_file','application/vnd.google-apps.spreadsheet'],['failed_file','application/pdf']]) {
+      for(const [id,mime] of [['unsupported_file','image/png'],['failed_file','application/pdf']]) {
         await db.query(`select public.drive_sync_reserve($1,$2,$3::jsonb)`,[c.id,scanId,JSON.stringify({driveFileId:id,name:id,mimeType:mime,parentId:'root_folder_123',sourceUrl:`https://drive.google.com/file/d/${id}/view`,fingerprint:'v1',folderMappingId:c.mappings[0].id,courseFolderId:'root_folder_123',courseFolderTitle:'Finance'})]);
       }
       await db.exec(`update public.drive_sources set parse_failure_count=3,parse_failure_code='parse_pdf' where drive_file_id='failed_file'`);

@@ -2,7 +2,7 @@ export type FolderMapping = {
   id: string;
   driveFolderId: string;
   resourceKey?: string | null;
-  mode: "course" | "collection";
+  mode: "course" | "collection" | "submissions";
   courseId?: string | null;
   rootCourseTitle: string;
 };

@@ -74,6 +74,22 @@ describe("Drive Apps Script runtime",()=>{
     expect(h.checkpoints[0]).toMatchObject({checkpoint:{roots:{mapping:{pendingFolders:[{id:"root",resourceKey:"0-root_KEY"}]}}}});
   });
 
+  it("searches only owned, importable files by assignment-title words and exports Sheets as XLSX",async()=>{
+    const sheet={...pdf("sheet"),name:"Copy of Session 1 Rapido Workbook",mimeType:"application/vnd.google-apps.spreadsheet"};
+    const h=await harness({installed:true,pages:{"undefined:":{files:[sheet]}}});
+    Object.assign(h.mapping,{driveFolderId:"search:submissions",mode:"submissions",courseId:null,rootCourseTitle:"Submitted work",searches:[{id:"search:abc",courseFolderId:"course-uuid",courseFolderTitle:"Data Driven Decision Making",terms:["Session","1","Rapido","Workbook"]}]});
+    vm.runInContext("syncDrive()",h.context);
+    const listing=new URL(h.requests.find(r=>r.url.startsWith("https://www.googleapis.com/drive/v3/files?"))!.url).searchParams.get("q")!;
+    expect(listing).toContain("'me' in owners");
+    expect(listing).toContain("name contains 'Rapido' and name contains 'Workbook'");
+    expect(listing).not.toContain("in parents");
+    const inventory=JSON.parse(String(h.requests.find(r=>r.url.endsWith("/inventory"))!.payload));
+    expect(inventory.files[0]).toMatchObject({driveFileId:"sheet",folderMappingId:"mapping",courseFolderId:"course-uuid",parentId:"search:abc"});
+    const exported=h.requests.find(r=>r.url.includes("/files/sheet/export"))!;
+    expect(new URL(exported.url).searchParams.get("mimeType")).toBe("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    expect(h.finalized).toContain("item-sheet");
+  });
+
   it("exports Docs as PDF, Slides as PPTX and transfers binary bytes without bearer credentials",async()=>{
     const h=await harness({installed:true,pages:{"root:":{files:[{...pdf("doc"),mimeType:"application/vnd.google-apps.document"},{...pdf("slides"),mimeType:"application/vnd.google-apps.presentation"},pdf("binary")]}}});
     vm.runInContext("syncDrive()",h.context);

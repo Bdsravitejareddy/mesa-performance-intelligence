@@ -45,6 +45,8 @@ beforeEach(async () => {
   `);
   const directory = new URL("../../../supabase/migrations/", import.meta.url);
   for (const file of (await readdir(directory)).filter(f => f.endsWith(".sql")).sort()) await db.exec(await readFile(new URL(file, directory), "utf8"));
+  // These folder-traversal tests run without the submitted-work search root.
+  await db.exec("alter table public.drive_connections alter column find_submissions set default false");
   await db.exec(`
     insert into private.workspace_access(email) values('first@example.com'),('second@example.com'),('pending@example.com');
     insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data) values
