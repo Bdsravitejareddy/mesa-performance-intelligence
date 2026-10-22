@@ -47,7 +47,7 @@ export type ScanCheckpoint = { roots: Record<string, RootCheckpoint> };
 export type ImportItem = {
   itemId: string;
   storagePath: string;
-  exportFormat: "pdf" | "pptx";
+  exportFormat: "pdf" | "pptx" | "docx" | "xlsx";
 };
 export type ImportDecision =
   | ({ decision: "upload" } & ImportItem)

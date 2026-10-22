@@ -1,6 +1,15 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { extractPdfPages, extractPptxSlides, type ExtractedPage } from "@/lib/documents";
+import { extractDocxPages, extractXlsxSheets } from "@/lib/office-documents";
+
+// Stored MIME type for each import format; DOCX/XLSX/PPTX are ZIP containers, PDF has its own signature.
+const FORMAT_MIME: Record<'pdf' | 'pptx' | 'docx' | 'xlsx', string> = {
+    pdf: 'application/pdf',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+};
 import type { SourceFile, ImportDecision } from "./contracts";
 import type { DriveSyncStore } from "./store";
 import { safeDriveSourceUrl } from "./source-url";
@@ -52,7 +61,7 @@ type Source = {
     id: string;
     course_id: string;
     course_user_id: string;
-    export_format: 'pdf' | 'pptx';
+    export_format: 'pdf' | 'pptx' | 'docx' | 'xlsx';
     folder_mapping_id: string;
 };
 async function itemContext(c: ImportContext, id: string): Promise<{
@@ -116,11 +125,11 @@ async function published(c: ImportContext, materialId: string, version: number, 
 }
 async function failure(c: ImportContext, id: string, code: string) { const { error } = await c.client.rpc('drive_sync_parse_failure', { p_connection_id: c.connectionId, p_item_id: id, p_code: code }); if (error)
     throw new HttpError(503, 'Could not record import failure.'); }
-export function isPermanentParseFailure(error:unknown,format:'pdf'|'pptx'):boolean {
+export function isPermanentParseFailure(error:unknown,format:'pdf'|'pptx'|'docx'|'xlsx'):boolean {
  if(!(error instanceof Error))return false;
  return format==='pdf'
   ? ['InvalidPDFException','PasswordException','FormatError'].includes(error.name) || (error.name==='UnknownErrorException' && 'details' in error && typeof error.details==='string' && /^FormatError:/.test(error.details))
-  : /zip|central directory|readable slides|invalid|malformed|unclosed|unexpected|corrupt|end of data|encrypted|unsupported compression/i.test(error.message);
+  : /zip|central directory|readable slides|readable content|readable sheets|invalid|malformed|unclosed|unexpected|corrupt|end of data|encrypted|unsupported compression|size limit/i.test(error.message);
 }
 export async function finalizeImport(c: ImportContext, id: string): Promise<{
     materialId: string;
@@ -136,7 +145,7 @@ export async function finalizeImport(c: ImportContext, id: string): Promise<{
     const { data: file, error } = await c.client.storage.from('course-files').download(item.storage_path);
     if (error || !file)
         throw new HttpError(503, 'Uploaded file is not available yet.');
-    const s = item.source_snapshot, mime = source.export_format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+    const s = item.source_snapshot, mime = FORMAT_MIME[source.export_format];
     const native = s.mimeType.startsWith('application/vnd.google-apps.');
     if (file.size < 1 || file.size > maxSize || (!native && s.size !== undefined && s.size !== file.size) || file.type.split(';')[0] !== mime || (!native && s.name.split('.').at(-1)?.toLowerCase() !== source.export_format)) {
         await failure(c, id, 'invalid_metadata');
@@ -151,14 +160,17 @@ export async function finalizeImport(c: ImportContext, id: string): Promise<{
     let pages: ExtractedPage[];
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-        const extraction = source.export_format === 'pdf' ? extractPdfPages(bytes) : (async () => (await extractPptxSlides(bytes)).map(s => ({ pageNumber: s.slideNumber, text: s.text, tables: s.tables, hasVisuals: s.hasVisuals })))();
+        const extraction = source.export_format === 'pdf' ? extractPdfPages(bytes)
+            : source.export_format === 'docx' ? extractDocxPages(bytes)
+            : source.export_format === 'xlsx' ? extractXlsxSheets(bytes)
+            : (async () => (await extractPptxSlides(bytes)).map(s => ({ pageNumber: s.slideNumber, text: s.text, tables: s.tables, hasVisuals: s.hasVisuals })))();
         pages = await Promise.race([extraction, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new HttpError(503, 'Parsing timed out; retry this import.')), 45000); })]);
     }
     catch (error) {
         if (error instanceof HttpError)
             throw error;
         if (!isPermanentParseFailure(error, source.export_format)) throw new HttpError(503, 'Document parsing is temporarily unavailable; retry this import.');
-        await failure(c, id, source.export_format === 'pdf' ? 'parse_pdf' : 'parse_pptx');
+        await failure(c, id, `parse_${source.export_format}`);
         throw new HttpError(422, 'Document could not be parsed. Review the source or retry from the dashboard.');
     }
     finally {
