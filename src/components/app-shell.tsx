@@ -10,12 +10,14 @@ import { groups, sectionIndex, chapters } from "@/components/navigation";
 import { StorySeams, ChapterRail } from "@/components/story-flow";
 import { GuidedTour, tourSeen } from "@/components/guided-tour";
 import { GlassBackdrop } from "@/components/glass-backdrop";
+import { useEdgeReveal } from "@/components/edge-reveal";
 
 
 export function AppShell({ children, demoMode }: { children: React.ReactNode; demoMode: boolean }) {
   const pathname = usePathname();
   useRevealOnScroll(pathname);
   useSpotlight();
+  useEdgeReveal();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
   // First visit on this browser opens the guided tour once; it can be replayed from the top bar.
@@ -30,6 +32,8 @@ export function AppShell({ children, demoMode }: { children: React.ReactNode; de
   return (
     <div className="app-frame glass-ui" data-theme="nature" data-tone={tone}>
       <GlassBackdrop />
+      <span className="edge-handle edge-handle-left" aria-hidden="true" />
+      <span className="edge-handle edge-handle-right" aria-hidden="true" />
       <aside className="sidebar">
         <Link href="/" className="brand-lockup" aria-label="Mesa Performance Intelligence home">
           <span className="brand-mark"><Activity size={18} strokeWidth={2.5} /></span>

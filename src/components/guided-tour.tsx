@@ -39,9 +39,11 @@ export function GuidedTour({ open, onClose }: { open: boolean; onClose: () => vo
       setBox(rect && rect.width > 4 && rect.height > 4 ? { top: rect.top - 8, left: rect.left - 8, width: rect.width + 16, height: rect.height + 16 } : null);
     };
     measure();
+    // Edge panels slide in when the tour opens; measure again once they have settled.
+    const settle = window.setTimeout(measure, 560);
     window.addEventListener("resize", measure);
     window.addEventListener("scroll", measure, { passive: true });
-    return () => { window.removeEventListener("resize", measure); window.removeEventListener("scroll", measure); };
+    return () => { window.clearTimeout(settle); window.removeEventListener("resize", measure); window.removeEventListener("scroll", measure); };
   }, [open, current.target]);
 
   useEffect(() => {

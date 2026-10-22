@@ -463,3 +463,22 @@ html[data-story-enter="from-below"] .main-content{animation:storyDrop .6s cubic-
 .narrative-panel{margin-top:16px}.narrative-panel>.why{margin-top:0}
 @media(max-width:1180px){.highlight-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:620px){.highlight-grid{grid-template-columns:1fr}}
+
+/* Edge reveal: with a precise pointer on wide screens, the sidebar and chapter rail hide until the cursor
+   touches the left or right edge, giving the page the full width. Keyboard focus and the tour also reveal them. */
+.edge-handle{display:none}
+@media (hover:hover) and (pointer:fine) and (min-width:901px){
+  html[data-edge-reveal] .glass-ui .sidebar{transform:translateX(calc(-100% - 28px));opacity:.0;transition:transform .5s cubic-bezier(.2,.7,.2,1),opacity .35s ease;z-index:60;box-shadow:inset 0 1px 0 rgba(255,255,255,.95),0 30px 80px -20px rgba(36,44,30,.45)}
+  html[data-edge-reveal][data-nav-open] .glass-ui .sidebar,html[data-edge-reveal] .glass-ui .sidebar:focus-within,html.tour-open .glass-ui .sidebar{transform:none;opacity:1}
+  html[data-edge-reveal] .glass-ui .main-column{margin-left:calc(var(--gap) + 14px);transition:margin .5s cubic-bezier(.2,.7,.2,1)}
+  html[data-edge-reveal] .chapter-rail{transform:translate(calc(100% + 30px),-50%);opacity:0;transition:transform .45s cubic-bezier(.2,.7,.2,1),opacity .3s ease}
+  html[data-edge-reveal][data-rail-open] .chapter-rail,html[data-edge-reveal] .chapter-rail:focus-within,html.tour-open .chapter-rail{transform:translateY(-50%);opacity:1}
+  html[data-edge-reveal] .glass-ui .topbar,html[data-edge-reveal] .glass-ui .demo-banner{margin-right:calc(var(--gap) + 14px)}
+  html[data-edge-reveal] .glass-ui .main-content{padding-right:36px}
+  html[data-edge-reveal] .seam-up{left:0}
+  html[data-edge-reveal] .edge-handle{display:block;position:fixed;top:50%;z-index:55;width:5px;height:64px;margin-top:-32px;border-radius:999px;background:rgba(18,20,18,.22);box-shadow:0 0 0 1px rgba(255,255,255,.6);transition:opacity .3s,transform .3s;pointer-events:none}
+  html[data-edge-reveal] .edge-handle-left{left:6px}
+  html[data-edge-reveal] .edge-handle-right{right:6px}
+  html[data-edge-reveal][data-nav-open] .edge-handle-left,html[data-edge-reveal][data-rail-open] .edge-handle-right{opacity:0;transform:scaleY(.5)}
+}
+@media (prefers-reduced-motion: reduce){html[data-edge-reveal] .glass-ui .sidebar,html[data-edge-reveal] .chapter-rail{transition:none}}
