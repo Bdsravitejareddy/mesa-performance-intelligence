@@ -63,8 +63,11 @@ export async function gradeSubmissions(client: SupabaseClient, budgetMs: number,
     const assessment = assessmentById.get(submission.assessment_id);
     if (!assessment) continue;
     const docs = docsBySubmission.get(submission.id) ?? [];
-    const pending = docs.filter((doc) => doc.extraction_status !== "complete");
-    const text = [submission.answer_text ?? "", ...docs.filter((doc) => doc.extraction_status === "complete").map((doc) => `[${doc.name} · version ${doc.source_version}]\n${doc.extracted_text}`)].filter((part) => part.trim()).join("\n\n").trim();
+    // Files whose images still await review are graded on their text; the note says visuals were not read.
+    const readable = (doc: DocumentRow) => doc.extraction_status === "complete" || doc.extraction_status === "needs_visual_review";
+    const pending = docs.filter((doc) => !readable(doc));
+    const visualsUnread = docs.some((doc) => doc.extraction_status === "needs_visual_review");
+    const text = [submission.answer_text ?? "", ...docs.filter(readable).map((doc) => `[${doc.name} · version ${doc.source_version}]\n${doc.extracted_text}`)].filter((part) => part.trim()).join("\n\n").trim();
     if (!text) { if (docs.length || submission.answer_text) outcomes.push({ submissionId: submission.id, assessment: assessment.title, status: "skipped", note: "No readable text in the submitted files." }); continue; }
     if (pending.length) { outcomes.push({ submissionId: submission.id, assessment: assessment.title, status: "skipped", note: `${pending.length} attached file${pending.length === 1 ? " is" : "s are"} not fully extracted; grading waits so no submitted work is left out.` }); continue; }
     if (Date.now() > deadline - 15_000) break;
@@ -85,6 +88,7 @@ export async function gradeSubmissions(client: SupabaseClient, budgetMs: number,
     let aiReport: Awaited<ReturnType<typeof blindEvaluate>> | null = null;
     let aiStatus: "complete" | "failed" | "skipped" = "skipped";
     let note = aiAllowed ? "" : "AI grading needs the current AI consent for this account; only the code score was computed.";
+    if (visualsUnread) note = `${note} Images and charts in the submitted file were not read; only its text was graded.`.trim();
     if (aiAllowed && Date.now() < deadline - AI_RESERVE_MS) {
       try { aiReport = await blindEvaluate(text, standard, workKind(assessment.title, assessment.assessment_format)); aiStatus = "complete"; }
       catch (error) { aiStatus = "failed"; note = error instanceof Error ? error.message.slice(0, 300) : "AI grading failed; it will retry on the next run."; }

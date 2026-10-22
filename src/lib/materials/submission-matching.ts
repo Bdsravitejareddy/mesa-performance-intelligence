@@ -53,6 +53,7 @@ export type MatchOutcome = { materialId: string; kind: Classification["kind"]; a
 // Recognises the student's own submissions among imported materials of linked courses and attaches them as evidence.
 export async function matchDriveSubmissions(client: SupabaseClient, budgetMs: number): Promise<MatchOutcome[]> {
   const deadline = Date.now() + budgetMs;
+  const linked = await attachLinkedFiles(client);
   const [links, current, existing, held, lmsCourses] = await Promise.all([
     client.from("course_links").select("assessment_course_id, material_course_id"),
     client.from("current_course_materials").select("id"),
@@ -64,10 +65,10 @@ export async function matchDriveSubmissions(client: SupabaseClient, budgetMs: nu
   const assessmentCourseOf = new Map((links.data ?? []).map((row) => [row.material_course_id as string, row.assessment_course_id as string]));
   // Drive title-search hits are filed straight under the LMS course of the assessment they matched.
   for (const row of lmsCourses.data ?? []) if (!assessmentCourseOf.has(row.course_id as string)) assessmentCourseOf.set(row.course_id as string, row.course_id as string);
-  if (!assessmentCourseOf.size) return [];
+  if (!assessmentCourseOf.size) return linked;
   const done = new Set((existing.data ?? []).map((row) => row.material_id as string));
   const ids = (current.data ?? []).map((row) => row.id as string).filter((id) => !done.has(id));
-  if (!ids.length) return [];
+  if (!ids.length) return linked;
   const { data: materials, error } = await client.from("course_materials").select("id, user_id, name, course_id, mime_type, file_size, version, extraction_status, drive_source_id").in("id", ids).in("course_id", [...assessmentCourseOf.keys()]).not("drive_source_id", "is", null);
   if (error) throw new Error("Drive materials could not be loaded.");
   const { data: assessments } = await client.from("assessments").select("id, user_id, course_id, title").in("course_id", [...new Set(assessmentCourseOf.values())]);
@@ -122,6 +123,33 @@ export async function matchDriveSubmissions(client: SupabaseClient, budgetMs: nu
     }
     await client.from("material_submission_matches").upsert({ ...base, kind: classification.kind, method: "title_and_ai", confidence: classification.confidence, reason: note.slice(0, 600), title_score: score, provider_model: model, submission_id: submissionId, ...(shortlist ? { assessment_id: shortlist.assessment.id, assessment_user_id: (shortlist.assessment as { user_id: string }).user_id } : { unassigned_id: heldMatch!.assessment.id }) }, { onConflict: "material_id" });
     outcomes.push({ materialId: material.id, kind: classification.kind, assessmentTitle: targetTitle, attached, note });
+  }
+  return [...linked, ...outcomes];
+}
+
+// Files the student linked as submitted work on Nexus are attached to that submission directly: the page
+// already says which assessment they belong to, so no title matching or AI classification is needed.
+export async function attachLinkedFiles(client: SupabaseClient): Promise<MatchOutcome[]> {
+  const { data: links } = await client.from("submission_links").select("submission_id, drive_file_id").not("drive_file_id", "is", null);
+  if (!links?.length) return [];
+  const { data: sources } = await client.from("drive_sources").select("drive_file_id, current_material_id").in("drive_file_id", [...new Set(links.map((row) => row.drive_file_id as string))]).not("current_material_id", "is", null);
+  const materialOf = new Map((sources ?? []).map((row) => [row.drive_file_id as string, row.current_material_id as string]));
+  const outcomes: MatchOutcome[] = [];
+  for (const link of links) {
+    const materialId = materialOf.get(link.drive_file_id as string);
+    if (!materialId) continue;
+    const [{ data: material }, { data: submission }] = await Promise.all([
+      client.from("course_materials").select("id, user_id, name, mime_type, file_size, version, extraction_status, drive_source_id").eq("id", materialId).maybeSingle(),
+      client.from("submissions").select("id, user_id, assessment_id, assessments(title)").eq("id", link.submission_id as string).maybeSingle(),
+    ]);
+    if (!material || !submission || material.user_id !== submission.user_id) continue;
+    const { data: pages } = await client.from("material_pages").select("page_number, extracted_text").eq("material_id", material.id).order("page_number");
+    const text = (pages ?? []).map((page) => `[Page or sheet ${page.page_number}]\n${page.extracted_text}`).join("\n\n");
+    const { error } = await client.from("submission_documents").insert({ user_id: submission.user_id, submission_id: submission.id, source_kind: "drive", source_id: material.drive_source_id ?? material.id, course_material_id: material.id, name: material.name, mime_type: material.mime_type, file_size: material.file_size, extracted_text: text.slice(0, 500_000), extraction_status: material.extraction_status, source_version: String(material.version) });
+    if (error && error.code !== "23505") continue;
+    const title = (submission.assessments as unknown as { title: string } | null)?.title ?? null;
+    await client.from("material_submission_matches").upsert({ material_id: material.id, user_id: material.user_id, kind: "submission", method: "nexus_link", confidence: "high", reason: "Linked as submitted work on the Nexus assignment page.", title_score: 1, submission_id: submission.id, assessment_id: submission.assessment_id, assessment_user_id: submission.user_id, updated_at: new Date().toISOString() }, { onConflict: "material_id" });
+    if (!error) outcomes.push({ materialId: material.id, kind: "submission", assessmentTitle: title, attached: true, note: "Linked on the Nexus submission page." });
   }
   return outcomes;
 }

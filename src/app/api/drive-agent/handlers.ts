@@ -4,7 +4,7 @@ import { DriveSyncStore } from '@/lib/drive-sync/store';
 import { HttpError, jsonError, jsonResponse, readJsonBody } from '@/lib/drive-sync/http';
 import { createImportUpload, finalizeImport, requireId, reserveSource, validateSource, type ImportContext } from '@/lib/drive-sync/importer';
 import type { ScanCheckpoint } from '@/lib/drive-sync/contracts';
-import { buildSubmissionSearches } from '@/lib/drive-sync/submission-search';
+import { buildLinkedFileFetches, buildSubmissionSearches } from '@/lib/drive-sync/submission-search';
 type Operation = 'session' | 'inventory' | 'upload' | 'finalize' | 'checkpoint';
 function exact(body: Record<string, unknown>, keys: string[]) { if (Object.keys(body).some(k => !keys.includes(k)))
     throw new HttpError(400, 'Unexpected request field.'); }
@@ -57,7 +57,7 @@ export function machineHandler(operation: Operation) {
                 // The submitted-work root carries its title searches; folder roots are unchanged.
                 if (!session.mappings.some(mapping => mapping.mode === 'submissions'))
                     return jsonResponse(session);
-                const searches = await buildSubmissionSearches(client);
+                const searches = [...await buildLinkedFileFetches(client), ...await buildSubmissionSearches(client)];
                 return jsonResponse({ ...session, mappings: session.mappings.map(mapping => mapping.mode === 'submissions' ? { ...mapping, searches } : mapping) });
             }
             if (operation === 'inventory') {

@@ -102,7 +102,13 @@ function driveRun() {
         if (!Array.isArray(mapping.searches)) throw driveError("Invalid submission search", true);
         if (!Object.prototype.hasOwnProperty.call(DRIVE_RUN.checkpoint.roots, mapping.id)) {
           var searches = mapping.searches.map(function(search) {
-            if (!search || !driveString(search.id) || !driveString(search.courseFolderId) || !driveString(search.courseFolderTitle) || !Array.isArray(search.terms) || !search.terms.length || search.terms.some(function(term) { return !driveString(term) || term.length > 60; })) throw driveError("Invalid submission search", true);
+            if (!search || !driveString(search.id) || !driveString(search.courseFolderId) || !driveString(search.courseFolderTitle)) throw driveError("Invalid submission search", true);
+            // Either explicit Drive file IDs (links captured from submission pages) or title words to search.
+            if (Array.isArray(search.fileIds)) {
+              if (!search.fileIds.length || search.fileIds.length > 50 || search.fileIds.some(function(id) { return typeof id !== "string" || !/^[A-Za-z0-9_-]{10,200}$/.test(id); })) throw driveError("Invalid submission search", true);
+              return { id: search.id, courseFolderId: search.courseFolderId, courseFolderTitle: search.courseFolderTitle, fileIds: search.fileIds.slice(0, 50) };
+            }
+            if (!Array.isArray(search.terms) || !search.terms.length || search.terms.some(function(term) { return !driveString(term) || term.length > 60; })) throw driveError("Invalid submission search", true);
             return { id: search.id, courseFolderId: search.courseFolderId, courseFolderTitle: search.courseFolderTitle, terms: search.terms.slice(0, 4) };
           });
           DRIVE_RUN.checkpoint.roots[mapping.id] = { pendingFolders: searches, visitedFolderIds: [], completed: false, failed: false };
@@ -188,7 +194,16 @@ function driveLoadPage(mapping, root) {
       : "'" + quote(current.id) + "' in parents and trashed = false";
     var query = { q: filter, fields: "nextPageToken,incompleteSearch,files(" + DRIVE_FIELDS + ")", pageSize: 100, supportsAllDrives: true, includeItemsFromAllDrives: true };
     if (current.pageToken) query.pageToken = current.pageToken;
-    page = driveGoogleJson("files", query, current.id, current.resourceKey);
+    if (Array.isArray(current.fileIds)) {
+      // Linked files are read one by one; a file that cannot be read is reported, never guessed at.
+      page = { files: [] };
+      var unreadable = [];
+      current.fileIds.forEach(function(id) {
+        try { page.files.push(driveGoogleJson("files/" + encodeURIComponent(id), { fields: DRIVE_FIELDS, supportsAllDrives: true }, id)); }
+        catch (error) { if (error.retryable) throw error; unreadable.push({ driveFileId: id, message: "Linked file could not be read with this account" }); }
+      });
+      if (unreadable.length) driveCheckpoint(unreadable);
+    } else page = driveGoogleJson("files", query, current.id, current.resourceKey);
     if (!Array.isArray(page.files) || (page.nextPageToken !== undefined && typeof page.nextPageToken !== "string")) throw driveError("Invalid Drive listing", true);
     if (page.incompleteSearch) throw driveError("Drive search incomplete", false);
   } catch (error) {
