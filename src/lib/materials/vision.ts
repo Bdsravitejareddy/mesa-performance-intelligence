@@ -18,7 +18,8 @@ export function composeNote(description: { readableText: string; visualDescripti
   return (parts.join("\n") || (description.decorative ? "Decorative visual; no course information." : "")).slice(0, 2000);
 }
 
-export async function describeMaterial(client: SupabaseClient, materialId: string): Promise<VisionOutcome> {
+// With redo, pages that already have an AI description are described again (e.g. after the instructions improve).
+export async function describeMaterial(client: SupabaseClient, materialId: string, options: { redo?: boolean } = {}): Promise<VisionOutcome> {
   const available = visionAvailable();
   if (!available.ok) return { materialId, status: "skipped", requested: 0, described: 0, message: available.reason };
   const { data: material, error } = await client.from("course_materials").select("id, user_id, name, mime_type, storage_path").eq("id", materialId).maybeSingle();
@@ -32,7 +33,7 @@ export async function describeMaterial(client: SupabaseClient, materialId: strin
     client.from("material_pages").select("page_number, extracted_text, table_data, has_visuals").eq("material_id", materialId),
     client.from("material_page_notes").select("page_number").eq("material_id", materialId).eq("author_kind", "ai_vision"),
   ]);
-  const done = new Set((existing ?? []).map((row) => row.page_number as number));
+  const done = new Set(options.redo ? [] : (existing ?? []).map((row) => row.page_number as number));
   const summary = summarizeMaterialPages((pages ?? []) as ReviewPage[]);
   const pending = summary.attention.filter((item) => !done.has(item.pageNumber));
   if (!pending.length) return { materialId, status: "skipped", requested: 0, described: 0, message: "Every flagged page already has a description." };

@@ -15,10 +15,10 @@ export async function POST(request: NextRequest) {
   if (typeof claims?.claims?.sub !== "string") return NextResponse.json({ error: "Sign in to describe materials." }, { status: 401 });
   const available = visionAvailable();
   if (!available.ok) return NextResponse.json({ error: available.reason }, { status: 503 });
-  const body = (await request.json().catch(() => ({}))) as { materialId?: unknown };
+  const body = (await request.json().catch(() => ({}))) as { materialId?: unknown; redo?: unknown };
   if (body.materialId !== undefined) {
     if (typeof body.materialId !== "string" || !UUID.test(body.materialId)) return NextResponse.json({ error: "Unknown material." }, { status: 400 });
-    return NextResponse.json({ outcomes: [await describeMaterial(supabase, body.materialId)] });
+    return NextResponse.json({ outcomes: [await describeMaterial(supabase, body.materialId, { redo: body.redo === true })] });
   }
   return NextResponse.json({ outcomes: await describePendingMaterials(supabase, 240_000) });
 }

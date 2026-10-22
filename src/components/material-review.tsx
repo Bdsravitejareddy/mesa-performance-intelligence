@@ -55,7 +55,7 @@ export function MaterialReviewActions({ materialId, current, attentionCount, not
 }
 
 // Runs AI description for one material, or repeatedly for all pending materials until nothing is left.
-export function DescribeMaterialsButton({ materialId, available, reason }: { materialId?: string; available: boolean; reason: string }) {
+export function DescribeMaterialsButton({ materialId, available, reason, redo = false }: { materialId?: string; available: boolean; reason: string; redo?: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -66,7 +66,7 @@ export function DescribeMaterialsButton({ materialId, available, reason }: { mat
     let failed = 0;
     try {
       for (let round = 0; round < (materialId ? 1 : 10); round += 1) {
-        const response = await fetch("/api/materials/describe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(materialId ? { materialId } : {}) });
+        const response = await fetch("/api/materials/describe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(materialId ? { materialId, redo } : {}) });
         const result = await response.json() as { outcomes?: { status: string; described: number; message: string }[]; error?: string };
         if (!response.ok) throw new Error(result.error || "Description failed.");
         const outcomes = result.outcomes ?? [];
@@ -86,5 +86,5 @@ export function DescribeMaterialsButton({ materialId, available, reason }: { mat
       setBusy(false);
     }
   }
-  return <div className="info-callout describe-action"><span>{available ? "Gemini reads the images, charts, diagrams and colour coding in these slides; nothing needs to be typed." : `AI description is off: ${reason}`}</span><button className="button button-primary" type="button" disabled={!available || busy} onClick={run}>{busy ? "Describing…" : materialId ? "Describe with AI" : "Describe all with AI"}</button>{message && <small role="status">{message}</small>}</div>;
+  return <div className="info-callout describe-action"><span>{available ? "Gemini reads the images, charts, diagrams and colour coding in these slides; nothing needs to be typed." : `AI description is off: ${reason}`}</span><button className="button button-primary" type="button" disabled={!available || busy} onClick={run}>{busy ? "Describing…" : materialId ? (redo ? "Describe again with AI" : "Describe with AI") : "Describe all with AI"}</button>{message && <small role="status">{message}</small>}</div>;
 }

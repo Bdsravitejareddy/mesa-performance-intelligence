@@ -34,7 +34,7 @@ export default async function MaterialReviewPage({ params }: { params: Promise<{
   return <AppShell demoMode={false}><div className="section-page">
     <Link className="back-link" href="/materials/review"><ArrowLeft size={14} /> Material review</Link>
     <div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> v{material.version} · {material.extraction_status.replaceAll("_", " ")}</div><h1>{material.name}</h1><p className="page-subtitle">{summary.pages} slides · {summary.withText} with text · {summary.noText} without text · {summary.attention.length} to look at</p></div>{driveUrl && <a className="button button-secondary" href={driveUrl} target="_blank" rel="noreferrer" referrerPolicy="no-referrer">Open original in Drive</a>}</div>
-    {undescribed > 0 && <DescribeMaterialsButton materialId={id} available={vision.ok} reason={vision.ok ? "" : vision.reason} />}
+    {summary.attention.length > 0 && <DescribeMaterialsButton materialId={id} available={vision.ok} reason={vision.ok ? "" : vision.reason} redo={undescribed === 0} />}
     <MaterialReviewActions materialId={id} current={review.data ? { outcome: review.data.outcome as string, note: review.data.note as string } : null} attentionCount={summary.attention.length} notesCount={noteBy.size} />
     <section className="content-panel"><h2>Slides to look at <span className="panel-count">{summary.attention.length}</span></h2>
       <p className="empty-hint">AI descriptions are generated from the slide images, chart data and diagram labels in the original file. They are labelled as AI-generated wherever they are used. Add a note only if a description is wrong or missing.</p>
