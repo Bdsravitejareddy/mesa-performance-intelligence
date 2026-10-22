@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { UnassignedLmsList } from "@/components/unassigned-lms";
+import { DriveSubmissions } from "@/components/drive-submissions";
 import { CriterionBreakdown } from "@/components/criterion-breakdown";
 import { SyncHealthNotice } from "@/components/sync-health-notice";
 import { describeSyncHealth, type SyncRun } from "@/lib/lms/sync-health";
@@ -12,7 +13,7 @@ export const dynamic = "force-dynamic";
 
 type Assessment = { id: string; course_id: string; title: string; assessment_format: string; source_record_id: string | null; created_at: string };
 type Submission = { id: string; assessment_id: string; official_mark: number | string | null; source_original_mark: number | string | null; source_original_max_mark: number | string | null; official_feedback: string; official_mark_source: string; lms_submission_status: string; source_record_id: string | null; source_updated_at: string | null; submitted_at: string | null; created_at: string };
-type Material = { course_id: string; extraction_status: string };
+type Material = { id: string; name: string; course_id: string; extraction_status: string };
 
 const NOT_CONNECTED = [
   { name: "Resume and work experience", note: "A resume claim is evidence of a claim, not verified proficiency." },
@@ -75,6 +76,14 @@ function EvidenceContent({ data }: { data: Awaited<ReturnType<typeof loadData>> 
       </div>
     </section>
 
+    <section className="content-panel"><h2>Submissions found in Drive <span className="panel-count">{data.matches.filter((row) => row.kind === "submission").length}</span></h2>
+      <DriveSubmissions undetermined={data.matches.filter((row) => row.kind === "undetermined").length} matches={data.matches.filter((row) => row.kind === "submission").map((row) => {
+        const material = data.materials.find((item) => item.id === row.material_id);
+        const assessment = data.assessments.find((item) => item.id === row.assessment_id);
+        return { materialId: row.material_id, name: material?.name ?? "Drive file", course: courseTitle.get(material?.course_id ?? "") ?? "Course", assessment: assessment?.title ?? "Held LMS assignment", confidence: row.confidence, reason: row.reason, attached: Boolean(row.submission_id) };
+      })} />
+    </section>
+
     {data.unassigned.length > 0 && <section className="content-panel"><h2>LMS assignments without a course <span className="panel-count">{data.unassigned.length}</span></h2>
       <p className="empty-hint">The LMS sent these with an empty course field, even in assignment-detail lookups. Each is filed automatically when its title names exactly one course; otherwise pick the course once and it is imported straight away. Later syncs keep the choice.</p>
       <UnassignedLmsList courses={data.lmsCourses} items={data.unassigned.map((row) => ({ id: row.id, title: row.title, detail: [row.record.status, row.record.score === null || row.record.score === undefined ? "no released mark" : `${row.record.score}/100`].filter(Boolean).join(" · "), suggestedCourseId: row.suggested_course_id, basis: row.resolved_course_id ? "" : row.suggestion_basis, resolvedCourse: row.resolved_course_id ? courseTitle.get(row.resolved_course_id) ?? "Course" : null, resolution: row.resolution }))} />
@@ -100,16 +109,17 @@ function EvidenceContent({ data }: { data: Awaited<ReturnType<typeof loadData>> 
 
 async function loadData() {
   const supabase = await createClient();
-  const [courses, assessments, submissions, materials, links, unassigned, runs] = await Promise.all([
+  const [courses, assessments, submissions, materials, links, matches, unassigned, runs] = await Promise.all([
     supabase.from("courses").select("id, title").order("title"),
     supabase.from("assessments").select("id, course_id, title, assessment_format, source_record_id, created_at").order("created_at", { ascending: false }),
     supabase.from("submissions").select("id, assessment_id, official_mark, source_original_mark, source_original_max_mark, official_feedback, official_mark_source, lms_submission_status, source_record_id, source_updated_at, submitted_at, created_at"),
-    supabase.from("course_materials").select("course_id, extraction_status"),
+    supabase.from("course_materials").select("id, name, course_id, extraction_status"),
     supabase.from("course_links").select("assessment_course_id, material_course_id"),
+    supabase.from("material_submission_matches").select("material_id, assessment_id, kind, confidence, reason, submission_id"),
     supabase.from("lms_unassigned_assignments").select("id, title, record, suggested_course_id, suggestion_basis, resolved_course_id, resolution").order("title"),
     supabase.from("sync_runs").select("status, started_at, finished_at, message").eq("source_name", "Mesa Nexus MCP").order("started_at", { ascending: false }).limit(20),
   ]);
-  const error = courses.error ?? assessments.error ?? submissions.error ?? materials.error ?? links.error ?? unassigned.error ?? runs.error;
+  const error = courses.error ?? assessments.error ?? submissions.error ?? materials.error ?? links.error ?? matches.error ?? unassigned.error ?? runs.error;
   if (error) throw new Error("Could not load evidence records.");
   const syncRuns = (runs.data ?? []) as SyncRun[];
   // Show linked Drive materials under the LMS course they were confirmed for.
@@ -121,6 +131,7 @@ async function loadData() {
     materials: ((materials.data ?? []) as Material[]).map((material) => ({ ...material, course_id: linkedTo.get(material.course_id) ?? material.course_id })),
     courses: ((courses.data ?? []) as { id: string; title: string }[]).filter((course) => !linkedMaterialCourses.has(course.id)),
     linkCount: linkedTo.size,
+    matches: (matches.data ?? []) as { material_id: string; assessment_id: string | null; kind: string; confidence: string; reason: string; submission_id: string | null }[],
     unassigned: (unassigned.data ?? []) as { id: string; title: string; record: { score?: number | null; status?: string; sourceScore?: number | null; sourceMaximumMark?: number | null }; suggested_course_id: string | null; suggestion_basis: string; resolved_course_id: string | null; resolution: string | null }[],
     lmsCourses: ((courses.data ?? []) as { id: string; title: string }[]).filter((course) => !linkedMaterialCourses.has(course.id)),
     runs: syncRuns.slice(0, 10),
