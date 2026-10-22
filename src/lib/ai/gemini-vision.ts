@@ -1,4 +1,4 @@
-import { resolveProviderSettings } from "./settings";
+import { fetchWithKeyFailover, resolveProviderSettings } from "./settings";
 import { stripJsonFence } from "./provider";
 
 // Gemini's generateContent API (documented as fully supported) accepts PDFs and images inline, which the
@@ -33,9 +33,9 @@ export async function describeVisualPages(parts: VisionPart[], requestedPages: n
   const size = parts.reduce((sum, part) => sum + ("inlineData" in part ? part.inlineData.data.length * 0.75 : part.text.length), 0);
   if (size > MAX_INLINE_BYTES) throw new Error("The visual content is too large for one inline request.");
   const settings = resolveProviderSettings(env);
-  const response = await fetch(`${GEMINI_API}/${encodeURIComponent(available.model)}:generateContent`, {
+  const response = await fetchWithKeyFailover(settings.keys, (key) => fetch(`${GEMINI_API}/${encodeURIComponent(available.model)}:generateContent`, {
     method: "POST",
-    headers: { "x-goog-api-key": settings.key, "Content-Type": "application/json" },
+    headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: VISION_INSTRUCTIONS }] },
       contents: [{ role: "user", parts: [{ text: `Requested pages/slides: ${requestedPages.join(", ")}.` }, ...parts] }],
@@ -43,7 +43,7 @@ export async function describeVisualPages(parts: VisionPart[], requestedPages: n
     }),
     signal: AbortSignal.timeout(50_000),
     cache: "no-store",
-  });
+  }));
   if (!response.ok) throw new Error(`Gemini returned HTTP ${response.status}.`);
   const body = await response.json() as { candidates?: { content?: { parts?: { text?: unknown }[] } }[] };
   const text = (body.candidates?.[0]?.content?.parts ?? []).map((part) => typeof part.text === "string" ? part.text : "").join("");

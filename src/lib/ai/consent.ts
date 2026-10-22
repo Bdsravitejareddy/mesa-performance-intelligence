@@ -13,7 +13,7 @@ export type AIProcessingConfig = {
 };
 
 export function getAIProcessingConfig(): AIProcessingConfig {
-  const { base, key, model } = resolveProviderSettings();
+  const { base, key, keys, model } = resolveProviderSettings();
   const retentionNotice = process.env.AI_DATA_RETENTION_NOTICE?.trim() ?? "";
   let providerHost = "";
   let endpoint = "";
@@ -26,7 +26,7 @@ export function getAIProcessingConfig(): AIProcessingConfig {
   } catch { /* Invalid provider configuration remains unavailable. */ }
   const approved = process.env.AI_DATA_PROCESSING_APPROVED === "true";
   const configured = Boolean(approved && providerHost && endpoint && key && model && retentionNotice);
-  const configurationFingerprint = createHash("sha256").update(JSON.stringify({ endpoint, providerHost, model, keyDigest: createHash("sha256").update(key).digest("hex"), approved, retentionNotice, disclosureVersion: AI_DISCLOSURE_VERSION })).digest("hex");
+  const configurationFingerprint = createHash("sha256").update(JSON.stringify({ endpoint, providerHost, model, keyDigest: createHash("sha256").update(key).digest("hex"), keySetDigest: createHash("sha256").update(keys.join("\n")).digest("hex"), approved, retentionNotice, disclosureVersion: AI_DISCLOSURE_VERSION })).digest("hex");
   return { configured, providerHost, model: model.slice(0, 120), retentionNotice, disclosureVersion: AI_DISCLOSURE_VERSION, configurationFingerprint };
 }
 
