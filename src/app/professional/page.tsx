@@ -2,7 +2,8 @@ import { AppShell } from "@/components/app-shell";
 import { AIConsentGate } from "@/components/ai-consent-gate";
 import { ProfessionalEvidenceForm, ProfessionalEvidenceList } from "@/components/professional-evidence";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
-import { createClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { cachedRead } from "@/lib/data/cached";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,10 @@ export default async function ProfessionalEvidencePage() {
 }
 
 async function load() {
-  const supabase = await createClient();
+  return cachedRead("professional:load", loadWith);
+}
+
+async function loadWith(supabase: SupabaseClient) {
   const [evidence, claims, competencies] = await Promise.all([
     supabase.from("professional_evidence").select("id, kind, title, description, url, issued_by, storage_path, created_at").order("created_at", { ascending: false }),
     supabase.from("professional_claims").select("id, evidence_id, claim, claim_type, quantified, competency_id, status, supporting_evidence_id, supporting_note").order("created_at"),

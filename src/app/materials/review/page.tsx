@@ -4,7 +4,8 @@ import { summarizeMaterialPages, type ReviewPage } from "@/lib/materials/review"
 import { DescribeMaterialsButton } from "@/components/material-review";
 import { visionAvailable } from "@/lib/ai/gemini-vision";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
-import { createClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { cachedRead } from "@/lib/data/cached";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,7 @@ export default async function MaterialReviewListPage() {
   const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
   const rows = demoMode || !hasSupabaseConfig() ? [] : await loadQueue();
   // Slides drawn only with vector graphics or shapes have nothing more to read automatically once the rest are described.
-  const covered = (row: (typeof rows)[number]) => row.summary.attention.every((item) => row.describedPages.has(item.pageNumber)) || Boolean(row.lastRun?.message.includes("vector graphics"));
+  const covered = (row: (typeof rows)[number]) => row.summary.attention.every((item) => row.describedPages.includes(item.pageNumber)) || Boolean(row.lastRun?.message.includes("vector graphics"));
   const open = rows.filter((row) => !row.review && row.summary.attention.length > 0 && !covered(row));
   const nothing = rows.filter((row) => !row.review && row.summary.attention.length === 0);
   const done = rows.filter((row) => row.review || (row.summary.attention.length > 0 && covered(row)));
@@ -41,7 +42,10 @@ export default async function MaterialReviewListPage() {
 }
 
 async function loadQueue() {
-  const supabase = await createClient();
+  return cachedRead("materials-review:loadQueue", loadQueueWith);
+}
+
+async function loadQueueWith(supabase: SupabaseClient) {
   const { data: current, error } = await supabase.from("current_course_materials").select("id");
   if (error) throw new Error("Could not load materials.");
   const ids = (current ?? []).map((row) => row.id as string);
@@ -83,7 +87,7 @@ async function loadQueue() {
     notes: noteCount.get(row.id) ?? 0,
     aiNotes: aiCount.get(row.id) ?? 0,
     lastRun: lastRun.get(row.id) ?? null,
-    describedPages: described.get(row.id) ?? new Set<number>(),
+    describedPages: [...(described.get(row.id) ?? new Set<number>())],
     review: review.get(row.id) ?? null,
   })).sort((a, b) => a.course.localeCompare(b.course) || b.summary.noText - a.summary.noText);
 }

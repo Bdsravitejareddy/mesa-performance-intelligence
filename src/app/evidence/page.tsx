@@ -7,7 +7,8 @@ import { SyncHealthNotice } from "@/components/sync-health-notice";
 import { describeSyncHealth, type SyncRun } from "@/lib/lms/sync-health";
 import { formatOfficialMark } from "@/lib/scoring";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
-import { createClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { cachedRead } from "@/lib/data/cached";
 
 export const dynamic = "force-dynamic";
 
@@ -108,7 +109,10 @@ function EvidenceContent({ data }: { data: Awaited<ReturnType<typeof loadData>> 
 }
 
 async function loadData() {
-  const supabase = await createClient();
+  return cachedRead("evidence:loadData", loadDataWith);
+}
+
+async function loadDataWith(supabase: SupabaseClient) {
   const [courses, assessments, submissions, materials, links, matches, unassigned, runs] = await Promise.all([
     supabase.from("courses").select("id, title").order("title"),
     supabase.from("assessments").select("id, course_id, title, assessment_format, source_record_id, created_at").order("created_at", { ascending: false }),

@@ -7,7 +7,8 @@ import { buildCompetencyMap, type SubmissionRow } from "@/lib/competency/map";
 import { parseCriterionScores } from "@/lib/feedback/criteria";
 import { loadCompetencyInputs } from "@/lib/competency/load";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
-import { createClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { cachedRead } from "@/lib/data/cached";
 
 export const dynamic = "force-dynamic";
 
@@ -67,7 +68,10 @@ function latestCriteria(submissions: SubmissionRow[], assessmentId: string) {
 }
 
 async function loadData() {
-  const supabase = await createClient();
+  return cachedRead("competencies:loadData", loadDataWith);
+}
+
+async function loadDataWith(supabase: SupabaseClient) {
   const [inputs, history, challenges, claims, evidence] = await Promise.all([
     loadCompetencyInputs(supabase),
     supabase.from("competency_snapshots").select("competency_id, state, confidence, headline, reason, recorded_at").order("recorded_at", { ascending: false }).limit(1000),

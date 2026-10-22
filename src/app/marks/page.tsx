@@ -2,7 +2,8 @@ import { AppShell } from "@/components/app-shell";
 import { demoData } from "@/lib/demo-data";
 import { formatOfficialMark } from "@/lib/scoring";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
-import { createClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { cachedRead } from "@/lib/data/cached";
 import { LmsSyncAction } from "@/components/lms-sync-action";
 import Link from "next/link";
 import { CriterionBreakdown } from "@/components/criterion-breakdown";
@@ -26,7 +27,10 @@ export default async function MarksPage() {
 
 async function loadSyncHealth() {
   if (!hasSupabaseConfig()) return null;
-  const supabase = await createClient();
+  return cachedRead("marks:loadSyncHealth", loadSyncHealthWith);
+}
+
+async function loadSyncHealthWith(supabase: SupabaseClient) {
   const { data, error } = await supabase.from("sync_runs").select("status,started_at,finished_at,message").eq("source_name", "Mesa Nexus MCP").order("started_at", { ascending: false }).limit(20);
   if (error) throw new Error("Could not load LMS sync status.");
   return describeSyncHealth((data ?? []) as SyncRun[]);
@@ -34,7 +38,10 @@ async function loadSyncHealth() {
 
 async function loadMarks() {
   if (!hasSupabaseConfig()) return [];
-  const supabase = await createClient();
+  return cachedRead("marks:loadMarks", loadMarksWith);
+}
+
+async function loadMarksWith(supabase: SupabaseClient) {
   const [{ data: submissions, error }, { data: assessments }, { data: courses }] = await Promise.all([
     supabase.from("submissions").select("id, assessment_id, official_mark, source_original_mark, source_original_max_mark, official_feedback, official_mark_source").not("official_mark", "is", null).order("submitted_at", { ascending: false }),
     supabase.from("assessments").select("id, course_id, title"),

@@ -3,7 +3,8 @@ import { AIConsentGate } from "@/components/ai-consent-gate";
 import { ConversationImport, RunBehaviourAnalysis } from "@/components/thinking";
 import type { DimensionAnalysis } from "@/lib/behaviour/analyse";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
-import { createClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { cachedRead } from "@/lib/data/cached";
 
 export const dynamic = "force-dynamic";
 type Stored = Omit<DimensionAnalysis, "observations"> & { observations: (DimensionAnalysis["observations"][number] & { label?: string })[] };
@@ -35,7 +36,10 @@ export default async function ThinkingPage() {
 }
 
 async function load() {
-  const supabase = await createClient();
+  return cachedRead("thinking:load", loadWith);
+}
+
+async function loadWith(supabase: SupabaseClient) {
   const [analyses, imports] = await Promise.all([
     supabase.from("behaviour_analyses").select("id, dimensions, source_counts, provider_model, created_at").order("created_at", { ascending: false }).limit(10),
     supabase.from("conversation_imports").select("id, title, source, message_count, conversation_count, created_at").order("created_at", { ascending: false }),

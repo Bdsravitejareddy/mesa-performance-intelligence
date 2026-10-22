@@ -2,13 +2,13 @@ import { AppShell } from "@/components/app-shell";
 import { RoadmapPlan, RoadmapRecommendations } from "@/components/roadmap";
 import { loadRoadmap } from "@/lib/roadmap/load";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
-import { createClient } from "@/lib/supabase/server";
+import { cachedRead } from "@/lib/data/cached";
 
 export const dynamic = "force-dynamic";
 
 export default async function RoadmapPage() {
   const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
-  const data = demoMode || !hasSupabaseConfig() ? null : await loadRoadmap(await createClient());
+  const data = demoMode || !hasSupabaseConfig() ? null : await cachedRead("roadmap", loadRoadmap);
   return <AppShell demoMode={demoMode}><div className="section-page">
     <div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> Development roadmap</div><h1>Growth roadmap</h1><p className="page-subtitle">What to do next, ranked by a formula you can see: importance × demonstrated gap × confidence.</p></div></div>
     {data && <div className="info-callout"><span>Ranked against your targets: <b>Stage 1</b> {data.stages.primary}; <b>Stage 2</b> {data.stages.cross}. Requirements come from real job postings (see Career readiness).</span></div>}

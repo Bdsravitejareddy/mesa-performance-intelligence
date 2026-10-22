@@ -1,7 +1,8 @@
 import { AppShell } from "@/components/app-shell";
 import { DeleteCheckButton, QualityChecker } from "@/components/quality-checker";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
-import { createClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { cachedRead } from "@/lib/data/cached";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,10 @@ export default async function QualityCheckPage() {
 }
 
 async function load() {
-  const supabase = await createClient();
+  return cachedRead("quality-check:load", loadWith);
+}
+
+async function loadWith(supabase: SupabaseClient) {
   const [assessments, courses, roles, documents, history] = await Promise.all([
     supabase.from("assessments").select("id, title, course_id").order("title"),
     supabase.from("courses").select("id, title"),

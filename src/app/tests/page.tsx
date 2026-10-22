@@ -2,7 +2,8 @@ import { AppShell } from "@/components/app-shell";
 import { PersonalityQuestionnaire, ReasoningTest } from "@/components/self-tests";
 import { FACTOR_LABELS, type Factor } from "@/lib/tests/personality";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
-import { createClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { cachedRead } from "@/lib/data/cached";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,10 @@ export default async function TestsPage() {
 }
 
 async function load() {
-  const supabase = await createClient();
+  return cachedRead("tests:load", loadWith);
+}
+
+async function loadWith(supabase: SupabaseClient) {
   const { data } = await supabase.from("test_attempts").select("id, kind, submitted_at, result").not("submitted_at", "is", null).order("submitted_at", { ascending: false }).limit(20);
   return (data ?? []) as { id: string; kind: string; submitted_at: string; result: Record<string, unknown> }[];
 }

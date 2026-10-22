@@ -8,7 +8,8 @@ import { buildLibrary } from "@/lib/roles/library";
 import { roleReadiness } from "@/lib/roles/readiness";
 import { demoData } from "@/lib/demo-data";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
-import { createClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { cachedRead } from "@/lib/data/cached";
 
 export const dynamic = "force-dynamic";
 
@@ -25,14 +26,20 @@ export default async function CareerPage() {
 
 async function loadProfiles() {
   if (!hasSupabaseConfig()) return [];
-  const supabase = await createClient();
+  return cachedRead("career:loadProfiles", loadProfilesWith);
+}
+
+async function loadProfilesWith(supabase: SupabaseClient) {
   const { data, error } = await supabase.from("role_profiles").select("id, title, industry, employer, benchmark_source, source_url, retrieved_at, posting_date, is_verified, competencies").order("created_at", { ascending: false });
   if (error) throw new Error("Could not load role profiles.");
   return (data ?? []).map((profile) => ({ ...profile, competencies: Array.isArray(profile.competencies) ? profile.competencies as Array<string | { title: string }> : [] }));
 }
 
 async function loadTargets() {
-  const supabase = await createClient();
+  return cachedRead("career:loadTargets", loadTargetsWith);
+}
+
+async function loadTargetsWith(supabase: SupabaseClient) {
   const [inputs, claims] = await Promise.all([loadCompetencyInputs(supabase), supabase.from("professional_claims").select("competency_id, status").not("competency_id", "is", null)]);
   const competencies = new Map(buildCompetencyMap(inputs).flatMap((domain) => domain.competencies).map((entry) => [entry.id, { state: entry.assessment.state, name: entry.name }]));
   const library = buildLibrary();

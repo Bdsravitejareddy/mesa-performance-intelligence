@@ -10,6 +10,8 @@ import { buildLibrary } from "@/lib/roles/library";
 import { roleReadiness } from "@/lib/roles/readiness";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { cachedRead } from "@/lib/data/cached";
 
 export const dynamic = "force-dynamic";
 const QUADRANTS: [SwotCategory, string, string][] = [
@@ -51,14 +53,28 @@ async function load() {
   const supabase = await createClient();
   const { data: claims } = await supabase.auth.getClaims();
   const userId = claims?.claims?.sub as string;
-  const [inputs, profClaims, evidence, runs, held, entries, latest] = await Promise.all([
+  // The analysis is cached per data version; the latest snapshot is read fresh so changes are recorded once.
+  const [{ items, entries }, latest] = await Promise.all([
+    cachedRead("swot:items", computeSwot),
+    supabase.from("swot_snapshots").select("items, items_hash, created_at").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+  ]);
+  const summary = items.map(({ key, title }) => ({ key, title }));
+  const hash = createHash("sha256").update(JSON.stringify(summary)).digest("hex");
+  const previous = latest.data ? (latest.data.items as { key: string; title: string }[]) : null;
+  const change = compareSwot(previous, items);
+  // Keep a version whenever the SWOT changes, so later visits can show what is new or resolved.
+  if (!latest.data || latest.data.items_hash !== hash) await supabase.from("swot_snapshots").insert({ user_id: userId, items: summary, items_hash: hash });
+  return { items, change, previousAt: latest.data?.created_at ?? null, entries };
+}
+
+async function computeSwot(supabase: SupabaseClient) {
+  const [inputs, profClaims, evidence, runs, held, entries] = await Promise.all([
     loadCompetencyInputs(supabase),
     supabase.from("professional_claims").select("claim, competency_id, status, evidence_id").neq("status", "withdrawn"),
     supabase.from("professional_evidence").select("id, title"),
     supabase.from("sync_runs").select("status, started_at, finished_at, message").eq("source_name", "Mesa Nexus MCP").order("started_at", { ascending: false }).limit(20),
     supabase.from("lms_unassigned_assignments").select("id").is("resolved_course_id", null),
     supabase.from("swot_entries").select("category, title, evidence, source_reference").order("created_at", { ascending: false }),
-    supabase.from("swot_snapshots").select("items, items_hash, created_at").order("created_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
   const domains = buildCompetencyMap(inputs);
   const competencies = domains.flatMap((domain) => domain.competencies.map((entry) => ({ id: entry.id, name: entry.name, domain: domain.name, assessment: entry.assessment, mappedAssessments: entry.mappedAssessments })));
@@ -81,11 +97,5 @@ async function load() {
     criterionGaps,
     dataQuality: { syncWarning: health.level === "ok" ? null : health.warnings[0] ?? null, heldAssignments: (held.data ?? []).length, describedShare: null },
   });
-  const summary = items.map(({ key, title }) => ({ key, title }));
-  const hash = createHash("sha256").update(JSON.stringify(summary)).digest("hex");
-  const previous = latest.data ? (latest.data.items as { key: string; title: string }[]) : null;
-  const change = compareSwot(previous, items);
-  // Keep a version whenever the SWOT changes, so later visits can show what is new or resolved.
-  if (!latest.data || latest.data.items_hash !== hash) await supabase.from("swot_snapshots").insert({ user_id: userId, items: summary, items_hash: hash });
-  return { items, change, previousAt: latest.data?.created_at ?? null, entries: entries.data ?? [] };
+  return { items, entries: entries.data ?? [] };
 }

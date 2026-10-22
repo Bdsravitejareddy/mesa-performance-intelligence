@@ -1,4 +1,5 @@
 import { demoData, demoMarkSeries } from "@/lib/demo-data";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { describeSyncHealth, type SyncHealth, type SyncRun } from "@/lib/lms/sync-health";
 
@@ -41,13 +42,13 @@ const demoSnapshot: DashboardSnapshot = {
   syncHealth: null,
 };
 
-export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
+export async function getDashboardSnapshot(client?: SupabaseClient): Promise<DashboardSnapshot> {
   if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") return demoSnapshot;
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) {
     throw new Error("Supabase is not configured. Connect the private workspace before loading dashboard records.");
   }
 
-  const supabase = await createClient();
+  const supabase = client ?? await createClient();
   const [courseResult, assessmentResult, submissionResult, competencyResult, syncResult] = await Promise.all([
     supabase.from("courses").select("id, code, title, term").order("created_at", { ascending: false }),
     supabase.from("assessments").select("id, course_id, title, assessment_format, due_at"),
