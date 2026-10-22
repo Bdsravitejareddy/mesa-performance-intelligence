@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as { submissionId?: unknown } | null;
   const submissionId = typeof body?.submissionId === "string" && UUID.test(body.submissionId) ? body.submissionId : undefined;
   try {
-    const outcomes = await gradeSubmissions(supabase, 280_000, submissionId ? { submissionIds: [submissionId] } : {});
+    const outcomes = await gradeSubmissions(supabase, 280_000, { actorUserId: data.claims.sub, ...(submissionId ? { submissionIds: [submissionId] } : {}) });
     return NextResponse.json({ outcomes });
   } catch {
     return NextResponse.json({ error: "Grading failed. Try again shortly." }, { status: 500 });

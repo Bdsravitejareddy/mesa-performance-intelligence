@@ -38,7 +38,7 @@ async function standardFor(client: SupabaseClient, assessmentId: string, aiAllow
   return GRADABLE_SOURCES.has(standard.source) ? standard : null;
 }
 
-export async function gradeSubmissions(client: SupabaseClient, budgetMs: number, options: { submissionIds?: string[] } = {}): Promise<GradingOutcome[]> {
+export async function gradeSubmissions(client: SupabaseClient, budgetMs: number, options: { submissionIds?: string[]; actorUserId?: string } = {}): Promise<GradingOutcome[]> {
   const deadline = Date.now() + budgetMs;
   const [documents, submissions, assessments, consents, latest] = await Promise.all([
     client.from("submission_documents").select("submission_id, name, extracted_text, extraction_status, source_version"),
@@ -72,7 +72,8 @@ export async function gradeSubmissions(client: SupabaseClient, budgetMs: number,
     if (pending.length) { outcomes.push({ submissionId: submission.id, assessment: assessment.title, status: "skipped", note: `${pending.length} attached file${pending.length === 1 ? " is" : "s are"} not fully extracted; grading waits so no submitted work is left out.` }); continue; }
     if (Date.now() > deadline - 15_000) break;
 
-    const aiAllowed = config.configured && consentOk.get(submission.user_id) === true;
+    // The member who asked for grading may consent for the shared workspace; the nightly run uses the owner's consent.
+    const aiAllowed = config.configured && (consentOk.get(submission.user_id) === true || (options.actorUserId !== undefined && consentOk.get(options.actorUserId) === true));
     let standard: Standard | null;
     try { standard = await standardFor(client, assessment.id, aiAllowed && Date.now() < deadline - AI_RESERVE_MS); }
     catch (error) { outcomes.push({ submissionId: submission.id, assessment: assessment.title, status: "skipped", note: error instanceof Error ? error.message : "No criteria could be established." }); continue; }
