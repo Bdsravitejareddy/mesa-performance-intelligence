@@ -20,6 +20,11 @@ export type SnapshotRow = {
 
 const sha = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
+// Identifies the exact evidence behind a conclusion; it changes only when marks or mappings change.
+export function evidenceFingerprintOf(evidence: { assessmentId: string; submissionId: string | null; criterionLabel?: string | null; mark: number | null; date: string | null }[]): string {
+  return sha(evidence.map((row) => [row.assessmentId, row.submissionId, row.criterionLabel ?? "", row.mark, row.date]).sort());
+}
+
 // Rows to append: only competencies whose conclusion, evidence, mapping or rules changed since their latest snapshot.
 // A competency that has never had evidence and still has none is not recorded.
 export function snapshotChanges(domains: CompetencyDomain[], mappings: MappingRow[], latest: Map<string, SnapshotRow>): SnapshotRow[] {
@@ -27,7 +32,7 @@ export function snapshotChanges(domains: CompetencyDomain[], mappings: MappingRo
   for (const competency of domains.flatMap((domain) => domain.competencies)) {
     const evidence = competency.assessment.why.evidence;
     const mappingFingerprint = sha(mappings.filter((row) => row.competency_id === competency.id && row.review_status === "accepted").map((row) => [row.assessment_id, row.criterion_label ?? "", row.mapping_source]).sort());
-    const evidenceFingerprint = sha(evidence.map((row) => [row.assessmentId, row.submissionId, row.criterionLabel ?? "", row.mark, row.date]).sort());
+    const evidenceFingerprint = evidenceFingerprintOf(evidence);
     const previous = latest.get(competency.id);
     const next = {
       competency_id: competency.id,

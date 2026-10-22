@@ -24,6 +24,7 @@ import {
   ShieldCheck,
   Sparkles,
   Target,
+  Route,
 } from "lucide-react";
 
 const groups = [
@@ -44,6 +45,7 @@ const groups = [
     links: [
       { href: "/competencies", label: "Competency map", icon: Network },
       { href: "/swot", label: "SWOT analysis", icon: Target },
+      { href: "/roadmap", label: "Growth roadmap", icon: Route },
       { href: "/correlations", label: "Correlations", icon: ChartNoAxesCombined },
       { href: "/career", label: "Career readiness", icon: BriefcaseBusiness },
       { href: "/professional", label: "Resume & portfolio", icon: FileUser },
