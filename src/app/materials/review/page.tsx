@@ -9,18 +9,22 @@ export const dynamic = "force-dynamic";
 export default async function MaterialReviewListPage() {
   const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
   const rows = demoMode || !hasSupabaseConfig() ? [] : await loadQueue();
-  const open = rows.filter((row) => !row.review);
+  const open = rows.filter((row) => !row.review && row.summary.attention.length > 0);
+  const nothing = rows.filter((row) => !row.review && row.summary.attention.length === 0);
   const done = rows.filter((row) => row.review);
+  const scanned = open.filter((row) => row.summary.pages > 0 && row.summary.noText === row.summary.pages);
   const blind = open.reduce((sum, row) => sum + row.summary.noText, 0);
   return <AppShell demoMode={demoMode}><div className="section-page">
     <div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> Course materials</div><h1>Material review</h1><p className="page-subtitle">Slides the importer could not read on its own. Your notes fill the gap without changing the imported document.</p></div></div>
     <div className="info-callout"><span>A document is flagged when any slide has an image or no text, so most flags are harmless logos. Only slides with <strong>no readable text</strong> or <strong>mostly image</strong> are listed for review. Notes are labelled as member interpretation wherever they are used.</span></div>
     <section className="competency-summary" aria-label="Review progress">
-      <div className="competency-summary-item"><strong>{open.length}</strong><span>Documents to review</span></div>
+      <div className="competency-summary-item"><strong>{open.length}</strong><span>Documents with slides to describe</span></div>
+      <div className="competency-summary-item"><strong>{nothing.length}</strong><span>Flagged only for decoration</span></div>
       <div className="competency-summary-item"><strong>{blind}</strong><span>Slides with no readable text</span></div>
       <div className="competency-summary-item"><strong>{done.length}</strong><span>Reviewed</span></div>
     </section>
-    {[["To review", open], ["Reviewed", done]].map(([label, list]) => (list as typeof rows).length > 0 && <section className="content-panel" key={label as string}><h2>{label as string} <span className="panel-count">{(list as typeof rows).length}</span></h2>
+    {scanned.length > 0 && <div className="info-callout data-quality-warning"><span><strong>{scanned.length === 1 ? "1 document has" : `${scanned.length} documents have`} no readable text on any page</strong> ({scanned.map((row) => row.name).join(", ")}). These are probably scanned images. Notes per page work, but a text-based PDF from Drive would be far more useful; OCR is not available yet.</span></div>}
+    {[["Slides to describe", open], ["Flagged only for decoration — nothing to add", nothing], ["Reviewed", done]].map(([label, list]) => (list as typeof rows).length > 0 && <section className="content-panel" key={label as string}><h2>{label as string} <span className="panel-count">{(list as typeof rows).length}</span></h2>
       <div className="review-list">{(list as typeof rows).map((row) => <Link href={`/materials/${row.id}`} className="review-row" key={row.id}>
         <span><strong>{row.name}</strong><small>{row.course}</small></span>
         <span className="review-stats"><small>{row.summary.pages} slides · {row.summary.noText} without text · {row.summary.attention.length - row.summary.noText} mostly image</small><small>{row.notes ? `${row.notes} note${row.notes > 1 ? "s" : ""} added` : "No notes yet"}{row.review ? ` · ${row.review === "reviewed" ? "Reviewed" : "Marked not needed"}` : ""}</small></span>
