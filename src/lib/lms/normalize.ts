@@ -126,7 +126,7 @@ export function normalizeAssignmentRecords(value: unknown): MesaAssignmentRecord
       sourceScore,
       score: normalizedScore,
       feedback,
-      status: firstString(rawSubmission.status, record.status, record.submission_status),
+      status: firstString(rawSubmission.status, record.status, record.submission_status, record.submissionStatus),
       submittedAt: timestamp(rawSubmission.submitted_at, rawSubmission.submittedAt, rawSubmission.submitted_on),
       sourceUpdatedAt: timestamp(rawSubmission.updated_at, rawSubmission.updatedAt, record.updated_at, record.updatedAt),
     }];

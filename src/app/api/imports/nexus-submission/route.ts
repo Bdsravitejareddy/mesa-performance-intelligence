@@ -38,13 +38,17 @@ export async function POST(request: NextRequest) {
   const assignmentId = typeof body?.assignmentId === "string" && /^[0-9a-f-]{36}$/i.test(body.assignmentId) ? body.assignmentId : null;
   if (!assignmentId) return NextResponse.json({ error: "A Nexus assignment id is required." }, { status: 400 });
 
-  const { data: assessment } = await supabase.from("assessments").select("id, title").eq("source_record_id", `mesa-lms:assignment:${assignmentId}`).maybeSingle();
+  const { data: assessment } = await supabase.from("assessments").select("id, title, user_id").eq("source_record_id", `mesa-lms:assignment:${assignmentId}`).maybeSingle();
   if (!assessment) return NextResponse.json({ error: "This assignment has not been imported by the LMS sync yet." }, { status: 404 });
   // Attach to the LMS sync's own submission row so later syncs keep one record per assessment.
-  const { data: submission } = await supabase.from("submissions").select("id, user_id").eq("assessment_id", assessment.id).order("created_at", { ascending: true }).limit(1).maybeSingle();
-  if (!submission) return NextResponse.json({ error: "No submission record yet; run the LMS sync first." }, { status: 409 });
-
   const capture = cleanCapture(body?.capture);
+  let { data: submission } = await supabase.from("submissions").select("id, user_id").eq("assessment_id", assessment.id).order("created_at", { ascending: true }).limit(1).maybeSingle();
+  if (!submission && /submitted|graded/i.test(capture.status)) {
+    // Same key the LMS sync uses for a submission without its own id, so a later sync updates this row.
+    const { data: created } = await supabase.from("submissions").upsert({ user_id: assessment.user_id, assessment_id: assessment.id, answer_text: "", official_feedback: "", official_mark_source: "Mesa LMS (Nexus MCP)", source_record_id: `mesa-lms:submission:${assignmentId}`, lms_submission_status: capture.status.toLowerCase() }, { onConflict: "user_id,source_record_id" }).select("id, user_id").single();
+    submission = created;
+  }
+  if (!submission) return NextResponse.json({ error: "Nexus does not show this assignment as submitted." }, { status: 409 });
   await supabase.from("submissions").update({ page_capture: capture }).eq("id", submission.id);
 
   const links = (Array.isArray(body?.links) ? body.links : []).filter((link): link is string => typeof link === "string").slice(0, 20);
