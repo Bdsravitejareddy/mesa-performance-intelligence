@@ -99,7 +99,7 @@ export async function gradeSubmissions(client: SupabaseClient, budgetMs: number,
     let standard: Standard | null;
     try { standard = await standardFor(client, assessment, aiAllowed && Date.now() < deadline - AI_RESERVE_MS); }
     catch (error) { outcomes.push({ submissionId: submission.id, assessment: assessment.title, status: "skipped", note: error instanceof Error ? error.message : "No criteria could be established." }); continue; }
-    if (!standard) { outcomes.push({ submissionId: submission.id, assessment: assessment.title, status: "skipped", note: "No rubric yet, and AI is unavailable to derive provisional criteria from the course material." }); continue; }
+    if (!standard) { outcomes.push({ submissionId: submission.id, assessment: assessment.title, status: "skipped", note: aiAllowed ? "Out of time in this run to derive criteria; it continues on the next run." : "No rubric yet, and AI is unavailable to derive criteria from the brief." }); continue; }
 
     const refs = await retrieveRelevantReferences(client, assessment.course_id, assessment.id, `${assessment.title} ${standard.criteria.map((criterion) => criterion.name).join(" ")} ${text.slice(0, 3000)}`).catch(() => []);
     const official = submission.official_mark === null ? null : Number(submission.official_mark);
