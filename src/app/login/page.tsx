@@ -1,17 +1,35 @@
-import Link from "next/link";
-import { Activity, ShieldCheck, Sparkles } from "lucide-react";
+import { Activity, BrainCircuit, FileSearch, ShieldCheck, Target } from "lucide-react";
 import { LoginForm } from "@/components/login-form";
+import { IntelligenceVisual } from "@/components/intelligence-visual";
+import { ParallaxHero, RotatingWord } from "@/components/motion";
+
+const MARQUEE = ["Course-grounded evaluation", "Evidence, not verdicts", "Blind quality checks", "Target-role readiness", "Every conclusion explained", "Private by design", "AI-described slides", "Growth you can verify"];
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const { error } = await searchParams;
-  return <main className="auth-page">
-    <div className="auth-art"><div className="auth-orbit auth-orbit-one" /><div className="auth-orbit auth-orbit-two" /><div className="auth-art-content">
-      <Link href="/" className="brand-lockup auth-brand"><span className="brand-mark"><Activity size={18} /></span><span className="brand-copy"><strong>mesa</strong><small>PERFORMANCE INTELLIGENCE</small></span></Link>
-      <div className="auth-quote"><span className="auth-kicker"><Sparkles size={14} /> LEARN WITH THE WHOLE PICTURE</span><h1>See what the score can’t tell you.</h1><p>Connect your coursework, evidence, and goals to understand what’s working and what to build next.</p></div>
-      <div className="auth-art-footer"><span>COURSE-GROUNDED</span><i /> <span>EVIDENCE-LINKED</span><i /> <span>BUILT FOR GROWTH</span></div>
-    </div></div>
-    <section className="auth-form-side"><div className="auth-form-card"><div className="auth-form-icon"><ShieldCheck size={19} /></div><span className="auth-eyebrow">PRIVATE WORKSPACE</span><h2>Welcome back</h2><p>Sign in to your academic performance workspace.</p><LoginForm errorCode={error} /><div className="auth-security"><LockKeyholeText />Your course materials and marks stay in your private Supabase workspace.</div></div><div className="auth-copyright">MESA PERFORMANCE INTELLIGENCE <span>·</span> PRIVATE BY DESIGN</div></section>
+  return <main className="lx-page" data-theme="nature">
+    <ParallaxHero className="lx-scene">
+      <div className="lx-layout">
+        <header className="lx-top"><span className="brand-lockup lx-brand"><span className="brand-mark"><Activity size={18} /></span><span className="brand-copy"><strong>mesa</strong><small>PERFORMANCE INTELLIGENCE</small></span></span><span className="lx-pill"><ShieldCheck size={13} /> Private workspace</span></header>
+        <section className="lx-copy">
+          <span className="lx-kicker">01 / Learn with the whole picture</span>
+          <h1>See your<br /><RotatingWord words={["strengths.", "gaps.", "next moves.", "evidence.", "potential."]} /></h1>
+          <p>Marks, feedback, course material, your work and your target roles — turned into conclusions you can inspect, question and act on.</p>
+          <ul className="lx-features">
+            <li><FileSearch size={15} /><span><b>Every conclusion explained</b><small>Evidence, benchmark and limits</small></span></li>
+            <li><BrainCircuit size={15} /><span><b>Blind evaluation</b><small>Judged before reputation</small></span></li>
+            <li><Target size={15} /><span><b>Role readiness</b><small>From real job postings</small></span></li>
+          </ul>
+        </section>
+        <div className="lx-visual"><IntelligenceVisual /></div>
+        <section className="lx-card">
+          <span className="lx-card-eyebrow">Welcome back</span>
+          <h2>Sign in</h2>
+          <p>We&apos;ll email you a one-time secure link. No password to remember.</p>
+          <LoginForm errorCode={error} />
+        </section>
+      </div>
+      <div className="lx-marquee" aria-hidden="true"><div className="lx-marquee-track">{[...MARQUEE, ...MARQUEE].map((item, index) => <span key={index}>{item}<i /></span>)}</div></div>
+    </ParallaxHero>
   </main>;
 }
-
-function LockKeyholeText() { return <ShieldCheck size={13} />; }

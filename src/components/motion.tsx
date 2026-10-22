@@ -97,3 +97,34 @@ export function useRevealOnScroll(dependency: unknown) {
     return () => { observer.disconnect(); window.clearTimeout(failSafe); };
   }, [dependency]);
 }
+
+// Cycles through words with a vertical slide; the first word is rendered on the server.
+export function RotatingWord({ words, intervalMs = 2600 }: { words: string[]; intervalMs?: number }) {
+  const [index, setIndex] = useState(0);
+  useEffect(() => {
+    if (prefersReducedMotion() || words.length < 2) return;
+    const timer = window.setInterval(() => setIndex((current) => (current + 1) % words.length), intervalMs);
+    return () => window.clearInterval(timer);
+  }, [words.length, intervalMs]);
+  return <span className="rotating-word" aria-live="polite"><span key={index} className="rotating-word-inner">{words[index]}</span></span>;
+}
+
+// Cards light up under the cursor: sets --mx/--my on the hovered card for a radial highlight.
+export function useSpotlight() {
+  useEffect(() => {
+    if (prefersReducedMotion()) return;
+    let frame = 0;
+    const onMove = (event: PointerEvent) => {
+      const card = (event.target as HTMLElement | null)?.closest<HTMLElement>(".metric-card,.panel,.content-panel,.swot-item,.role-card,.roadmap-item,.quality-dimension,.competency-summary-item");
+      if (!card) return;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const rect = card.getBoundingClientRect();
+        card.style.setProperty("--mx", `${event.clientX - rect.left}px`);
+        card.style.setProperty("--my", `${event.clientY - rect.top}px`);
+      });
+    };
+    window.addEventListener("pointermove", onMove, { passive: true });
+    return () => { window.removeEventListener("pointermove", onMove); cancelAnimationFrame(frame); };
+  }, []);
+}

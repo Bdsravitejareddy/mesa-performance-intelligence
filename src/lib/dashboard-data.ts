@@ -2,6 +2,12 @@ import { demoData, demoMarkSeries } from "@/lib/demo-data";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { describeSyncHealth, type SyncHealth, type SyncRun } from "@/lib/lms/sync-health";
+import { loadCompetencyInputs } from "@/lib/competency/load";
+import { buildCompetencyMap } from "@/lib/competency/map";
+import { buildLibrary } from "@/lib/roles/library";
+import { importanceFromLibrary, roleReadiness } from "@/lib/roles/readiness";
+import { recommend } from "@/lib/roadmap/prioritise";
+import { toRoadmapInput } from "@/lib/roadmap/load";
 
 export type DashboardSnapshot = {
   demoMode: boolean;
@@ -18,6 +24,7 @@ export type DashboardSnapshot = {
   assessmentCount: number;
   topicCount: number;
   syncHealth: SyncHealth | null;
+  insights: { markedAssessments: number; competenciesAssessed: number; competenciesTotal: number; strengths: number; gaps: number; readiness: { role: string; evidenced: number; total: number }[]; focus: { title: string; why: string; tag: string }[] } | null;
 };
 
 const demoSnapshot: DashboardSnapshot = {
@@ -40,6 +47,7 @@ const demoSnapshot: DashboardSnapshot = {
   assessmentCount: 12,
   topicCount: 11,
   syncHealth: null,
+  insights: null,
 };
 
 export async function getDashboardSnapshot(client?: SupabaseClient): Promise<DashboardSnapshot> {
@@ -105,6 +113,7 @@ export async function getDashboardSnapshot(client?: SupabaseClient): Promise<Das
     assessmentCount: assessments.length,
     topicCount: competencies.length,
     syncHealth: describeSyncHealth((syncResult.data ?? []) as SyncRun[]),
+    insights: await buildInsights(supabase, new Set(submissions.map((row) => row.assessment_id as string)).size),
   };
 }
 
@@ -129,4 +138,28 @@ export function weightedAverage(rows: { mark: number; weight: number }[]): numbe
   const total = rows.reduce((sum, row) => sum + row.weight, 0);
   if (!rows.length || total <= 0) return null;
   return Math.round((rows.reduce((sum, row) => sum + row.mark * row.weight, 0) / total) * 10) / 10;
+}
+
+// Competency coverage, Stage 1 readiness and the top roadmap actions, from the same evidence model as the other pages.
+async function buildInsights(supabase: SupabaseClient, markedAssessments: number): Promise<DashboardSnapshot["insights"]> {
+  try {
+    const inputs = await loadCompetencyInputs(supabase);
+    const entries = buildCompetencyMap(inputs).flatMap((domain) => domain.competencies.map((entry) => ({ ...entry, domain: domain.name })));
+    const states = new Map(entries.map((entry) => [entry.id, { state: entry.assessment.state, name: entry.name }]));
+    const library = buildLibrary();
+    const readiness = library.filter((role) => role.tier === "primary").map((role) => roleReadiness(role, states, []));
+    const importance = importanceFromLibrary(library, new Map(entries.map((entry) => [entry.id, entry.mappedAssessments])));
+    const focus = recommend(entries.map(toRoadmapInput), importance, new Set(), 3).map((item) => ({ title: item.activity.title, why: item.activity.why, tag: item.competency }));
+    return {
+      markedAssessments,
+      competenciesAssessed: entries.filter((entry) => entry.assessment.why.evidence.some((row) => row.mark !== null)).length,
+      competenciesTotal: entries.length,
+      strengths: entries.filter((entry) => entry.assessment.state === "demonstrated_strength").length,
+      gaps: entries.filter((entry) => entry.assessment.state === "development_area").length,
+      readiness: readiness.map((item) => ({ role: item.role.name, evidenced: item.evidenced, total: item.skillRequirements })),
+      focus,
+    };
+  } catch {
+    return null;
+  }
 }

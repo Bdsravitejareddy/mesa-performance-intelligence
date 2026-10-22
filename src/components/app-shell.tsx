@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useRevealOnScroll } from "@/components/motion";
+import { useRevealOnScroll, useSpotlight } from "@/components/motion";
+import { CommandPalette } from "@/components/command-palette";
+import { useEffect, useState } from "react";
 import {
   Activity,
   ArrowUpRight,
@@ -64,6 +66,13 @@ const groups = [
 export function AppShell({ children, demoMode }: { children: React.ReactNode; demoMode: boolean }) {
   const pathname = usePathname();
   useRevealOnScroll(pathname);
+  useSpotlight();
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setPaletteOpen((open) => !open); } };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
     <div className="app-frame" data-theme="nature">
@@ -111,7 +120,7 @@ export function AppShell({ children, demoMode }: { children: React.ReactNode; de
         <header className="topbar">
           <div className="breadcrumb"><span>Performance intelligence</span><span className="crumb-divider">/</span><strong>{pageTitle(pathname)}</strong></div>
           <div className="topbar-actions">
-            <button className="search-trigger" type="button" aria-label="Search"><Search size={16} /><span>Search anything</span><kbd>⌘ K</kbd></button>
+            <button className="search-trigger" type="button" aria-label="Open command palette" onClick={() => setPaletteOpen(true)}><Search size={16} /><span>Search or run…</span><kbd>⌘ K</kbd></button>
             <button className="icon-button" title="AI insights" type="button"><Sparkles size={17} /></button>
             <div className="topbar-date"><span className="date-dot" /> October 2026</div>
           </div>
@@ -119,6 +128,7 @@ export function AppShell({ children, demoMode }: { children: React.ReactNode; de
         {demoMode && <div className="demo-banner"><span className="demo-banner-icon"><Sparkles size={14} /></span><strong>Illustrative preview</strong><span>Sample figures are synthetic and are not actual Mesa student records.</span><Link href="/setup">Connect your workspace <ArrowUpRight size={13} /></Link></div>}
         <main className="main-content">{children}</main>
       </div>
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} links={groups.flatMap((group) => group.links.map(({ href, label }) => ({ href, label, group: group.label })))} />
     </div>
   );
 }

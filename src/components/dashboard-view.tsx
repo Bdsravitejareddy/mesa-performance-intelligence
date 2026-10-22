@@ -4,30 +4,26 @@ import {
   ArrowDownRight,
   ArrowRight,
   ArrowUpRight,
-  BookOpenCheck,
   FileText,
   Layers3,
   Plus,
   Sparkles,
-  Target,
-  TrendingUp,
 } from "lucide-react";
 import type { DashboardSnapshot } from "@/lib/dashboard-data";
 import { formatOfficialMark } from "@/lib/scoring";
 import { IntelligenceVisual } from "@/components/intelligence-visual";
-import { CountUp, ParallaxHero } from "@/components/motion";
+import { CountUp, ParallaxHero, RotatingWord } from "@/components/motion";
 import { InsightSummary } from "@/components/insight-summary";
 
 export function DashboardView({ data }: { data: DashboardSnapshot }) {
   const average = data.averageMark;
-  const demonstrated = data.mastery.filter((item) => item.state.toLowerCase().includes("demonstrated")).length;
 
   return (
     <div className="dashboard-page page-enter">
       <ParallaxHero className="overview-hero">
         <div className="overview-hero-copy">
           <div className="eyebrow"><span className="eyebrow-line" /> Your learning, in context</div>
-          <h1>See the signal in your performance.</h1>
+          <h1>See the signal in your <RotatingWord words={["performance.", "strengths.", "gaps.", "next moves."]} /></h1>
           <p>Connect what you were taught with the work you’ve shown, then choose what to improve next.</p>
           <Link href="/courses" className="button button-primary"><Plus size={16} /> Add course material</Link>
         </div>
@@ -42,11 +38,11 @@ export function DashboardView({ data }: { data: DashboardSnapshot }) {
 
       {!data.demoMode && data.courses.length === 0 && data.assessmentCount === 0 && data.marks.length === 0 && <div className="info-callout" role="status"><span><strong>No Mesa records have been imported.</strong> Run an LMS sync from Marks & feedback, or add a course and its materials to start recording assessment evidence. <Link href="/courses" className="text-link">Open courses <ArrowRight size={14} /></Link></span></div>}
 
-      <section className="metric-grid" aria-label="Performance summary">
-        <MetricCard label="Average assessment mark" value={average === null ? "—" : formatOfficialMark(average)} meta={data.markCount ? `${data.markCount} marks · weighted by maximum marks${data.unweightedAverage !== null && data.unweightedAverage !== data.averageMark ? ` (unweighted ${data.unweightedAverage})` : ""}` : "No marks recorded"} icon={<TrendingUp size={17} />} accent="mint" />
-        <MetricCard label="Courses in view" value={String(data.courses.length)} meta="Course-linked evidence" icon={<BookOpenCheck size={17} />} accent="blue" />
-        <MetricCard label="Assessments" value={String(data.assessmentCount)} meta="Across linked courses" icon={<FileText size={17} />} accent="violet" />
-        <MetricCard label="Topics demonstrated" value={`${demonstrated} / ${data.topicCount}`} meta="Evidence-weighted view" icon={<Target size={17} />} accent="amber" />
+      <section className="metric-grid ring-grid" aria-label="Performance summary">
+        <RingCard label="Weighted average" value={average} max={100} display={average === null ? "—" : `${average}`} suffix={average === null ? "" : "/100"} meta={data.markCount ? `${data.markCount} marks · weighted by maximum marks${data.unweightedAverage !== null && data.unweightedAverage !== data.averageMark ? ` (unweighted ${data.unweightedAverage})` : ""}` : "No marks recorded"} tone="mint" />
+        <RingCard label="Assessments marked" value={data.insights?.markedAssessments ?? data.markCount} max={Math.max(data.assessmentCount, 1)} display={String(data.insights?.markedAssessments ?? data.markCount)} suffix={` of ${data.assessmentCount}`} meta="Released marks across your courses" tone="blue" />
+        <RingCard label="Competencies evidenced" value={data.insights?.competenciesAssessed ?? 0} max={Math.max(data.insights?.competenciesTotal ?? 35, 1)} display={String(data.insights?.competenciesAssessed ?? 0)} suffix={` of ${data.insights?.competenciesTotal ?? 35}`} meta={data.insights ? `${data.insights.strengths} strengths · ${data.insights.gaps} development areas` : "Map assessments to start"} tone="violet" />
+        <RingCard label="Stage 1 readiness" value={(data.insights?.readiness ?? []).reduce((sum, role) => sum + role.evidenced, 0)} max={Math.max((data.insights?.readiness ?? []).reduce((sum, role) => sum + role.total, 0), 1)} display={String((data.insights?.readiness ?? []).reduce((sum, role) => sum + role.evidenced, 0))} suffix={` of ${(data.insights?.readiness ?? []).reduce((sum, role) => sum + role.total, 0)}`} meta="Skill requirements evidenced for your two target roles" tone="amber" />
       </section>
 
       <section className="insight-grid">
@@ -68,15 +64,14 @@ export function DashboardView({ data }: { data: DashboardSnapshot }) {
             <FocusRow number="01" title="Make assumptions visible" detail="Name the denominator and time period before interpreting a ratio." tag="Quantitative" />
             <FocusRow number="02" title="Turn insight into action" detail="Link each finding to a decision the business could make." tag="Application" />
             <FocusRow number="03" title="Ground claims in evidence" detail="Tie market conclusions to a course or case source." tag="Evidence" />
-          </div> : <div className="empty-copy"><p>As course materials and feedback are linked, repeated themes will appear here.</p><Link href="/courses">Connect course content <ArrowRight size={14} /></Link></div>}
+          </div> : data.insights?.focus.length ? <div className="focus-list">{data.insights.focus.map((item, index) => <FocusRow key={item.title} number={String(index + 1).padStart(2, "0")} title={item.title} detail={item.why} tag={item.tag} />)}<Link className="text-link" href="/roadmap">Open the growth roadmap <ArrowRight size={14} /></Link></div> : <div className="empty-copy"><p>As course materials and feedback are linked, repeated themes will appear here.</p><Link href="/courses">Connect course content <ArrowRight size={14} /></Link></div>}
         </article>
       </section>
 
       <section className="lower-grid">
         <article className="panel mastery-panel">
-          <div className="panel-heading"><div><h2>Course mastery</h2><p>Topic-level evidence, not a single-score verdict</p></div><Link className="text-link" href="/courses">Explore courses <ArrowRight size={14} /></Link></div>
-          {data.mastery.length ? <div className="mastery-list">{data.mastery.slice(0, 5).map((item, index) => <MasteryRow key={item.topic} item={item} index={index} />)}</div> : <div className="empty-copy"><p>Course topics will appear once objectives and assessment evidence are connected.</p><Link href="/courses">Add a course <ArrowRight size={14} /></Link></div>}
-          <div className="mastery-legend"><span><i className="state-dot state-good" /> Demonstrated</span><span><i className="state-dot state-review" /> Development needed</span><span><i className="state-dot state-muted" /> Not enough evidence</span></div>
+          <div className="panel-heading"><div><h2>Readiness for your targets</h2><p>Skill requirements from real postings that your evidence covers</p></div><Link className="text-link" href="/career">Career readiness <ArrowRight size={14} /></Link></div>
+          {data.insights?.readiness.length ? <div className="readiness-list">{data.insights.readiness.map((role) => <div className="readiness-row" key={role.role}><span><strong>{role.role}</strong><small>{role.evidenced} of {role.total} skill requirements evidenced</small></span><span className="readiness-track"><i style={{ width: `${role.total ? Math.round((role.evidenced / role.total) * 100) : 0}%` }} /></span><b>{role.total ? Math.round((role.evidenced / role.total) * 100) : 0}%</b></div>)}<p className="scope-note">Eligibility (years of experience, degrees) is listed separately on Career readiness and never scored as a skill gap.</p></div> : <div className="empty-copy"><p>Target-role readiness appears once assessments are mapped to competencies.</p></div>}
         </article>
 
         <article className="panel recent-panel">
@@ -99,21 +94,15 @@ export function DashboardView({ data }: { data: DashboardSnapshot }) {
   );
 }
 
-function MetricCard({ label, value, meta, icon, accent, trend }: { label: string; value: string; meta: string; icon: React.ReactNode; accent: string; trend?: string }) {
-  return <article className="metric-card">
-    <div className="metric-top"><span>{label}</span><span className={`metric-icon metric-${accent}`}>{icon}</span></div>
-    <div className="metric-value-row"><strong><CountUp value={value} /></strong>{trend && <span className="metric-trend"><ArrowUpRight size={13} /> {trend}</span>}</div>
-    <small>{meta}</small>
-  </article>;
-}
-
 function FocusRow({ number, title, detail, tag }: { number: string; title: string; detail: string; tag: string }) {
   return <div className="focus-row"><span className="focus-number">{number}</span><span className="focus-content"><strong>{title}</strong><small>{detail}</small><em>{tag}</em></span><ArrowDownRight size={15} className="focus-arrow" /></div>;
 }
 
-function MasteryRow({ item, index }: { item: DashboardSnapshot["mastery"][number]; index: number }) {
-  const isGood = item.state.toLowerCase().includes("demonstrated");
-  const isNeed = item.state.toLowerCase().includes("development");
-  const bar = isGood ? "bar-good" : isNeed ? "bar-review" : "bar-muted";
-  return <div className="mastery-row"><span className={`mastery-index mastery-index-${index}`}>{String(index + 1).padStart(2, "0")}</span><span className="mastery-topic"><strong>{item.topic}</strong><span className="mastery-track"><i className={bar} style={{ width: item.value === null ? "0%" : `${Math.max(6, Math.min(item.value, 100))}%` }} /></span></span><span className="mastery-value">{item.value === null ? "Not scored" : `${item.value}/100`}<small>{item.state}</small></span></div>;
+function RingCard({ label, value, max, display, suffix, meta, tone }: { label: string; value: number | null; max: number; display: string; suffix: string; meta: string; tone: string }) {
+  const share = value === null ? 0 : Math.max(0, Math.min(1, value / max));
+  const circumference = 2 * Math.PI * 34;
+  return <article className={`metric-card ring-card ring-${tone}`}>
+    <svg viewBox="0 0 80 80" className="ring" aria-hidden="true"><circle cx="40" cy="40" r="34" className="ring-track" /><circle cx="40" cy="40" r="34" className="ring-value" style={{ strokeDasharray: circumference, ["--ring-offset" as string]: `${circumference * (1 - share)}`, ["--ring-full" as string]: `${circumference}` }} /></svg>
+    <div className="ring-copy"><span className="ring-label">{label}</span><strong><CountUp value={display} /><small>{suffix}</small></strong><small>{meta}</small></div>
+  </article>;
 }
