@@ -11,6 +11,7 @@ import { StorySeams, ChapterRail } from "@/components/story-flow";
 import { GuidedTour, tourSeen } from "@/components/guided-tour";
 import { GlassBackdrop } from "@/components/glass-backdrop";
 import { useEdgeReveal } from "@/components/edge-reveal";
+import { TermSwitch } from "@/components/term-switch";
 
 
 export function AppShell({ children, demoMode }: { children: React.ReactNode; demoMode: boolean }) {
@@ -78,6 +79,7 @@ export function AppShell({ children, demoMode }: { children: React.ReactNode; de
         <header className="topbar">
           <div className="breadcrumb"><span>Performance intelligence</span><span className="crumb-divider">/</span><strong>{pageTitle(pathname)}</strong></div>
           <div className="topbar-actions">
+            <TermSwitch />
             <button className="search-trigger" data-tour="search" type="button" aria-label="Open command palette" onClick={() => setPaletteOpen(true)}><Search size={16} /><span>Search or run…</span><kbd>⌘ K</kbd></button>
             <button className="icon-button tour-trigger" data-tour="tour" title="Guided tour" aria-label="Replay the guided tour" type="button" onClick={() => setTourOpen(true)}><Compass size={17} /></button>
             <div className="topbar-date"><span className="date-dot" /> October 2026</div>

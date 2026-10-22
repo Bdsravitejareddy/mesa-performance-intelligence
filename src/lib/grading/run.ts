@@ -7,6 +7,7 @@ import { requestJsonFromProvider } from "@/lib/ai/provider";
 import { blindEvaluate, parseCriteria, PROVENANCE_LABELS, resolveStandard, type Standard, type WorkKind } from "@/lib/quality/engine";
 import { CODE_RULES_VERSION, codeGrade } from "./code-score";
 import { compareWithFeedback } from "./compare";
+import { differenceReasons } from "./reasons";
 
 export type GradingOutcome = { submissionId: string; assessment: string; status: "graded" | "code_only" | "unchanged" | "skipped"; note: string };
 
@@ -119,6 +120,21 @@ export async function gradeSubmissions(client: SupabaseClient, budgetMs: number,
 
     const aiPoints = aiReport ? [...aiReport.issues, ...aiReport.strengths, ...aiReport.dimensions.flatMap((dimension) => [dimension.issue, dimension.strength])] : [];
     const comparison = compareWithFeedback({ feedback, aiPoints, official, ai: aiReport?.overall ?? null, code: code.score });
+    const reasons = differenceReasons(code.report, aiReport, { ai: aiReport?.overall ?? null, code: code.score, official }, comparison.facultyOnly.length);
+    // With several files (e.g. a data sheet and a deck), each is also scored on its own. Data sheets get their
+    // own blind AI grade when time allows; every file gets a code score.
+    const readableDocs = docs.filter(readable);
+    const documents: { name: string; code: number | null; ai: number | null }[] = [];
+    if (readableDocs.length > 1) {
+      for (const doc of readableDocs.slice(0, 4)) {
+        const docCode = codeGrade(doc.extracted_text, standard.criteria, refs.map((ref) => ref.excerpt)).score;
+        let docAi: number | null = null;
+        if (aiAllowed && /\.(xlsx|csv)$|sheet/i.test(doc.name) && Date.now() < deadline - AI_RESERVE_MS) {
+          try { docAi = (await blindEvaluate(doc.extracted_text, standard, "case_solution", assessment.brief ?? "")).overall; } catch { docAi = null; }
+        }
+        documents.push({ name: doc.name, code: docCode, ai: docAi });
+      }
+    }
     const { error } = await client.from("submission_gradings").upsert({
       user_id: submission.user_id,
       submission_id: submission.id,
@@ -133,7 +149,7 @@ export async function gradeSubmissions(client: SupabaseClient, budgetMs: number,
       ai_report: aiReport,
       ai_status: aiStatus,
       official_mark: official,
-      comparison: { ...comparison, note: note ? `${comparison.note} ${note}` : comparison.note },
+      comparison: { ...comparison, reasons, documents, note: note ? `${comparison.note} ${note}` : comparison.note },
       provider_model: aiReport ? model : "",
       rules_version: CODE_RULES_VERSION,
     }, { onConflict: "submission_id,input_hash" });

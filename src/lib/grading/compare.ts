@@ -10,6 +10,8 @@ export type Comparison = {
   gaps: { aiMinusOfficial: number | null; codeMinusOfficial: number | null; aiMinusCode: number | null };
   agreement: "close" | "moderate" | "far" | "no_official_mark";
   note: string;
+  reasons?: string[];
+  documents?: { name: string; code: number | null; ai: number | null }[];
 };
 
 export function splitPoints(text: string): string[] {

@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { SyncHealthNotice } from "@/components/sync-health-notice";
 import { ArrowDown, ArrowRight, FileText } from "lucide-react";
 import type { DashboardSnapshot } from "@/lib/dashboard-data";
 import { formatOfficialMark } from "@/lib/scoring";
 import { IntelligenceVisual } from "@/components/intelligence-visual";
 import { CountUp, ParallaxHero } from "@/components/motion";
-import { InsightSummary } from "@/components/insight-summary";
 import { Why } from "@/components/why";
+import { BriefRefresh } from "@/components/brief-refresh";
+import type { CourseStanding } from "@/lib/insights/course-standing";
 
 const shortCourse = (name: string) => name.replace(/\s+with\s+.*$/i, "");
 
@@ -24,7 +24,8 @@ export function DashboardView({ data }: { data: DashboardSnapshot }) {
   const grading = data.insights?.grading ?? null;
   const markedCount = data.insights?.markedAssessments ?? data.markCount;
 
-  const headline = !best
+  const brief = data.brief?.brief ?? null;
+  const headline = brief ? <>{brief.headline}</> : !best
     ? <>Your story starts with <em>your first mark.</em></>
     : attention
       ? <>Strongest in <em>{shortCourse(best.course)}</em>; {shortCourse(attention.course)} needs attention.</>
@@ -36,15 +37,18 @@ export function DashboardView({ data }: { data: DashboardSnapshot }) {
         <div className="overview-hero-copy">
           <div className="eyebrow"><span className="eyebrow-line" /> Your summary</div>
           <h1>{headline}</h1>
+          {brief?.summary && <p className="summary-text">{brief.summary}</p>}
           <p className="summary-line">{average === null ? "No marks yet" : <><b>{average}</b> weighted average</>} · <b>{markedCount}</b> of {data.assessmentCount} assessments marked{data.insights ? <> · <b>{data.insights.competenciesAssessed}</b> of {data.insights.competenciesTotal} competencies evidenced</> : null}</p>
-          <a href="#breakdown" className="button button-light">The breakdown <ArrowDown size={15} /></a>
+          <div className="hero-actions"><a href="#breakdown" className="button button-light">The breakdown <ArrowDown size={15} /></a>{!data.demoMode && <BriefRefresh term={data.term} hasBrief={Boolean(brief)} />}{data.syncHealth && data.syncHealth.level !== "ok" && <Link href="/marks" className="sync-chip">LMS sync {data.syncHealth.level === "warning" ? "partial" : "needs attention"} ·  details</Link>}</div>
         </div>
         <IntelligenceVisual />
       </ParallaxHero>
 
-      {data.syncHealth && data.syncHealth.level !== "ok" && <SyncHealthNotice health={data.syncHealth} compact />}
 
       {!data.demoMode && data.courses.length === 0 && data.assessmentCount === 0 && data.marks.length === 0 && <div className="info-callout" role="status"><span><strong>No Mesa records yet.</strong> Run an LMS sync from Marks & feedback to begin.</span></div>}
+
+      {brief && <section className="brief-insights" aria-label="Insights">{brief.insights.map((item) => <article key={item.title} className={`brief-card kind-${item.kind}`}><span className="brief-kind">{item.kind}</span><h3>{item.title}</h3><p>{item.detail}</p></article>)}</section>}
+      {brief && brief.focus.length > 0 && <section className="brief-focus"><span className="eyebrow"><span className="eyebrow-line" /> Focus next</span><ol>{brief.focus.map((item) => <li key={item}>{item}</li>)}</ol><small>AI-written from the figures below · {data.brief?.model} · {new Date(data.brief!.createdAt).toLocaleString()}</small></section>}
 
       <section className="highlight-grid" aria-label="Highlights">
         <Highlight label="Weighted average" tone="mint" ring={average === null ? null : average / 100} value={average === null ? "—" : `${average}`} unit={average === null ? "" : "/100"}
@@ -69,13 +73,9 @@ export function DashboardView({ data }: { data: DashboardSnapshot }) {
 
       <section className="insight-grid">
         <article className="panel performance-panel">
-          <div className="panel-heading"><div><h2>By course</h2></div><Link className="text-link" href="/marks">Marks <ArrowRight size={14} /></Link></div>
-          <div className="course-performance">{data.coursePerformance.map((row) => <div className="course-bar" key={row.course}>
-            <span className="course-bar-name"><strong>{shortCourse(row.course)}</strong><small>{row.marked} of {row.total} marked</small></span>
-            <span className="course-bar-track" aria-hidden><i style={{ width: `${row.weighted ?? 0}%` }} className={row.weighted === null ? "" : row.weighted >= 85 ? "bar-good" : row.weighted < 65 ? "bar-review" : "bar-muted"} /><b style={{ width: `${Math.round((row.marked / Math.max(row.total, 1)) * 100)}%` }} /></span>
-            <span className="course-bar-value">{row.weighted === null ? "—" : <CountUp value={`${row.weighted}`} />}</span>
-          </div>)}</div>
-          <Why>Bars show each course&apos;s weighted average out of 100. The thin line under a bar shows how much of that course has released marks, so a short line means the figure rests on little evidence.</Why>
+          <div className="panel-heading"><div><h2>By course, for your target roles</h2></div><Link className="text-link" href="/grading">Graded work <ArrowRight size={14} /></Link></div>
+          {data.standings.length ? <div className="standing-table">{data.standings.sort((a, b) => (b.standing ?? -1) - (a.standing ?? -1)).map((row) => <StandingRow key={row.courseId} row={row} />)}</div> : <p className="empty-hint">No courses in this term yet.</p>}
+          <Why>Standing is the official weighted average, or the blind AI grade where no mark is released yet (marked “AI”). “Shown” is how much of the course's assessment weight has a mark or a grading. A course is core for a role when it assesses a large share of that role's skills (bar 75) and supporting otherwise (bar 65).</Why>
         </article>
 
         <article className="panel focus-panel">
@@ -101,7 +101,6 @@ export function DashboardView({ data }: { data: DashboardSnapshot }) {
         </article>
       </section>
 
-      <section className="panel narrative-panel"><Why label="Read the AI-written narrative"><InsightSummary demoMode={data.demoMode} /></Why></section>
     </div>
   );
 }
@@ -118,4 +117,15 @@ function Highlight({ label, value, unit, insight, ring, tone, href, children }: 
     <p className="highlight-insight">{href ? <Link href={href}>{insight} <ArrowRight size={12} /></Link> : insight}</p>
     <Why>{children}</Why>
   </article>;
+}
+
+const VERDICT_LABEL = { sufficient: "enough", needs_work: "needs work", not_yet_evidenced: "not yet shown" } as const;
+const shortRole = (role: string) => role.replace(/Senior Technical Product Manager/i, "Sr TPM").replace(/Forward Deployed Engineer/i, "FDE");
+
+function StandingRow({ row }: { row: CourseStanding }) {
+  return <div className="standing-row">
+    <span className="standing-name"><strong>{row.title.replace(/\s+with\s+.*$/i, "")}</strong><small>{row.evidenced} of {row.assessments} assessed · {Math.round(row.demonstratedShare * 100)}% shown</small></span>
+    <span className={`standing-value basis-${row.basis}`}>{row.standing === null ? "—" : row.standing}{row.basis === "ai" && <em>AI</em>}</span>
+    <span className="standing-roles">{row.roles.map((role) => <span key={role.role} className={`role-chip verdict-${role.verdict}`} title={`${role.relevance} for ${role.role}: bar ${role.threshold}`}>{shortRole(role.role)} · {role.relevance} · {VERDICT_LABEL[role.verdict]}</span>)}</span>
+  </div>;
 }

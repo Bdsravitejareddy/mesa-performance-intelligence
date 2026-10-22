@@ -93,7 +93,7 @@ async function computeSwot(supabase: SupabaseClient) {
   const items = buildEvidenceSwot({
     competencies,
     readiness: library.map((role) => roleReadiness(role, stateMap, claimRows)),
-    supportedClaims: (profClaims.data ?? []).filter((row) => row.status === "supported").map((row) => ({ claim: row.claim as string, competency: stateMap.get(row.competency_id as string)?.name ?? "", source: titles.get(row.evidence_id as string) ?? "Professional evidence" })),
+    supportedClaims: (profClaims.data ?? []).filter((row) => row.status === "supported" || row.status === "attested").map((row) => ({ claim: row.claim as string, competency: stateMap.get(row.competency_id as string)?.name ?? "", source: titles.get(row.evidence_id as string) ?? "Professional evidence" })),
     criterionGaps,
     dataQuality: { syncWarning: health.level === "ok" ? null : health.warnings[0] ?? null, heldAssignments: (held.data ?? []).length, describedShare: null },
   });

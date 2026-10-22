@@ -13,7 +13,7 @@ import { extractDocxPages, extractXlsxSheets } from "@/lib/office-documents";
 import { toAssessmentRow, toSubmissionRow } from "./records";
 import { assignmentDetailArguments, selectAssignmentReadTools, toolArgumentVariants } from "./tool-selection";
 
-type SyncResult = { status: "succeeded" | "partial"; runId: string; courses: number; assessments: number; submissions: number; marks: number; feedback: number; message: string; competencySnapshots?: number | null; briefs?: number };
+type SyncResult = { status: "succeeded" | "partial"; runId: string; courses: number; assessments: number; submissions: number; marks: number; feedback: number; message: string; competencySnapshots?: number | null; briefs?: number; terms?: number };
 
 async function workspaceMembers(client: SupabaseClient): Promise<string[]> {
   const emails = new Set(getAllowedEmails());
@@ -200,6 +200,11 @@ export async function syncMesaLms(): Promise<SyncResult> {
     const summary: SyncResult = { status: hasPartialData ? "partial" : "succeeded", runId: run.id, courses: counts.courses, assessments: counts.assessments, submissions: counts.submissions, marks: counts.marks, feedback: counts.feedback, message: hasPartialData ? `Imported ${counts.assessments} assessment(s), ${counts.marks} marks, and ${counts.feedback} feedback records. ${counts.resolvedUnassigned ? `${counts.resolvedUnassigned} course-less record(s) were filed by title or member confirmation; ` : ""}${counts.skipped} record(s) without a course are held for review; ${failedReads} read operation(s) failed.` : `Synced ${counts.assessments} assessments, ${counts.marks} marks, and ${counts.feedback} feedback records. Scores are converted to the 0–100 scale, and original LMS marks are retained.` };
     const { error } = await client.from("sync_runs").update({ status: summary.status, finished_at: new Date().toISOString(), message: summary.message }).eq("id", run.id).eq("user_id", ownerId);
     if (error) throw new Error("Sync status could not be saved.");
+    // Terms (Pre-Term, Term 1, Term 2) and course dates from the read-only course list.
+    const courseListTool = availableTools.find((tool) => tool.name.toLowerCase().replace(/[^a-z]/g, "") === "listcourses");
+    if (courseListTool) {
+      try { summary.terms = await refreshTerms(client, mcp, courseListTool); } catch { summary.terms = 0; }
+    }
     // Briefs for assessments that have none yet (or are a week old), so grading can use the task's own requirements.
     if (assignmentDetailTool) {
       try { summary.briefs = await refreshBriefs(client, mcp, assignmentDetailTool); } catch { summary.briefs = 0; }
@@ -255,4 +260,19 @@ async function readAttachedMaterials(files: { name: string; url: string }[]): Pr
     } catch { /* an unreadable attachment leaves the brief as the LMS text */ }
   }
   return texts;
+}
+
+async function refreshTerms(client: SupabaseClient, mcp: MesaMcpClient, tool: McpTool): Promise<number> {
+  const reply = unwrapToolResult(await mcp.callTool(tool.name, {})) as { courses?: Record<string, unknown>[] } | Record<string, unknown>[];
+  const list = Array.isArray(reply) ? reply : Array.isArray(reply?.courses) ? reply.courses : [];
+  const date = (value: unknown) => (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null);
+  let updated = 0;
+  for (const course of list) {
+    const id = typeof course.id === "string" ? course.id : "";
+    const term = typeof course.term === "string" ? course.term.trim().slice(0, 40) : "";
+    if (!id || !term) continue;
+    const { data } = await client.from("courses").update({ term, starts_on: date(course.startDate), ends_on: date(course.endDate) }).eq("lms_course_id", id).select("id");
+    updated += data?.length ?? 0;
+  }
+  return updated;
 }

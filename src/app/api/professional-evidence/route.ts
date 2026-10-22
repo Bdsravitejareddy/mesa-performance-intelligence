@@ -105,9 +105,15 @@ export async function DELETE(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   const auth = await member();
   if (!auth) return NextResponse.json({ error: "Sign in first." }, { status: 401 });
-  const body = (await request.json().catch(() => null)) as { claimId?: unknown; status?: unknown; supportingEvidenceId?: unknown; note?: unknown } | null;
+  const body = (await request.json().catch(() => null)) as { claimId?: unknown; status?: unknown; supportingEvidenceId?: unknown; note?: unknown; action?: unknown } | null;
+  // "Confirm all": the member attests every open claim is accurate. Recorded as attested, not as evidence-backed.
+  if (body?.action === "attest_all") {
+    const { data, error } = await auth.supabase.from("professional_claims").update({ status: "attested", attested_at: new Date().toISOString(), supporting_evidence_id: null }).eq("status", "claimed").select("id");
+    if (error) return NextResponse.json({ error: "Could not confirm the claims." }, { status: 400 });
+    return NextResponse.json({ ok: true, confirmed: data?.length ?? 0 });
+  }
   const claimId = typeof body?.claimId === "string" && UUID.test(body.claimId) ? body.claimId : "";
-  const status = body?.status === "supported" || body?.status === "withdrawn" || body?.status === "claimed" ? body.status : null;
+  const status = body?.status === "supported" || body?.status === "withdrawn" || body?.status === "claimed" || body?.status === "attested" ? body.status : null;
   const supportingEvidenceId = typeof body?.supportingEvidenceId === "string" && UUID.test(body.supportingEvidenceId) ? body.supportingEvidenceId : null;
   if (!claimId || !status || (status === "supported" && !supportingEvidenceId)) return NextResponse.json({ error: "Supported claims need a supporting evidence item." }, { status: 400 });
   const { error } = await auth.supabase.from("professional_claims").update({ status, supporting_evidence_id: status === "supported" ? supportingEvidenceId : null, supporting_note: typeof body?.note === "string" ? body.note.slice(0, 600) : "" }).eq("id", claimId);

@@ -40,7 +40,8 @@ describe("dashboard snapshot from private records", () => {
       from(table: string) {
         const result = Promise.resolve({ data: tables[table] ?? [], error: null });
         const chain: Record<string, unknown> = {};
-        for (const method of ["select", "not", "order", "eq", "limit"]) chain[method] = () => chain;
+        for (const method of ["select", "not", "order", "eq", "limit", "in", "like"]) chain[method] = () => chain;
+        chain.maybeSingle = () => Promise.resolve({ data: null, error: null });
         chain.then = result.then.bind(result);
         return chain;
       },

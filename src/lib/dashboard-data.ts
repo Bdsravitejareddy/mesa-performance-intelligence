@@ -8,6 +8,10 @@ import { buildLibrary } from "@/lib/roles/library";
 import { importanceFromLibrary, roleReadiness } from "@/lib/roles/readiness";
 import { recommend } from "@/lib/roadmap/prioritise";
 import { toRoadmapInput } from "@/lib/roadmap/load";
+import { courseStanding, type CourseStanding } from "@/lib/insights/course-standing";
+import { inTerm, type TermChoice } from "@/lib/term";
+
+export type OverviewBrief = { headline: string; summary: string; insights: { title: string; detail: string; kind: "strength" | "gap" | "risk" | "opportunity" | "context" }[]; focus: string[] };
 
 export type DashboardSnapshot = {
   demoMode: boolean;
@@ -24,6 +28,9 @@ export type DashboardSnapshot = {
   assessmentCount: number;
   topicCount: number;
   syncHealth: SyncHealth | null;
+  term: TermChoice;
+  standings: CourseStanding[];
+  brief: { brief: OverviewBrief; createdAt: string; model: string } | null;
   insights: { markedAssessments: number; competenciesAssessed: number; competenciesTotal: number; strengths: number; gaps: number; readiness: { role: string; evidenced: number; total: number }[]; focus: { title: string; why: string; tag: string }[]; grading: { graded: number; compared: number; close: number; meanGap: number | null } | null } | null;
 };
 
@@ -47,10 +54,13 @@ const demoSnapshot: DashboardSnapshot = {
   assessmentCount: 12,
   topicCount: 11,
   syncHealth: null,
+  term: "all",
+  standings: [],
+  brief: null,
   insights: null,
 };
 
-export async function getDashboardSnapshot(client?: SupabaseClient): Promise<DashboardSnapshot> {
+export async function getDashboardSnapshot(client?: SupabaseClient, term: TermChoice = "all"): Promise<DashboardSnapshot> {
   if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") return demoSnapshot;
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) {
     throw new Error("Supabase is not configured. Connect the private workspace before loading dashboard records.");
@@ -59,7 +69,7 @@ export async function getDashboardSnapshot(client?: SupabaseClient): Promise<Das
   const supabase = client ?? await createClient();
   const [courseResult, assessmentResult, submissionResult, competencyResult, syncResult] = await Promise.all([
     supabase.from("courses").select("id, code, title, term").order("created_at", { ascending: false }),
-    supabase.from("assessments").select("id, course_id, title, assessment_format, due_at"),
+    supabase.from("assessments").select("id, course_id, title, assessment_format, due_at, official_max_mark"),
     supabase.from("submissions").select("id, assessment_id, official_mark, source_original_max_mark, submitted_at").not("official_mark", "is", null).order("submitted_at", { ascending: false }),
     supabase.from("topic_competencies").select("topic, state, score"),
     supabase.from("sync_runs").select("status, started_at, finished_at, message").eq("source_name", "Mesa Nexus MCP").order("started_at", { ascending: false }).limit(20),
@@ -68,11 +78,13 @@ export async function getDashboardSnapshot(client?: SupabaseClient): Promise<Das
   const error = courseResult.error ?? assessmentResult.error ?? submissionResult.error ?? competencyResult.error ?? syncResult.error;
   if (error) throw new Error("Could not load the private workspace. Check the Supabase migration and project configuration.");
 
-  const courses = courseResult.data ?? [];
-  const assessments = assessmentResult.data ?? [];
+  // The selected term narrows courses, and with them assessments and marks; "all" keeps everything.
+  const courses = (courseResult.data ?? []).filter((course) => inTerm(term, course.term as string | null));
+  const termCourseIds = new Set(courses.map((course) => course.id as string));
+  const assessments = (assessmentResult.data ?? []).filter((assessment) => termCourseIds.has(assessment.course_id as string));
   const assessmentById = new Map(assessments.map((assessment) => [assessment.id, assessment]));
   const courseById = new Map(courses.map((course) => [course.id, course]));
-  const submissions = submissionResult.data ?? [];
+  const submissions = (submissionResult.data ?? []).filter((submission) => assessmentById.has(submission.assessment_id));
   const marks = submissions.map((submission) => {
     const assessment = assessmentById.get(submission.assessment_id);
     const course = assessment ? courseById.get(assessment.course_id) : undefined;
@@ -113,6 +125,9 @@ export async function getDashboardSnapshot(client?: SupabaseClient): Promise<Das
     assessmentCount: assessments.length,
     topicCount: competencies.length,
     syncHealth: describeSyncHealth((syncResult.data ?? []) as SyncRun[]),
+    term,
+    standings: await loadStandings(supabase, courses as { id: string; title: string; term: string | null }[], assessments as { id: string; course_id: string; official_max_mark: number | null }[]),
+    brief: await latestBrief(supabase, term),
     insights: await buildInsights(supabase, new Set(submissions.map((row) => row.assessment_id as string)).size),
   };
 }
@@ -173,4 +188,31 @@ async function gradingSummary(supabase: SupabaseClient): Promise<{ graded: numbe
   for (const row of data ?? []) if (!latest.has(row.submission_id as string)) latest.set(row.submission_id as string, { ai: row.ai_score === null ? null : Number(row.ai_score), official: row.official_mark === null ? null : Number(row.official_mark) });
   const pairs = [...latest.values()].filter((row) => row.ai !== null && row.official !== null).map((row) => Math.abs(row.ai! - row.official!));
   return { graded: latest.size, compared: pairs.length, close: pairs.filter((gap) => gap <= 7.5).length, meanGap: pairs.length ? Math.round((pairs.reduce((sum, gap) => sum + gap, 0) / pairs.length) * 10) / 10 : null };
+}
+
+async function loadStandings(supabase: SupabaseClient, courses: { id: string; title: string; term: string | null }[], assessments: { id: string; course_id: string; official_max_mark: number | null }[]): Promise<CourseStanding[]> {
+  try {
+    const ids = assessments.map((row) => row.id);
+    const [gradings, mappings, submissions] = await Promise.all([
+      supabase.from("submission_gradings").select("assessment_id, ai_score, created_at").order("created_at", { ascending: false }),
+      supabase.from("assessment_competencies").select("assessment_id, competency_id"),
+      supabase.from("submissions").select("id, assessment_id, official_mark, source_original_max_mark").not("official_mark", "is", null),
+    ]);
+    const latest = new Map<string, number | null>();
+    for (const row of gradings.data ?? []) if (!latest.has(row.assessment_id as string)) latest.set(row.assessment_id as string, row.ai_score === null ? null : Number(row.ai_score));
+    return courseStanding({
+      courses,
+      assessments: assessments.map((row) => ({ ...row, official_max_mark: row.official_max_mark === null ? null : Number(row.official_max_mark) })),
+      marks: (submissions.data ?? []).filter((row) => ids.includes(row.assessment_id as string)).map((row) => ({ assessment_id: row.assessment_id as string, mark: Number(row.official_mark), weight: row.source_original_max_mark === null ? 100 : Number(row.source_original_max_mark) })),
+      gradings: [...latest.entries()].map(([assessment_id, ai_score]) => ({ assessment_id, ai_score })),
+      mappings: (mappings.data ?? []) as { assessment_id: string; competency_id: string }[],
+      roles: buildLibrary(),
+    });
+  } catch { return []; }
+}
+
+async function latestBrief(supabase: SupabaseClient, term: TermChoice): Promise<DashboardSnapshot["brief"]> {
+  const { data, error } = await supabase.from("overview_briefs").select("brief, created_at, provider_model").eq("term", term).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (error || !data) return null;
+  return { brief: data.brief as OverviewBrief, createdAt: data.created_at as string, model: data.provider_model as string };
 }

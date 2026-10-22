@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requestJsonFromProvider } from "@/lib/ai/provider";
+import { profileAsSource, type AiProfile } from "./ai-profile";
 
 export const DIMENSIONS = [
   "Problem framing", "First-principles reasoning", "Assumption identification", "Numerical discipline", "Hypothesis development",
@@ -8,7 +9,7 @@ export const DIMENSIONS = [
   "Decision-making under uncertainty", "Prioritisation under constraints", "Reflection and feedback adoption",
 ] as const;
 
-export type Source = { id: string; kind: "official_feedback" | "quality_check" | "evaluation_finding" | "own_ai_conversation" | "self_report" | "reasoning_test"; label: string; text: string };
+export type Source = { id: string; kind: "official_feedback" | "quality_check" | "evaluation_finding" | "own_ai_conversation" | "self_report" | "reasoning_test" | "ai_profile"; label: string; text: string };
 export type Observation = { sourceId: string; quote: string; verified: boolean };
 export type DimensionAnalysis = {
   dimension: string;
@@ -59,6 +60,10 @@ export async function gatherSources(supabase: SupabaseClient, options: { include
     const result = row.result as { sections?: Record<string, { correct: number; total: number }>; overtime?: boolean } | null;
     if (result?.sections) sources.push({ id: `R${index + 1}`, kind: "reasoning_test", label: "Practice reasoning test (self-administered)", text: `${Object.entries(result.sections).map(([section, value]) => `${section}: ${value.correct}/${value.total}`).join("; ")}${result.overtime ? "; submitted after the time limit" : ""}` });
   });
+  // Profiles written by the member's own AI assistants: an opinion about them, usable as context and as
+  // hypotheses to check against the other sources, never as the only support for an observation.
+  const { data: profiles } = await supabase.from("ai_context_reports").select("source, report, created_at").order("created_at", { ascending: false }).limit(6);
+  (profiles ?? []).forEach((row, index) => sources.push({ id: `A${index + 1}`, kind: "ai_profile", label: `${row.source} assistant's view of you (${String(row.created_at).slice(0, 10)}) — an opinion, not evidence`, text: profileAsSource(row.report as AiProfile) }));
   return sources;
 }
 
@@ -67,6 +72,7 @@ const SYSTEM = [
   "Never infer personality traits, IQ, intelligence, psychological conditions or fixed abilities. Describe behaviour in specific situations, not who the person is.",
   "Context matters: brief messages to an AI may reflect efficiency rather than poor communication; iterating may be useful with time and costly under deadlines; exploring many topics may be deliberate.",
   "AI-conversation sources contain only the student's own messages; an assistant's opinion is never evidence.",
+  "Sources of kind ai_profile are an AI assistant's summary of the student. Use them as context and as hypotheses to test against the other sources; cite them only alongside another source; note where they agree or conflict with the coursework evidence, and use their dated 'change' entries when describing change over time.",
   "For each dimension return: status (observed | not_observed), evidenceStrength (none|limited|moderate|substantial), observedBehaviour, observations (array of {sourceId, quote} with quotes copied exactly from that source), possibleExplanations (at least two different ones), context, consequences (only those shown in the sources), counterevidence, hypothesis (phrased as a tentative hypothesis), wouldConfirm, wouldChallenge.",
   "If a dimension has no supporting source, return status not_observed with empty fields. One source is at most 'limited' strength.",
   "Return JSON {\"dimensions\":[...]} with one entry per requested dimension, in order.",
@@ -78,6 +84,7 @@ const norm = (value: string) => value.toLowerCase().replace(/[“”"‘’']/g,
 // Keeps only quotes that really appear in the cited source; a dimension left without verified quotes is not observed.
 export function validateAnalysis(raw: Record<string, unknown>, sources: Source[]): DimensionAnalysis[] {
   const byId = new Map(sources.map((source) => [source.id, norm(source.text)]));
+  const kindById = new Map(sources.map((source) => [source.id, source.kind]));
   const rows = Array.isArray(raw.dimensions) ? raw.dimensions as Record<string, unknown>[] : [];
   return DIMENSIONS.map((dimension, index) => {
     const row = rows.find((item) => norm(clip(item.dimension, 120)) === norm(dimension)) ?? rows[index] ?? {};
@@ -86,8 +93,10 @@ export function validateAnalysis(raw: Record<string, unknown>, sources: Source[]
       const quote = clip(item.quote, 300);
       return { sourceId, quote, verified: Boolean(quote) && Boolean(byId.get(sourceId)?.includes(norm(quote))) };
     }).filter((item) => item.verified);
-    const distinctSources = new Set(observations.map((item) => item.sourceId)).size;
-    const observed = row.status === "observed" && observations.length > 0;
+    // An assistant's profile can add context, but an observation needs at least one source from the student's own work or feedback.
+    const independent = observations.filter((item) => kindById.get(item.sourceId) !== "ai_profile");
+    const distinctSources = new Set(independent.map((item) => item.sourceId)).size;
+    const observed = row.status === "observed" && independent.length > 0;
     const claimed = ["limited", "moderate", "substantial"].includes(String(row.evidenceStrength)) ? String(row.evidenceStrength) as DimensionAnalysis["evidenceStrength"] : "limited";
     // Strength is capped by how many independent sources actually support it.
     const evidenceStrength: DimensionAnalysis["evidenceStrength"] = !observed ? "none" : distinctSources <= 1 ? "limited" : distinctSources === 2 && claimed === "substantial" ? "moderate" : claimed;

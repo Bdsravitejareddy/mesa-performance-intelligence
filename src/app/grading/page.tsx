@@ -4,6 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { RunGrading } from "@/components/run-grading";
 import { Why } from "@/components/why";
 import { cachedRead } from "@/lib/data/cached";
+import { inTerm, selectedTerm, type TermChoice } from "@/lib/term";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import type { CodeReport } from "@/lib/grading/code-score";
 import type { Comparison } from "@/lib/grading/compare";
@@ -21,7 +22,8 @@ const SOURCE_LABEL: Record<string, string> = { official_rubric: "Official rubric
 
 export default async function GradingPage() {
   const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
-  const data = demoMode || !hasSupabaseConfig() ? null : await cachedRead("grading", loadGrading);
+  const term = await selectedTerm();
+  const data = demoMode || !hasSupabaseConfig() ? null : await cachedRead(`grading:${term}`, (client) => loadGrading(client, term));
   const rows = data?.rows ?? [];
   const withOfficial = rows.filter((row) => row.official_mark !== null && row.ai_score !== null);
   const meanGap = withOfficial.length ? withOfficial.reduce((sum, row) => sum + Math.abs(row.ai_score! - row.official_mark!), 0) / withOfficial.length : null;
@@ -61,6 +63,8 @@ export default async function GradingPage() {
           <Figure label="Code" value={row.code_score} />
         </div>
         {row.comparison && (row.comparison.agreed.length > 0 || row.comparison.facultyOnly.length > 0) && <p className="grade-insight">{insightLine(row.comparison)}</p>}
+        {row.comparison?.documents && row.comparison.documents.length > 1 && <div className="doc-scores">{row.comparison.documents.map((doc) => <span key={doc.name}><strong>{doc.name}</strong> code {fmt(doc.code)}{doc.ai !== null ? ` · AI ${fmt(doc.ai)}` : ""}</span>)}</div>}
+        {row.comparison?.reasons && row.comparison.reasons.length > 0 && <Why label="Why the scores differ"><ul className="reason-list">{row.comparison.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul></Why>}
         <Why label="See the reasoning">
           <p className="scope-note">{SOURCE_LABEL[row.standard_source] ?? row.standard_source}. {row.comparison?.note}</p>
           <table className="criteria-table"><thead><tr><th>Criterion</th><th>AI /10</th><th>Code /10</th><th>Terms found</th></tr></thead><tbody>
@@ -111,16 +115,18 @@ function ScoreTrack({ official, ai, code }: { official: number | null; ai: numbe
   return <div className="score-track" aria-hidden="true">{span && <span className="track-span" style={span} />}{marker(code, "code")}{marker(ai, "ai")}{marker(official, "official")}</div>;
 }
 
-async function loadGrading(supabase: SupabaseClient) {
+async function loadGrading(supabase: SupabaseClient, term: TermChoice) {
   const [gradings, submissions, assessments, courses, documents] = await Promise.all([
     supabase.from("submission_gradings").select("id, submission_id, assessment_id, standard_source, standard_label, code_score, code_report, ai_score, ai_report, ai_status, official_mark, comparison, provider_model, created_at").order("created_at", { ascending: false }),
     supabase.from("submissions").select("id, assessment_id, official_feedback"),
     supabase.from("assessments").select("id, course_id, title").order("title"),
-    supabase.from("courses").select("id, title"),
+    supabase.from("courses").select("id, title, term"),
     supabase.from("submission_documents").select("submission_id, extraction_status"),
   ]);
   if (gradings.error) return { missing: true as const, rows: [] as Row[], waiting: [] as Waiting[], assessmentCount: 0 };
   const course = new Map((courses.data ?? []).map((row) => [row.id as string, row.title as string]));
+  const termCourses = new Set((courses.data ?? []).filter((row) => inTerm(term, row.term as string | null)).map((row) => row.id as string));
+  assessments.data = (assessments.data ?? []).filter((row) => termCourses.has(row.course_id as string));
   const assessment = new Map((assessments.data ?? []).map((row) => [row.id as string, { title: row.title as string, course: course.get(row.course_id as string) ?? "" }]));
   const feedback = new Map((submissions.data ?? []).map((row) => [row.id as string, (row.official_feedback as string) ?? ""]));
   const seen = new Set<string>();
@@ -129,6 +135,7 @@ async function loadGrading(supabase: SupabaseClient) {
     if (seen.has(raw.submission_id as string)) continue;
     seen.add(raw.submission_id as string);
     const meta = assessment.get(raw.assessment_id as string);
+    if (!meta) continue;
     rows.push({ ...(raw as unknown as Grading), code_score: num(raw.code_score), ai_score: num(raw.ai_score), official_mark: num(raw.official_mark), assessment: meta?.title ?? "Assessment", course: meta?.course ?? "", feedback: feedback.get(raw.submission_id as string) ?? "" });
   }
   const gradedAssessments = new Set(rows.map((row) => row.assessment_id));

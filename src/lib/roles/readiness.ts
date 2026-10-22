@@ -27,7 +27,8 @@ function statusFor(competencyId: string, competencies: Map<string, CompetencyVie
   if (state === "development_area") return "gap";
   if (state === "conflicting") return "conflicting";
   const own = claims.filter((claim) => claim.competencyId === competencyId);
-  if (own.some((claim) => claim.status === "supported")) return "supported_claim";
+  // Claims backed by another evidence item, or confirmed as accurate by the member, count as supported.
+  if (own.some((claim) => claim.status === "supported" || claim.status === "attested")) return "supported_claim";
   if (own.some((claim) => claim.status === "claimed")) return "unverified_claim";
   return "missing_evidence";
 }

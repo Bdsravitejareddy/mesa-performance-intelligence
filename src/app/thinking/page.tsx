@@ -1,6 +1,8 @@
 import { AppShell } from "@/components/app-shell";
 import { AIConsentGate } from "@/components/ai-consent-gate";
 import { ConversationImport, RunBehaviourAnalysis } from "@/components/thinking";
+import { AiProfileImport, type SavedProfile } from "@/components/ai-profile-import";
+import type { AiProfile } from "@/lib/behaviour/ai-profile";
 import type { DimensionAnalysis } from "@/lib/behaviour/analyse";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -31,6 +33,7 @@ export default async function ThinkingPage() {
         {(item.wouldConfirm || item.wouldChallenge) && <p className="behaviour-test">{item.wouldConfirm && <><b>Would confirm:</b> {item.wouldConfirm} </>}{item.wouldChallenge && <><b>Would challenge:</b> {item.wouldChallenge}</>}</p>}
       </> : <p className="empty-hint">No source shows this yet. That is missing evidence, not a weakness.</p>}
     </article>)}</div>}
+    {data && <section className="content-panel"><h2>Your AI assistants&apos; view of you <span className="panel-count">{data.profiles.length}</span></h2><p className="empty-hint">Ask ChatGPT and each Claude account the profile prompt, then paste the reply here. It is an assistant&apos;s opinion: the analysis uses it as context and as hypotheses to check, and a pattern still needs your own work or feedback to count as observed. Visible only to your account.</p><AiProfileImport saved={data.profiles} /></section>}
     {data && <section className="content-panel"><h2>AI conversation imports (optional) <span className="panel-count">{data.imports.length}</span></h2><p className="empty-hint">Import exports from ChatGPT, Claude or Gemini to give the analysis examples of your reasoning. Only your own messages are kept — an assistant&apos;s opinion is never treated as evidence. Conversations are visible only to your account and can be deleted at any time.</p><ConversationImport imports={data.imports} /></section>}
   </div></AppShell>;
 }
@@ -40,10 +43,12 @@ async function load() {
 }
 
 async function loadWith(supabase: SupabaseClient) {
-  const [analyses, imports] = await Promise.all([
+  const [analyses, imports, profiles] = await Promise.all([
     supabase.from("behaviour_analyses").select("id, dimensions, source_counts, provider_model, created_at").order("created_at", { ascending: false }).limit(10),
     supabase.from("conversation_imports").select("id, title, source, message_count, conversation_count, created_at").order("created_at", { ascending: false }),
+    supabase.from("ai_context_reports").select("id, source, report, created_at").order("created_at", { ascending: false }),
   ]);
   if (analyses.error || imports.error) throw new Error("Could not load the analysis. Check that the migration is applied.");
-  return { analyses: analyses.data ?? [], imports: (imports.data ?? []) as { id: string; title: string; source: string; message_count: number; conversation_count: number; created_at: string }[] };
+  const saved: SavedProfile[] = (profiles.data ?? []).map((row) => { const report = row.report as AiProfile; return { id: row.id as string, source: row.source as string, created_at: row.created_at as string, findings: report.findings?.length ?? 0, observed: (report.findings ?? []).filter((item) => item.tag === "Observed").length, changes: (report.changes ?? []).map((change) => ({ what: change.what, when: change.when })) }; });
+  return { profiles: saved, analyses: analyses.data ?? [], imports: (imports.data ?? []) as { id: string; title: string; source: string; message_count: number; conversation_count: number; created_at: string }[] };
 }

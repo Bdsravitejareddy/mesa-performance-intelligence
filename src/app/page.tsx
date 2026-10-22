@@ -2,6 +2,7 @@ import { AppShell } from "@/components/app-shell";
 import { DashboardView } from "@/components/dashboard-view";
 import { getDashboardSnapshot } from "@/lib/dashboard-data";
 import { cachedRead } from "@/lib/data/cached";
+import { selectedTerm } from "@/lib/term";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import Link from "next/link";
 
@@ -14,7 +15,7 @@ export default async function HomePage() {
   }
   let data;
   try {
-    data = process.env.NEXT_PUBLIC_DEMO_MODE === "true" ? await getDashboardSnapshot() : await cachedRead("overview", (client) => getDashboardSnapshot(client));
+    data = process.env.NEXT_PUBLIC_DEMO_MODE === "true" ? await getDashboardSnapshot() : await (async () => { const term = await selectedTerm(); return cachedRead(`overview:${term}`, (client) => getDashboardSnapshot(client, term)); })();
   } catch {
     return <AppShell demoMode={demoMode}><div className="setup-inline"><span className="eyebrow">WORKSPACE CONNECTION</span><h1>Connect your private workspace</h1><p>We couldn’t load the Supabase workspace. Apply the included migration and confirm your project environment variables.</p><a href="/setup" className="button button-primary">Open setup guide</a></div></AppShell>;
   }
