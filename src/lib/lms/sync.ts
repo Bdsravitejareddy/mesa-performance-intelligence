@@ -266,12 +266,18 @@ async function refreshTerms(client: SupabaseClient, mcp: MesaMcpClient, tool: Mc
   const reply = unwrapToolResult(await mcp.callTool(tool.name, {})) as { courses?: Record<string, unknown>[] } | Record<string, unknown>[];
   const list = Array.isArray(reply) ? reply : Array.isArray(reply?.courses) ? reply.courses : [];
   const date = (value: unknown) => (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null);
+  // Assignment records name their course by title only, so courses are matched by LMS id when stored, else by title.
+  const { data: rows } = await client.from("courses").select("id, title, lms_course_id");
+  const key = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
   let updated = 0;
   for (const course of list) {
     const id = typeof course.id === "string" ? course.id : "";
+    const title = typeof course.title === "string" ? key(course.title) : "";
     const term = typeof course.term === "string" ? course.term.trim().slice(0, 40) : "";
-    if (!id || !term) continue;
-    const { data } = await client.from("courses").update({ term, starts_on: date(course.startDate), ends_on: date(course.endDate) }).eq("lms_course_id", id).select("id");
+    if (!term) continue;
+    const targets = (rows ?? []).filter((row) => (id && row.lms_course_id === id) || (title && key(String(row.title)) === title)).map((row) => row.id as string);
+    if (!targets.length) continue;
+    const { data } = await client.from("courses").update({ term, starts_on: date(course.startDate), ends_on: date(course.endDate) }).in("id", targets).select("id");
     updated += data?.length ?? 0;
   }
   return updated;
