@@ -150,3 +150,13 @@
 - **Growth roadmap** (`20261022230000`): priority = importance (role requirement / course coverage) × gap × confidence, formula shown; evidence-specific activities with effort as a planning assumption; plan items keep their starting state and evidence fingerprint and record improved/unchanged/worse only from later evidence, else "no new evidence yet". Empty until assessments are tagged or a target role is saved.
 - **Thinking & behaviour** (`20261022240000`): twelve dimensions from feedback, evaluation findings and Quality Checker reports; verified quotes only; strength capped by independent sources; no traits/IQ/diagnoses; runs kept. Optional consented AI-conversation imports keep only the member's own messages, are private to the account and deletable.
 - Validation: 602 tests, lint, type-check and production build pass; production migration history matches the repository.
+
+## Working-model pass (2026-10-23)
+
+- **Auto-mapping**: Gemini mapped all 44 assessments (81 competency links applied as "AI-mapped" with rationale, 4 criterion links, 50 low-confidence suggestions held back). AI links are editable on the Competency map and run nightly for new assessments.
+- **Target roles**: curated library from 10 real postings (quotes verified verbatim against live ATS feeds; one re-verified independently). Stage 1: Senior Technical Product Manager, Forward Deployed Engineer. Stage 2: Head of Product, Group PM, TPM, Solutions Architect, Chief of Staff, with competency overlap. Requirements mapped by an inspectable keyword table; eligibility (years, degrees, travel, sector background) listed apart and never scored. Live: Senior TPM 1/14 skill requirements evidenced.
+- **Roadmap** ranks primary-role requirements first and groups by stage; **SWOT** rebuilt from the evidence model with confirmed/possibility/context labels, consolidated items and snapshots (fixed: the old page always rendered in demo mode).
+- **Overview**: average weighted by maximum marks (70.2 weighted vs 74.4 unweighted live); timeline replaced by per-course weighted performance with marking coverage.
+- **Self-assessments**: seeded reasoning test (answers never sent to the browser; verified live) feeding Numerical analysis / Logical reasoning as practice evidence; Mini-IPIP scored on its own scale, used as context only. Not taken on the user's behalf.
+- **Live AI checks**: Quality Checker blind run on a synthetic text (verified quotes, deterministic overall 86.7); the synthetic run was then deleted so it is not evidence about the student. Behaviour analysis (split into two requests after a timeout) observed 3/12 dimensions from 2 official feedback records.
+- Validation: 622 tests, lint, type-check and production build pass; migration history matches production.
