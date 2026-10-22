@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getAllowedEmails, hasSupabaseConfig, isAllowedEmail, isDemoMode } from "./config";
 
 const publicPaths = ["/login", "/setup", "/unauthorized", "/auth/callback", "/api/auth/magic-link"];
-const machinePaths = new Set(["pair", "pair-request", "pair-status", "session", "inventory", "upload", "finalize", "checkpoint"]
+const machinePaths = new Set(["pair", "pair-request", "pair-status", "installer", "session", "inventory", "upload", "finalize", "checkpoint"]
   .map((name) => `/api/drive-agent/${name}`));
 const cronPaths = new Set(["/api/cron/lms-sync", "/api/cron/grading"]);
 
