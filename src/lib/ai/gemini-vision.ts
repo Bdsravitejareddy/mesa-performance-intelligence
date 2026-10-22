@@ -59,9 +59,16 @@ export async function describeVisualPages(parts: VisionPart[], requestedPages: n
   }));
   if (response.status === 429) throw new QuotaExhaustedError();
   if (!response.ok) throw new Error(`Gemini returned HTTP ${response.status}.`);
-  const body = await response.json() as { candidates?: { content?: { parts?: { text?: unknown }[] } }[] };
-  const text = (body.candidates?.[0]?.content?.parts ?? []).map((part) => typeof part.text === "string" ? part.text : "").join("");
-  return { model: available.model, pages: parseDescriptions(text, requestedPages) };
+  const body = await response.json() as { candidates?: { finishReason?: string; content?: { parts?: { text?: unknown; thought?: unknown }[] } }[]; promptFeedback?: { blockReason?: string } };
+  const candidate = body.candidates?.[0];
+  const text = (candidate?.content?.parts ?? []).filter((part) => part.thought !== true).map((part) => typeof part.text === "string" ? part.text : "").join("");
+  try {
+    return { model: available.model, pages: parseDescriptions(text, requestedPages) };
+  } catch (failure) {
+    // Surface why generation stopped (e.g. MAX_TOKENS, SAFETY, RECITATION) instead of a bare parse error.
+    const reason = body.promptFeedback?.blockReason ?? (candidate?.finishReason && candidate.finishReason !== "STOP" ? candidate.finishReason : "");
+    throw new Error(reason ? `${(failure as Error).message} Gemini stopped with ${reason}.` : (failure as Error).message);
+  }
 }
 
 // Keeps only well-formed entries for pages that were actually requested.
