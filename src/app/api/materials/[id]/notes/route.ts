@@ -22,11 +22,11 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
   if (!page) return NextResponse.json({ error: "That page does not exist in this material." }, { status: 404 });
 
   if (!note) {
-    const { error } = await supabase.from("material_page_notes").delete().eq("material_id", id).eq("page_number", pageNumber);
+    const { error } = await supabase.from("material_page_notes").delete().eq("material_id", id).eq("page_number", pageNumber).eq("author_kind", "member");
     if (error) return NextResponse.json({ error: "Could not clear the note." }, { status: 500 });
     return NextResponse.json({ ok: true, cleared: true });
   }
-  const { error } = await supabase.from("material_page_notes").upsert({ user_id: material.user_id, material_id: id, page_number: pageNumber, note, updated_by: claims.claims.sub, updated_at: new Date().toISOString() }, { onConflict: "material_id,page_number" });
+  const { error } = await supabase.from("material_page_notes").upsert({ user_id: material.user_id, material_id: id, page_number: pageNumber, author_kind: "member", note, updated_by: claims.claims.sub, updated_at: new Date().toISOString() }, { onConflict: "material_id,page_number,author_kind" });
   if (error) return NextResponse.json({ error: "Could not save the note." }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

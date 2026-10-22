@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadRelatedCourseIds } from "@/lib/courses/links";
 
 type MaterialRow = { id: string; name: string; version: number; source_kind: string; drive_source_id?: string | null };
-type NoteRow = { material_id: string; page_number: number; note: string };
+type NoteRow = { material_id: string; page_number: number; note: string; author_kind: string; provider_model: string; colour_meaning: string };
 type PageRow = { id: string; material_id: string; page_number: number; extracted_text: string; table_data: unknown; has_visuals: boolean; visual_notes: string };
 
 export type RetrievedReference = { key: string; pageId: string; materialId: string; label: string; excerpt: string; sourceKind: string };
@@ -19,11 +19,16 @@ export async function retrieveRelevantReferences(supabase: SupabaseClient, cours
   const columns = "id, material_id, page_number, extracted_text, table_data, has_visuals, visual_notes";
   const [{ data: textPages }, { data: noteRows }] = await Promise.all([
     supabase.from("material_pages").select(columns).in("material_id", materialIds).textSearch("search_document", terms.join(" OR "), { type: "websearch", config: "simple" }).limit(8),
-    supabase.from("material_page_notes").select("material_id, page_number, note").in("material_id", materialIds),
+    supabase.from("material_page_notes").select("material_id, page_number, note, author_kind, provider_model, colour_meaning").in("material_id", materialIds),
   ]);
   // Member notes describe slides the importer could not read; a matching note can surface an otherwise text-less slide.
   const noteKey = (materialId: string, pageNumber: number) => `${materialId}:${pageNumber}`;
-  const notes = new Map(((noteRows ?? []) as NoteRow[]).map((row) => [noteKey(row.material_id, row.page_number), row.note]));
+  // A member's note takes precedence over an AI description of the same page; both are labelled by origin.
+  const notes = new Map<string, string>();
+  for (const row of [...((noteRows ?? []) as NoteRow[])].sort((a, b) => (a.author_kind === "member" ? 1 : 0) - (b.author_kind === "member" ? 1 : 0))) {
+    const label = row.author_kind === "member" ? "Member note on visual content (a workspace member's interpretation, not course text)" : `AI-generated description of visual content (${row.provider_model}; not course text, may contain errors)`;
+    notes.set(noteKey(row.material_id, row.page_number), `${label}: ${row.note}${row.colour_meaning ? `\nColour coding: ${row.colour_meaning}` : ""}`);
+  }
   const pages = [...((textPages ?? []) as PageRow[])];
   const seen = new Set(pages.map((page) => noteKey(page.material_id, page.page_number)));
   const noteMatches = ((noteRows ?? []) as NoteRow[]).filter((row) => !seen.has(noteKey(row.material_id, row.page_number)) && terms.some((term) => row.note.toLocaleLowerCase().includes(term))).slice(0, Math.max(0, 8 - pages.length));
@@ -35,7 +40,7 @@ export async function retrieveRelevantReferences(supabase: SupabaseClient, cours
     const material = byId.get(page.material_id)!;
     const tableText = JSON.stringify(page.table_data ?? []).slice(0, 500);
     const memberNote = notes.get(noteKey(page.material_id, page.page_number));
-    const visual = memberNote ? `\nMember note on visual content (a workspace member's interpretation, not course text): ${memberNote}` : page.has_visuals ? `\nVisual note: ${page.visual_notes || "Visual content detected; interpretation is unavailable."}` : "";
+    const visual = memberNote ? `\n${memberNote}` : page.has_visuals ? `\nVisual note: ${page.visual_notes || "Visual content detected; interpretation is unavailable."}` : "";
     return {
       key: `S${index + 1}`,
       pageId: page.id,

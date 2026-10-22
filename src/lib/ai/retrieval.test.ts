@@ -30,6 +30,7 @@ describe('current imported course retrieval', () => {
 
 });
 
+let noteRows: unknown[] = [];
 describe("member slide notes in retrieval", () => {
   it("surfaces a text-less slide through its note and labels the note as member interpretation", async () => {
     const { retrieveRelevantReferences } = await import("./retrieval");
@@ -41,7 +42,7 @@ describe("member slide notes in retrieval", () => {
         const result = () => {
           if (table === "course_links") return { data: [], error: null };
           if (table === "current_course_materials") return { data: [{ id: "m1", name: "Lecture.pptx", version: 1, source_kind: "slides" }], error: null };
-          if (table === "material_page_notes") return { data: [{ material_id: "m1", page_number: 4, note: "Bar chart of segmentation by income band" }], error: null };
+          if (table === "material_page_notes") return { data: noteRows, error: null };
           return { data: [], error: null };
         };
         for (const method of ["select", "in", "or", "textSearch", "limit"]) chain[method] = () => chain;
@@ -51,9 +52,15 @@ describe("member slide notes in retrieval", () => {
         return chain;
       },
     };
+    noteRows = [{ material_id: "m1", page_number: 4, note: "Bar chart of segmentation by income band", author_kind: "member", provider_model: "", colour_meaning: "" }];
     const refs = await retrieveRelevantReferences(client as never, "course", "assessment", "segmentation income");
     expect(refs).toHaveLength(1);
     expect(refs[0].label).toBe("Lecture.pptx v1, page/slide 4");
     expect(refs[0].excerpt).toContain("Member note on visual content (a workspace member's interpretation, not course text): Bar chart of segmentation by income band");
+
+    noteRows = [{ material_id: "m1", page_number: 4, note: "Answer key table", author_kind: "ai_vision", provider_model: "gemini-3.8-flash", colour_meaning: "Green cells mark the correct option." }];
+    const aiRefs = await retrieveRelevantReferences(client as never, "course", "assessment", "answer key");
+    expect(aiRefs[0].excerpt).toContain("AI-generated description of visual content (gemini-3.8-flash; not course text, may contain errors): Answer key table");
+    expect(aiRefs[0].excerpt).toContain("Colour coding: Green cells mark the correct option.");
   });
 });

@@ -4,6 +4,9 @@ import { GET } from "./route";
 
 const { syncMesaLms } = vi.hoisted(() => ({ syncMesaLms: vi.fn() }));
 vi.mock("@/lib/lms/sync", () => ({ syncMesaLms }));
+const { describePendingMaterials } = vi.hoisted(() => ({ describePendingMaterials: vi.fn(async () => []) }));
+vi.mock("@/lib/materials/vision", () => ({ describePendingMaterials }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
 
 describe("daily LMS cron route", () => {
   afterEach(() => { vi.unstubAllEnvs(); vi.clearAllMocks(); });
@@ -28,5 +31,15 @@ describe("daily LMS cron route", () => {
     const response = await GET(new NextRequest("https://mesa.test/api/cron/lms-sync", { headers: { authorization: "Bearer configured-secret" } }));
     expect(response.status).toBe(200);
     expect(syncMesaLms).toHaveBeenCalledOnce();
+    expect(describePendingMaterials).toHaveBeenCalledOnce();
+  });
+
+  it("still describes materials and reports 502 when the LMS sync fails", async () => {
+    vi.stubEnv("CRON_SECRET", "configured-secret");
+    syncMesaLms.mockRejectedValue(new Error("token expired"));
+    const response = await GET(new NextRequest("https://mesa.test/api/cron/lms-sync", { headers: { authorization: "Bearer configured-secret" } }));
+    expect(response.status).toBe(502);
+    expect(describePendingMaterials).toHaveBeenCalledOnce();
+    expect(JSON.stringify(await response.json())).not.toContain("token expired");
   });
 });
