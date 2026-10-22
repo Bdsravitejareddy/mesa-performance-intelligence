@@ -3,7 +3,7 @@ import { verifyArithmeticStatements, type ArithmeticCheck } from "@/lib/scoring"
 // A deterministic score: how much of each rubric criterion and of the relevant course material the work
 // addresses. It measures coverage, not quality or correctness of reasoning; the same work always gets the
 // same score, and every point can be traced to a matched term.
-export const CODE_RULES_VERSION = "code-coverage-v1";
+export const CODE_RULES_VERSION = "code-completeness-v2";
 export const FULL_COVERAGE = 0.6; // a criterion counts as fully addressed when 60% of its key terms appear
 const RUBRIC_SHARE = 0.8;
 const COURSE_SHARE = 0.2;
@@ -40,8 +40,11 @@ export function keyTerms(text: string, limit: number): string[] {
 
 export type CriterionInput = { name: string; description: string; weight: number };
 export type CriterionCoverage = { name: string; weight: number; expected: string[]; matched: string[]; coverage: number; score: number };
+export type BriefPart = { label: string; text: string; keywords: string[]; answered: boolean; how: "label" | "keywords" | "missing" };
 export type CodeReport = {
   rulesVersion: string;
+  parts?: BriefPart[];
+  completeness?: number | null;
   criteria: CriterionCoverage[];
   courseConcepts: { expected: string[]; matched: string[]; coverage: number };
   wordCount: number;
@@ -86,4 +89,62 @@ export function codeGrade(work: string, criteria: CriterionInput[], courseExcerp
   if (errors.length) { score -= Math.min(10, errors.length * 2); adjustments.push(`${errors.length} arithmetic error${errors.length === 1 ? "" : "s"}: −${Math.min(10, errors.length * 2)}`); }
   if (wordCount < MIN_WORDS) { score = Math.min(score, 50); adjustments.push(`Only ${wordCount} words of readable text: capped at 50`); }
   return { score: round1(Math.max(0, Math.min(100, score))), report };
+}
+
+// ── Completeness (v2) ────────────────────────────────────────────────────────────────────────────────
+// The questions and parts the brief asks for ("Q1", "1.", "Part A", "A2", "(b)") are read from its text, and
+// each counts as answered when the work labels it the same way or contains most of its distinctive words.
+// This measures whether everything asked was attempted — not whether the answers are right.
+const PART = /^\s*(?:(Q(?:uestion)?\s*\d+[a-z]?)|(Part\s+[A-Z0-9]+)|([A-Z]\d{1,2})|(\d{1,2})[.)]|\(([a-z])\))[\s:.)\-–]+(.{8,240})$/im;
+
+export function briefParts(brief: string): { label: string; text: string; keywords: string[] }[] {
+  const parts: { label: string; text: string; keywords: string[] }[] = [];
+  for (const line of brief.split(/\n+/)) {
+    const match = PART.exec(line);
+    if (!match) continue;
+    const label = (match[1] ?? match[2] ?? match[3] ?? match[4] ?? match[5] ?? "").replace(/\s+/g, " ").trim();
+    const text = match[6].trim();
+    if (!label || parts.some((part) => part.label.toLowerCase() === label.toLowerCase())) continue;
+    parts.push({ label, text, keywords: keyTerms(text, 6) });
+    if (parts.length >= 20) break;
+  }
+  return parts;
+}
+
+function labelPattern(label: string): RegExp {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s*");
+  const numeric = /^\d+$/.test(label) ? `(?:Q(?:uestion)?\\s*)?${escaped}[.):]` : /^[a-z]$/.test(label) ? `\\(${escaped}\\)` : escaped;
+  return new RegExp(`(^|[^A-Za-z0-9])${numeric}(?![0-9])`, "im");
+}
+
+export function completeness(work: string, brief: string): { score: number | null; parts: BriefPart[] } {
+  const found = briefParts(brief);
+  if (found.length < 2) return { score: null, parts: [] };
+  const present = new Set(terms(work));
+  const parts: BriefPart[] = found.map((part) => {
+    if (labelPattern(part.label).test(work)) return { ...part, answered: true, how: "label" };
+    const hits = part.keywords.filter((term) => present.has(term)).length;
+    const answered = part.keywords.length > 0 && hits >= Math.max(2, Math.ceil(part.keywords.length * 0.5));
+    return { ...part, answered, how: answered ? "keywords" : "missing" };
+  });
+  return { score: Math.round((parts.filter((part) => part.answered).length / parts.length) * 1000) / 10, parts };
+}
+
+// The code score: completeness against the brief's parts when the brief lists them (75%), with criterion
+// coverage (25%); otherwise criterion coverage alone. Arithmetic errors and very short work still adjust it.
+export function codeGradeV2(work: string, criteria: CriterionInput[], courseExcerpts: string[], brief: string): { score: number | null; report: CodeReport } {
+  const base = codeGrade(work, criteria, courseExcerpts);
+  const check = completeness(work, brief);
+  if (check.score === null || base.score === null) {
+    return { score: base.score, report: { ...base.report, rulesVersion: CODE_RULES_VERSION, parts: [], completeness: null } };
+  }
+  let score = 0.75 * check.score + 0.25 * base.score;
+  const adjustments = [...base.report.adjustments];
+  if (base.report.arithmetic.errors.length) score -= Math.min(10, base.report.arithmetic.errors.length * 2);
+  if (base.report.wordCount < MIN_WORDS) score = Math.min(score, 50);
+  return {
+    score: round1(Math.max(0, Math.min(100, score))),
+    report: { ...base.report, rulesVersion: CODE_RULES_VERSION, parts: check.parts, completeness: check.score, adjustments,
+      method: `Completeness: ${check.parts.filter((part) => part.answered).length} of ${check.parts.length} parts the brief asks for are answered (by matching label, or most of their distinctive words) — 75% of the score; criterion coverage — 25%. It checks that everything asked was attempted, not whether answers are correct; the AI and official marks judge quality.` },
+  };
 }

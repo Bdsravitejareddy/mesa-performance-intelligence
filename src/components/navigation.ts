@@ -1,42 +1,41 @@
 import {
   BookOpen,
-  Brain,
   BriefcaseBusiness,
-  ChartNoAxesCombined,
-  ClipboardCheck,
-  CloudDownload,
+  Brain,
   FileCheck2,
-  FileUser,
   LayoutDashboard,
-  Library,
-  MessageSquareText,
   Network,
-  Route,
-  ScanSearch,
-  Scale,
   ShieldCheck,
-  Target,
   type LucideIcon,
 } from "lucide-react";
 
-export type Chapter = { href: string; label: string; icon: LucideIcon; blurb: string };
-export type Act = { label: string; act: string; tone: "gold" | "moss" | "dusk"; links: Chapter[] };
+export type Tab = { href: string; label: string; blurb: string };
+// A section is one entry in the sidebar; its tabs are the pages inside it. The first tab is its home.
+export type Section = { href: string; label: string; icon: LucideIcon; blurb: string; tabs: Tab[] };
+export type Act = { label: string; act: string; tone: "gold" | "moss" | "dusk"; links: Section[] };
 
-// The site reads as one story: each page is a chapter, in this order, grouped into three acts.
+const section = (label: string, icon: LucideIcon, blurb: string, tabs: Tab[]): Section => ({ href: tabs[0].href, label, icon, blurb, tabs });
+
+// The site reads as one story in three acts. Seven sections replace the former seventeen pages; related
+// pages sit as tabs inside a section.
 export const groups: Act[] = [
   {
     label: "Workspace",
     act: "Act I · Your material",
     tone: "gold",
     links: [
-      { href: "/", label: "Overview", icon: LayoutDashboard, blurb: "The whole picture in one view." },
-      { href: "/courses", label: "Courses & content", icon: BookOpen, blurb: "What you were taught, course by course." },
-      { href: "/drive-sync", label: "Drive sync", icon: CloudDownload, blurb: "Your course folders, kept in step automatically." },
-      { href: "/materials/review", label: "Material review", icon: ScanSearch, blurb: "Slides and answer keys, read by vision AI." },
-      { href: "/assessments", label: "Assessments", icon: FileCheck2, blurb: "Every task, with its brief and rubric." },
-      { href: "/marks", label: "Marks & feedback", icon: MessageSquareText, blurb: "Official marks and faculty feedback." },
-      { href: "/grading", label: "Graded work", icon: Scale, blurb: "Each submission graded by code and AI, beside the official mark." },
-      { href: "/evidence", label: "Evidence library", icon: Library, blurb: "Every piece of evidence, with its source." },
+      section("Overview", LayoutDashboard, "The whole picture in one view.", [{ href: "/", label: "Overview", blurb: "The whole picture in one view." }]),
+      section("Courses", BookOpen, "What you were taught, and where it comes from.", [
+        { href: "/courses", label: "Courses", blurb: "What you were taught, course by course." },
+        { href: "/materials/review", label: "Material review", blurb: "Slides and answer keys, read by vision AI." },
+        { href: "/drive-sync", label: "Drive sync", blurb: "Your course folders and submitted work, kept in step." },
+      ]),
+      section("Assessments", FileCheck2, "Every assessment, its marks and how your work was graded.", [
+        { href: "/assessments", label: "All assessments", blurb: "Every assessment with its status, marks and grades." },
+        { href: "/grading", label: "Graded work", blurb: "Each submission graded by code and AI, beside the official mark." },
+        { href: "/marks", label: "Marks & LMS sync", blurb: "Official marks and faculty feedback from the LMS." },
+        { href: "/evidence", label: "Evidence", blurb: "Every record the analysis uses, with its source." },
+      ]),
     ],
   },
   {
@@ -44,33 +43,47 @@ export const groups: Act[] = [
     act: "Act II · What it means",
     tone: "moss",
     links: [
-      { href: "/competencies", label: "Competency map", icon: Network, blurb: "Thirty-five competencies, classified from evidence." },
-      { href: "/thinking", label: "Thinking & behaviour", icon: Brain, blurb: "How you approach problems, as observed patterns." },
-      { href: "/tests", label: "Reasoning & personality", icon: ClipboardCheck, blurb: "Self-tests that add context, never verdicts." },
-      { href: "/swot", label: "SWOT analysis", icon: Target, blurb: "Strengths, weaknesses, opportunities and threats, from evidence." },
-      { href: "/roadmap", label: "Growth roadmap", icon: Route, blurb: "What to do next, ranked by what matters." },
-      { href: "/correlations", label: "Correlations", icon: ChartNoAxesCombined, blurb: "Patterns across your results — never causes." },
-      { href: "/career", label: "Career readiness", icon: BriefcaseBusiness, blurb: "Your evidence against real job postings." },
-      { href: "/professional", label: "Resume & portfolio", icon: FileUser, blurb: "Every claim checked against evidence." },
+      section("Insights", Network, "Competencies, strengths and patterns from your evidence.", [
+        { href: "/competencies", label: "Competencies", blurb: "Thirty-five competencies, classified from evidence." },
+        { href: "/swot", label: "SWOT", blurb: "Strengths, weaknesses, opportunities and threats, from evidence." },
+        { href: "/correlations", label: "Correlations", blurb: "Patterns across your results — never causes." },
+      ]),
+      section("You", Brain, "How you think and work, in context.", [
+        { href: "/thinking", label: "Thinking & behaviour", blurb: "How you approach problems, as observed patterns." },
+        { href: "/tests", label: "Reasoning & personality", blurb: "Self-tests that add context, never verdicts." },
+      ]),
+      section("Career", BriefcaseBusiness, "Your evidence against target roles, and what to do next.", [
+        { href: "/career", label: "Readiness", blurb: "Your evidence against real job postings." },
+        { href: "/roadmap", label: "Roadmap", blurb: "What to do next, ranked by what matters." },
+        { href: "/professional", label: "Resume & portfolio", blurb: "Every claim, and how it is supported." },
+      ]),
     ],
   },
   {
     label: "Tools",
     act: "Act III · Sharpen",
     tone: "dusk",
-    links: [{ href: "/quality-check", label: "Quality checker", icon: ShieldCheck, blurb: "A blind evaluation of your work before you submit." }],
+    links: [section("Quality checker", ShieldCheck, "A blind evaluation of your work before you submit.", [{ href: "/quality-check", label: "Quality checker", blurb: "A blind evaluation of your work before you submit." }])],
   },
 ];
 
-export const chapters = groups.flatMap((group) => group.links.map((link) => ({ ...link, act: group.act, tone: group.tone })));
+export const sections = groups.flatMap((group) => group.links.map((link) => ({ ...link, act: group.act, tone: group.tone })));
+
+// Scrolling moves through every tab in order, then into the next section.
+export const chapters = sections.flatMap((item) => item.tabs.map((tab) => ({ ...tab, icon: item.icon, section: item.label, act: item.act, tone: item.tone })));
+
+const matches = (href: string, pathname: string) => (href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`));
 
 export function chapterIndex(pathname: string) {
   return chapters.findIndex((chapter) => (chapter.href === "/" ? pathname === "/" : pathname === chapter.href));
 }
 
-// Detail pages (a course, a material) belong to their parent chapter for scenery and the rail.
+// The section a page belongs to, including detail pages such as /courses/<id> or /materials/<id>.
+export function sectionOf(pathname: string) {
+  return sections.findIndex((item) => item.tabs.some((tab) => matches(tab.href, pathname) || (tab.href.split("/").length > 2 && matches(`/${tab.href.split("/")[1]}`, pathname))));
+}
+
 export function sectionIndex(pathname: string) {
-  const exact = chapterIndex(pathname);
-  if (exact >= 0) return exact;
-  return chapters.findIndex((chapter) => chapter.href !== "/" && pathname.startsWith(`${chapter.href.split("/").slice(0, 2).join("/")}/`));
+  const found = sectionOf(pathname);
+  return found >= 0 ? chapters.findIndex((chapter) => chapter.href === sections[found].href) : -1;
 }

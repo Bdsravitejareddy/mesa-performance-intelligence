@@ -1,34 +1,76 @@
 import Link from "next/link";
-import { ArrowRight, FileCheck2 } from "lucide-react";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { AppShell } from "@/components/app-shell";
-import { demoData } from "@/lib/demo-data";
+import { Why } from "@/components/why";
+import { cachedRead } from "@/lib/data/cached";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
-import { createClient } from "@/lib/supabase/server";
+import { inTerm, selectedTerm, type TermChoice } from "@/lib/term";
 
 export const dynamic = "force-dynamic";
 
+type Status = "marked" | "graded" | "submitted" | "external" | "not_submitted";
+type Row = { id: string; title: string; course: string; status: Status; official: number | null; ai: number | null; code: number | null; files: number; links: number; linksImported: number; submittedAt: string | null; timing: string | null; group: boolean; feedback: boolean };
+
+const STATUS: Record<Status, string> = { marked: "Marked", graded: "Graded by AI", submitted: "Submitted", external: "Submitted via form", not_submitted: "Not submitted" };
+const fmt = (value: number | null) => (value === null ? "—" : Number.isInteger(value) ? String(value) : value.toFixed(1));
+const shortCourse = (name: string) => name.replace(/\s+with\s+.*$/i, "");
+
+// One register for every assessment: what was submitted, how it was graded and what the official mark is.
 export default async function AssessmentsPage() {
   const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
-  const records = demoMode ? demoData.assessments.map((item) => ({ ...item, courseId: "", maximum: 100, status: "Illustrative" })) : await loadAssessments();
-  return <AppShell demoMode><div className="section-page"><div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> EVIDENCE AND RUBRICS</div><h1>Assessments</h1><p className="page-subtitle">Link student work, official marks, feedback, and course evidence to each assessment.</p></div></div>
-    <section className="content-panel"><h2>Assessment register <span className="panel-count">{records.length}</span></h2>{records.length ? records.map((item) => <Link className="assessment-register-row" href={demoMode ? "/marks" : `/courses/${item.courseId}`} key={item.id}><span className="assessment-icon icon-mint"><FileCheck2 size={16} /></span><span><strong>{item.title}</strong><small>{item.course} · {item.format} · maximum {item.maximum}/100</small></span><span className="assessment-status">{item.status}</span><ArrowRight size={15} /></Link>) : <div className="empty-copy"><p>Create a course, then add its assessment and link course content.</p><Link href="/courses">Open courses <ArrowRight size={14} /></Link></div>}</section>
-    <div className="three-layer-grid"><Layer name="Mesa Academic Evaluation" description="Course requirements, learning outcomes, and approved rubric." /><Layer name="Objective Analytical Evaluation" description="Methods, calculations, assumptions, evidence, and conclusions." /><Layer name="Professional Readiness Evaluation" description="A selected role profile and its declared competency evidence." /></div>
-    <p className="scope-note">AI rubric drafting and evaluation are not active until a model provider is configured and relevant-data processing is approved. No scores are inferred in this build.</p>
+  const term = await selectedTerm();
+  const rows = demoMode || !hasSupabaseConfig() ? [] : await cachedRead(`assessments:${term}`, (client) => load(client, term));
+  const count = (status: Status) => rows.filter((row) => row.status === status).length;
+  const byCourse = [...new Set(rows.map((row) => row.course))];
+  return <AppShell demoMode={demoMode}><div className="section-page">
+    <div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> Every assessment</div><h1>Assessments</h1><p className="page-subtitle">{rows.length ? `${count("marked")} marked · ${count("graded")} graded by AI only · ${count("submitted") + count("external")} submitted, awaiting a grade · ${count("not_submitted")} not submitted` : "No assessments in this term yet."}</p></div></div>
+    {byCourse.map((course) => <section key={course} className="content-panel register-course">
+      <h2>{shortCourse(course)} <span className="panel-count">{rows.filter((row) => row.course === course).length}</span></h2>
+      <div className="register-table" role="table">
+        <div className="register-head" role="row"><span>Assessment</span><span>Status</span><span>Official</span><span>AI</span><span>Code</span></div>
+        {rows.filter((row) => row.course === course).map((row) => <Link key={row.id} href={row.ai !== null || row.code !== null ? "/grading" : "/marks"} className={`register-row status-${row.status}`} role="row">
+          <span className="register-title"><strong>{row.title}</strong><small>{[row.submittedAt && `submitted ${row.submittedAt}${row.timing === "late" ? " (late)" : ""}`, row.group && "group", row.files && `${row.files} file${row.files === 1 ? "" : "s"}`, row.links && `${row.links} link${row.links === 1 ? "" : "s"}${row.linksImported < row.links ? ` (${row.links - row.linksImported} importing)` : ""}`, row.feedback && "feedback"].filter(Boolean).join(" · ") || "no submission recorded"}</small></span>
+          <span><em className={`status-chip chip-${row.status}`}>{STATUS[row.status]}</em></span>
+          <span className="register-score">{fmt(row.official)}</span>
+          <span className="register-score">{fmt(row.ai)}</span>
+          <span className="register-score muted">{fmt(row.code)}</span>
+        </Link>)}
+      </div>
+    </section>)}
+    {rows.length > 0 && <Why label="How these are worked out">Official marks come from the LMS. “AI” is a blind grade against the assignment brief and course material, and never sees the official mark. “Code” is a deterministic completeness check: the share of the brief&apos;s questions and parts your work answers. Submissions arrive from Nexus pages and your Drive (linked Sheets and Docs are fetched by the Drive connector), then are graded nightly.</Why>}
   </div></AppShell>;
 }
 
-async function loadAssessments() {
-  if (!hasSupabaseConfig()) return [];
-  const supabase = await createClient();
-  const [{ data: assessments, error }, { data: courses }] = await Promise.all([
-    supabase.from("assessments").select("id, course_id, title, assessment_format, official_max_mark").order("created_at", { ascending: false }),
-    supabase.from("courses").select("id, title"),
+async function load(supabase: SupabaseClient, term: TermChoice): Promise<Row[]> {
+  const [assessments, courses, submissions, documents, links, gradings, sources] = await Promise.all([
+    supabase.from("assessments").select("id, course_id, title, due_at").order("due_at", { ascending: true, nullsFirst: false }),
+    supabase.from("courses").select("id, title, term"),
+    supabase.from("submissions").select("id, assessment_id, official_mark, official_feedback, lms_submission_status, page_capture"),
+    supabase.from("submission_documents").select("submission_id"),
+    supabase.from("submission_links").select("submission_id, drive_file_id"),
+    supabase.from("submission_gradings").select("assessment_id, ai_score, code_score, created_at").order("created_at", { ascending: false }),
+    supabase.from("drive_sources").select("drive_file_id").not("current_material_id", "is", null),
   ]);
-  if (error) throw new Error("Could not load assessments.");
-  const names = new Map((courses ?? []).map((item) => [item.id, item.title]));
-  return (assessments ?? []).map((item) => ({ id: item.id, courseId: item.course_id, title: item.title, course: names.get(item.course_id) ?? "Course", format: item.assessment_format, maximum: Number(item.official_max_mark), status: "Awaiting evidence" }));
-}
-
-function Layer({ name, description }: { name: string; description: string }) {
-  return <article className="layer-card"><div className="layer-card-head"><span className="layer-label">{name}</span><span className="not-configured">Not evaluated</span></div><p>{description}</p></article>;
+  const course = new Map((courses.data ?? []).filter((row) => inTerm(term, row.term as string | null)).map((row) => [row.id as string, row.title as string]));
+  const imported = new Set((sources.data ?? []).map((row) => row.drive_file_id as string));
+  const latest = new Map<string, { ai: number | null; code: number | null }>();
+  for (const row of gradings.data ?? []) if (!latest.has(row.assessment_id as string)) latest.set(row.assessment_id as string, { ai: row.ai_score === null ? null : Number(row.ai_score), code: row.code_score === null ? null : Number(row.code_score) });
+  return (assessments.data ?? []).filter((row) => course.has(row.course_id as string)).map((assessment) => {
+    const subs = (submissions.data ?? []).filter((row) => row.assessment_id === assessment.id);
+    const ids = new Set(subs.map((row) => row.id as string));
+    const official = subs.map((row) => row.official_mark).find((mark) => mark !== null);
+    const capture = subs.map((row) => row.page_capture as { status?: string; submittedAt?: string; timing?: string; isGroup?: boolean } | null).find(Boolean) ?? null;
+    const files = (documents.data ?? []).filter((row) => ids.has(row.submission_id as string)).length;
+    const linkRows = (links.data ?? []).filter((row) => ids.has(row.submission_id as string));
+    const grade = latest.get(assessment.id as string) ?? { ai: null, code: null };
+    const submittedStatus = subs.some((row) => /submit|graded/i.test(String(row.lms_submission_status ?? ""))) || /submitted/i.test(capture?.status ?? "");
+    const status: Status = official !== undefined ? "marked" : grade.ai !== null ? "graded" : /external form/i.test(capture?.status ?? "") ? "external" : submittedStatus || files || linkRows.length ? "submitted" : "not_submitted";
+    return {
+      id: assessment.id as string, title: assessment.title as string, course: course.get(assessment.course_id as string)!, status,
+      official: official === undefined ? null : Number(official), ai: grade.ai, code: grade.code, files, links: linkRows.length,
+      linksImported: linkRows.filter((row) => row.drive_file_id && imported.has(row.drive_file_id as string)).length,
+      submittedAt: capture?.submittedAt ? capture.submittedAt.replace(/^[A-Za-z]+day,\s*/, "").replace(/\s*·.*$/, "") : null,
+      timing: capture?.timing ?? null, group: capture?.isGroup === true, feedback: subs.some((row) => String(row.official_feedback ?? "").trim().length > 0),
+    };
+  });
 }

@@ -5,7 +5,7 @@ import { resolveProviderSettings } from "@/lib/ai/settings";
 import { retrieveRelevantReferences } from "@/lib/ai/retrieval";
 import { requestJsonFromProvider } from "@/lib/ai/provider";
 import { blindEvaluate, parseCriteria, PROVENANCE_LABELS, resolveStandard, type Standard, type WorkKind } from "@/lib/quality/engine";
-import { CODE_RULES_VERSION, codeGrade } from "./code-score";
+import { CODE_RULES_VERSION, codeGradeV2 } from "./code-score";
 import { compareWithFeedback } from "./compare";
 import { differenceReasons } from "./reasons";
 
@@ -108,7 +108,7 @@ export async function gradeSubmissions(client: SupabaseClient, budgetMs: number,
     const inputHash = createHash("sha256").update(JSON.stringify({ text, standard, brief: assessment.brief ?? "", refs: refs.map((ref) => ref.key + ref.excerpt.length), official, feedback, rules: CODE_RULES_VERSION })).digest("hex");
     if (done.has(`${submission.id}:${inputHash}`)) { outcomes.push({ submissionId: submission.id, assessment: assessment.title, status: "unchanged", note: "Already graded with these inputs." }); continue; }
 
-    const code = codeGrade(text, standard.criteria, refs.map((ref) => ref.excerpt));
+    const code = codeGradeV2(text, standard.criteria, refs.map((ref) => ref.excerpt), assessment.brief ?? "");
     let aiReport: Awaited<ReturnType<typeof blindEvaluate>> | null = null;
     let aiStatus: "complete" | "failed" | "skipped" = "skipped";
     let note = aiAllowed ? "" : "AI grading needs the current AI consent for this account; only the code score was computed.";
@@ -127,7 +127,7 @@ export async function gradeSubmissions(client: SupabaseClient, budgetMs: number,
     const documents: { name: string; code: number | null; ai: number | null }[] = [];
     if (readableDocs.length > 1) {
       for (const doc of readableDocs.slice(0, 4)) {
-        const docCode = codeGrade(doc.extracted_text, standard.criteria, refs.map((ref) => ref.excerpt)).score;
+        const docCode = codeGradeV2(doc.extracted_text, standard.criteria, refs.map((ref) => ref.excerpt), assessment.brief ?? "").score;
         let docAi: number | null = null;
         if (aiAllowed && /\.(xlsx|csv)$|sheet/i.test(doc.name) && Date.now() < deadline - AI_RESERVE_MS) {
           try { docAi = (await blindEvaluate(doc.extracted_text, standard, "case_solution", assessment.brief ?? "")).overall; } catch { docAi = null; }

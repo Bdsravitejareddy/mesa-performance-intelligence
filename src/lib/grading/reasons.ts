@@ -5,7 +5,13 @@ import type { BlindReport } from "@/lib/quality/engine";
 // figures; it explains the measurement difference and never says which view is right.
 export function differenceReasons(code: CodeReport, ai: BlindReport | null, scores: { ai: number | null; code: number | null; official: number | null }, facultyOnly: number): string[] {
   const reasons: string[] = [];
-  if (ai) {
+  // With the brief's parts available, the code check is completeness: say what it found before comparing quality.
+  if (code.completeness !== null && code.completeness !== undefined && code.parts?.length) {
+    const missing = code.parts.filter((part) => !part.answered).map((part) => part.label);
+    reasons.push(`Code check: ${code.parts.length - missing.length} of ${code.parts.length} parts of the brief are answered${missing.length ? ` (not found: ${missing.slice(0, 6).join(", ")})` : ""}. It measures whether everything asked was attempted, so it can be high when answers are weak and low when answers are unlabelled.`);
+    if (scores.ai !== null && Math.abs(scores.ai - code.completeness) >= 15) reasons.push(scores.ai > code.completeness ? "The AI judged the answers it found stronger than the share of parts the code could locate; some parts may be answered without matching labels or wording." : "The work attempts most parts, but the AI judged their accuracy or reasoning weaker.");
+  }
+  if (ai && !(code.parts?.length)) {
     for (const criterion of code.criteria) {
       const dimension = ai.dimensions.find((item) => item.name === criterion.name);
       if (!dimension || dimension.score === null) continue;

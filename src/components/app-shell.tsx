@@ -6,7 +6,7 @@ import { useRevealOnScroll, useSpotlight } from "@/components/motion";
 import { CommandPalette } from "@/components/command-palette";
 import { useEffect, useState } from "react";
 import { Activity, ArrowUpRight, ChevronDown, CircleHelp, Compass, GraduationCap, Search, Sparkles } from "lucide-react";
-import { groups, sectionIndex, chapters } from "@/components/navigation";
+import { groups, sectionOf, sections } from "@/components/navigation";
 import { StorySeams, ChapterRail } from "@/components/story-flow";
 import { GuidedTour, tourSeen } from "@/components/guided-tour";
 import { GlassBackdrop } from "@/components/glass-backdrop";
@@ -23,7 +23,8 @@ export function AppShell({ children, demoMode }: { children: React.ReactNode; de
   const [tourOpen, setTourOpen] = useState(false);
   // First visit on this browser opens the guided tour once; it can be replayed from the top bar.
   useEffect(() => { if (!tourSeen()) { const timer = window.setTimeout(() => setTourOpen(true), 500); return () => window.clearTimeout(timer); } }, []);
-  const tone = chapters[sectionIndex(pathname)]?.tone ?? "gold";
+  const current = sections[sectionOf(pathname)];
+  const tone = current?.tone ?? "gold";
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setPaletteOpen((open) => !open); } };
     window.addEventListener("keydown", onKey);
@@ -52,7 +53,7 @@ export function AppShell({ children, demoMode }: { children: React.ReactNode; de
             <div className="nav-group" key={group.label}>
               <p className="nav-group-label">{group.label}</p>
               {group.links.map(({ href, label, icon: Icon }) => {
-                const active = href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
+                const active = current?.href === href;
                 return (
                   <Link className={`nav-link${active ? " active" : ""}`} href={href} key={href} aria-current={active ? "page" : undefined}>
                     <Icon size={17} strokeWidth={active ? 2.2 : 1.8} />
@@ -86,11 +87,11 @@ export function AppShell({ children, demoMode }: { children: React.ReactNode; de
           </div>
         </header>
         {demoMode && <div className="demo-banner"><span className="demo-banner-icon"><Sparkles size={14} /></span><strong>Illustrative preview</strong><span>Sample figures are synthetic and are not actual Mesa student records.</span><Link href="/setup">Connect your workspace <ArrowUpRight size={13} /></Link></div>}
-        <main className="main-content">{children}<StorySeams pathname={pathname} /></main>
+        <main className="main-content">{current && current.tabs.length > 1 && <nav className="section-tabs" aria-label={`${current.label} pages`}>{current.tabs.map((tab) => { const on = pathname === tab.href || pathname.startsWith(`${tab.href}/`); return <Link key={tab.href} href={tab.href} className={on ? "is-on" : ""} aria-current={on ? "page" : undefined}>{tab.label}</Link>; })}</nav>}{children}<StorySeams pathname={pathname} /></main>
       </div>
       <ChapterRail pathname={pathname} />
       <GuidedTour open={tourOpen} onClose={() => setTourOpen(false)} />
-      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} links={groups.flatMap((group) => group.links.map(({ href, label }) => ({ href, label, group: group.label })))} />
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} links={sections.flatMap((item) => item.tabs.map((tab) => ({ href: tab.href, label: tab.label === item.label ? tab.label : `${item.label} · ${tab.label}`, group: item.label })))} />
     </div>
   );
 }

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { chapterIndex, chapters, sectionIndex } from "@/components/navigation";
+import { chapterIndex, chapters, sectionOf, sections } from "@/components/navigation";
 
 const PULL = 200; // scroll distance past either end of a page that opens the neighbouring chapter
 const SETTLE_MS = 160; // ignore the tail of scroll momentum that carried the reader to the edge
@@ -125,7 +125,7 @@ export function StorySeams({ pathname }: { pathname: string }) {
 
 // Right-hand rail: where this page sits in the story, plus reading progress within it.
 export function ChapterRail({ pathname }: { pathname: string }) {
-  const current = sectionIndex(pathname);
+  const current = sectionOf(pathname);
   const [progress, setProgress] = useState(0);
   useEffect(() => {
     let frame = 0;
@@ -144,7 +144,7 @@ export function ChapterRail({ pathname }: { pathname: string }) {
   return <>
     <div className="read-progress" aria-hidden="true" style={{ transform: `scaleX(${progress})` }} />
     <nav className="chapter-rail" aria-label="Story chapters" data-tour="rail">
-      {chapters.map((chapter, index) => <Link key={chapter.href} href={chapter.href} className={`rail-dot tone-${chapter.tone}${index === current ? " is-current" : ""}${index < current ? " is-read" : ""}`} aria-current={index === current ? "page" : undefined}>
+      {sections.map((chapter, index) => <Link key={chapter.href} href={chapter.href} className={`rail-dot tone-${chapter.tone}${index === current ? " is-current" : ""}${index < current ? " is-read" : ""}`} aria-current={index === current ? "page" : undefined}>
         <span className="rail-label"><small>{String(index + 1).padStart(2, "0")}</small>{chapter.label}</span>
       </Link>)}
     </nav>

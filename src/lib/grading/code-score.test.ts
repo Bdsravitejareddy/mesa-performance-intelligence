@@ -37,3 +37,23 @@ describe("code score", () => {
     expect(codeGrade("Some work here", [{ name: "The", description: "and of", weight: 1 }], course).score).toBeNull();
   });
 });
+
+import { briefParts, codeGradeV2, completeness } from "./code-score";
+describe("completeness against the brief", () => {
+  const brief = "Brief:\nAnswer all questions.\nQ1. Which three cities need more captains next month?\nQ2. Compute the average wait time per city and rank them.\nQ3. Recommend an incentive plan with its expected cost.";
+  it("reads the brief's questions", () => {
+    expect(briefParts(brief).map((part) => part.label)).toEqual(["Q1", "Q2", "Q3"]);
+  });
+  it("counts labelled and unlabelled answers, and reports what is missing", () => {
+    const work = "Q1: Pune, Delhi, Jaipur based on demand gap.\nAverage wait time per city computed and ranked: Pune 9.2 min, Delhi 8.1 min.";
+    const result = completeness(work, brief);
+    expect(result.parts.map((part) => part.how)).toEqual(["label", "keywords", "missing"]);
+    expect(result.score).toBe(66.7);
+  });
+  it("scores complete concise work highly even without the rubric's vocabulary", () => {
+    const work = `Q1. Pune, Delhi, Jaipur.\nQ2. Pune 9.2, Delhi 8.1, Jaipur 7.4 minutes.\nQ3. Rs 40 per peak trip; cost Rs 2.1 lakh.\n${"Supporting analysis of the dataset follows. ".repeat(40)}`;
+    const graded = codeGradeV2(work, [{ name: "Analytical rigour", description: "Demonstrates hypothesis-driven segmentation using cohort analysis", weight: 1 }], [], brief);
+    expect(graded.report.completeness).toBe(100);
+    expect(graded.score).toBeGreaterThan(75);
+  });
+});
