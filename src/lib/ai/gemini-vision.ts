@@ -40,7 +40,14 @@ export const VISION_INSTRUCTIONS = [
 ].join(" ");
 
 // keys overrides the configured order, so parallel workers can each start on their own key.
-export async function describeVisualPages(parts: VisionPart[], requestedPages: number[], env: NodeJS.ProcessEnv = process.env, keys?: string[]): Promise<{ model: string; pages: PageDescription[] }> {
+// Used when Gemini declines to reproduce recognisable published text (finish reason RECITATION).
+export const PARAPHRASE_INSTRUCTION = "Do not transcribe any text verbatim. In readable_text, summarise what the visible text says in your own words.";
+
+export class RecitationError extends Error {
+  constructor(message: string) { super(message); this.name = "RecitationError"; }
+}
+
+export async function describeVisualPages(parts: VisionPart[], requestedPages: number[], env: NodeJS.ProcessEnv = process.env, keys?: string[], options: { paraphrase?: boolean } = {}): Promise<{ model: string; pages: PageDescription[] }> {
   const available = visionAvailable(env);
   if (!available.ok) throw new Error(available.reason);
   const size = parts.reduce((sum, part) => sum + ("inlineData" in part ? part.inlineData.data.length * 0.75 : part.text.length), 0);
@@ -50,7 +57,7 @@ export async function describeVisualPages(parts: VisionPart[], requestedPages: n
     method: "POST",
     headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
     body: JSON.stringify({
-      systemInstruction: { parts: [{ text: VISION_INSTRUCTIONS }] },
+      systemInstruction: { parts: [{ text: options.paraphrase ? `${VISION_INSTRUCTIONS} ${PARAPHRASE_INSTRUCTION}` : VISION_INSTRUCTIONS }] },
       contents: [{ role: "user", parts: [{ text: `Requested pages/slides: ${requestedPages.join(", ")}.` }, ...parts] }],
       generationConfig: { temperature: 0.1, maxOutputTokens: 16384, responseMimeType: "application/json", responseSchema: RESPONSE_SCHEMA },
     }),
@@ -67,7 +74,8 @@ export async function describeVisualPages(parts: VisionPart[], requestedPages: n
   } catch (failure) {
     // Surface why generation stopped (e.g. MAX_TOKENS, SAFETY, RECITATION) instead of a bare parse error.
     const reason = body.promptFeedback?.blockReason ?? (candidate?.finishReason && candidate.finishReason !== "STOP" ? candidate.finishReason : "");
-    throw new Error(reason ? `${(failure as Error).message} Gemini stopped with ${reason}.` : (failure as Error).message);
+    const message = reason ? `${(failure as Error).message} Gemini stopped with ${reason}.` : (failure as Error).message;
+    throw reason === "RECITATION" ? new RecitationError(message) : new Error(message);
   }
 }
 

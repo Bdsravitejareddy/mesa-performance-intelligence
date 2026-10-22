@@ -133,3 +133,26 @@ describe("splitting a failed batch", () => {
     ]);
   });
 });
+
+describe("recitation fallback", () => {
+  beforeEach(() => { vi.stubEnv("AI_DATA_PROCESSING_APPROVED", "true"); vi.stubEnv("GEMINI_API_KEY", "g-key"); vi.stubEnv("AI_API_BASE_URL", ""); vi.stubEnv("AI_API_KEY", ""); });
+  afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
+
+  it("retries with a summary instruction when Gemini refuses to recite published text", async () => {
+    const instructions: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+      instructions.push(body.systemInstruction.parts[0].text);
+      if (instructions.length === 1) return new Response(JSON.stringify({ candidates: [{ finishReason: "RECITATION", content: { parts: [] } }] }));
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({ pages: [{ page: 1, readable_text: "An advert promising faster delivery", visual_description: "Newspaper advert", colour_meaning: "", decorative: false }] }) }] } }] }));
+    }));
+    const client = fakeClient({
+      course_materials: [{ id: "m1", user_id: "owner", name: "Ad.pdf", mime_type: "application/pdf", storage_path: "p" }],
+      material_pages: [{ material_id: "m1", page_number: 1, extracted_text: "", table_data: [], has_visuals: true }],
+      material_page_notes: [],
+    }, new Uint8Array([1]));
+    const outcome = await describeMaterial(client as never, "m1");
+    expect(outcome).toMatchObject({ status: "succeeded", described: 1 });
+    expect(instructions[1]).toMatch(/Do not transcribe any text verbatim/);
+  });
+});

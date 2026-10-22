@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { describeVisualPages, MAX_INLINE_BYTES, QuotaExhaustedError, visionAvailable, type VisionPart } from "@/lib/ai/gemini-vision";
+import { describeVisualPages, MAX_INLINE_BYTES, QuotaExhaustedError, RecitationError, visionAvailable, type VisionPart } from "@/lib/ai/gemini-vision";
 import { resolveProviderSettings } from "@/lib/ai/settings";
 import { extractSlideAssets } from "./pptx-assets";
 import { summarizeMaterialPages, type ReviewPage } from "./review";
@@ -64,7 +64,7 @@ export async function describeMaterial(client: SupabaseClient, materialId: strin
 
   const textBy = new Map(((pages ?? []) as ReviewPage[]).map((page) => [page.page_number, page.extracted_text.replace(/\s+/g, " ").trim()]));
   // Requests carry at most a few pages each so the structured reply stays complete.
-  const batches: { parts: VisionPart[]; pages: number[] }[] = [];
+  const batches: { parts: VisionPart[]; pages: number[]; paraphrase?: boolean }[] = [];
   if (material.mime_type === PDF) {
     if (bytes.byteLength > MAX_INLINE_BYTES) return record({ materialId, status: "failed", requested: pending.length, described: 0, message: "The PDF is too large to send inline." });
     const pdfPart = { inlineData: { mimeType: PDF, data: toBase64(bytes) } };
@@ -91,7 +91,7 @@ export async function describeMaterial(client: SupabaseClient, materialId: strin
   const errors: string[] = [];
   for (const batch of batches) {
     try {
-      const result = await describeVisualPages(batch.parts, batch.pages, process.env, options.keys);
+      const result = await describeVisualPages(batch.parts, batch.pages, process.env, options.keys, { paraphrase: batch.paraphrase });
       model = result.model;
       const rows = result.pages.map((page) => ({ user_id: material.user_id, material_id: material.id, page_number: page.page, author_kind: "ai_vision", provider_model: result.model, note: composeNote(page), colour_meaning: page.colourMeaning, decorative: page.decorative, updated_at: new Date().toISOString() })).filter((row) => row.note);
       if (rows.length) {
@@ -102,7 +102,9 @@ export async function describeMaterial(client: SupabaseClient, materialId: strin
     } catch (failure) {
       if (failure instanceof QuotaExhaustedError) return { ...(await record({ materialId, status: "failed", requested: requested.length, described, message: failure.message }, model)), quotaExhausted: true };
       // A malformed reply for a multi-slide request is retried one slide at a time.
-      if (batch.pages.length > 1 && material.mime_type === PPTX) { batches.push(...splitBatch(batch)); continue; }
+      if (batch.pages.length > 1 && material.mime_type === PPTX) { batches.push(...splitBatch(batch).map((part) => ({ ...part, paraphrase: batch.paraphrase }))); continue; }
+      // Gemini declined to reproduce published text verbatim: retry once asking for a summary instead.
+      if (failure instanceof RecitationError && !batch.paraphrase) { batches.push({ ...batch, paraphrase: true }); continue; }
       errors.push(failure instanceof Error ? failure.message : "Description failed.");
     }
   }
