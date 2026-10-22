@@ -29,3 +29,31 @@ describe('current imported course retrieval', () => {
     });
 
 });
+
+describe("member slide notes in retrieval", () => {
+  it("surfaces a text-less slide through its note and labels the note as member interpretation", async () => {
+    const { retrieveRelevantReferences } = await import("./retrieval");
+    const pagesByKey: Record<string, unknown> = { "m1:4": { id: "p4", material_id: "m1", page_number: 4, extracted_text: "", table_data: [], has_visuals: true, visual_notes: "" } };
+    const client = {
+      from(table: string) {
+        const filters: Record<string, unknown> = {};
+        const chain: Record<string, unknown> = {};
+        const result = () => {
+          if (table === "course_links") return { data: [], error: null };
+          if (table === "current_course_materials") return { data: [{ id: "m1", name: "Lecture.pptx", version: 1, source_kind: "slides" }], error: null };
+          if (table === "material_page_notes") return { data: [{ material_id: "m1", page_number: 4, note: "Bar chart of segmentation by income band" }], error: null };
+          return { data: [], error: null };
+        };
+        for (const method of ["select", "in", "or", "textSearch", "limit"]) chain[method] = () => chain;
+        chain.eq = (column: string, value: unknown) => { filters[column] = value; return chain; };
+        chain.maybeSingle = async () => ({ data: pagesByKey[`${filters.material_id}:${filters.page_number}`] ?? null, error: null });
+        chain.then = (resolve: (value: unknown) => unknown) => Promise.resolve(result()).then(resolve);
+        return chain;
+      },
+    };
+    const refs = await retrieveRelevantReferences(client as never, "course", "assessment", "segmentation income");
+    expect(refs).toHaveLength(1);
+    expect(refs[0].label).toBe("Lecture.pptx v1, page/slide 4");
+    expect(refs[0].excerpt).toContain("Member note on visual content (a workspace member's interpretation, not course text): Bar chart of segmentation by income band");
+  });
+});

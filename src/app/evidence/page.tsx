@@ -75,7 +75,7 @@ function EvidenceContent({ data }: { data: Awaited<ReturnType<typeof loadData>> 
     </section>
 
     <section className="content-panel"><h2>Course materials <span className="panel-count">{data.materials.length}</span></h2>
-      <p className="empty-hint">{data.linkCount ? `${data.linkCount} Drive course${data.linkCount > 1 ? "s are" : " is"} linked and shown under the LMS course.` : "Drive courses are not linked to LMS courses yet, so assessments cannot use their materials."} <Link className="text-link" href="/courses">Review course links</Link></p>
+      <p className="empty-hint">{data.linkCount ? `${data.linkCount} Drive course${data.linkCount > 1 ? "s are" : " is"} linked and shown under the LMS course.` : "Drive courses are not linked to LMS courses yet, so assessments cannot use their materials."} <Link className="text-link" href="/courses">Review course links</Link> · <Link className="text-link" href="/materials/review">Review flagged slides</Link></p>
       {data.courses.length ? <div className="evidence-materials">{data.courses.map((course) => {
         const counts = materialsByCourse.get(course.id);
         return <Link href={`/courses/${course.id}`} className="evidence-material-row" key={course.id}><strong>{course.title}</strong><small>{counts ? `${counts.total} documents · ${counts.complete} extracted${counts.review ? ` · ${counts.review} need review` : ""}${counts.failed ? ` · ${counts.failed} failed` : ""}` : "No materials"}</small></Link>;
