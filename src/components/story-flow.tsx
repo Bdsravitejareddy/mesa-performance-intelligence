@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { chapterIndex, chapters, sectionIndex } from "@/components/navigation";
 
-const PULL = 360; // scroll distance past either end of a page that opens the neighbouring chapter
-const SETTLE_MS = 450; // ignore scroll momentum that carried the reader to the edge
+const PULL = 200; // scroll distance past either end of a page that opens the neighbouring chapter
+const SETTLE_MS = 160; // ignore the tail of scroll momentum that carried the reader to the edge
 export const ARRIVE_KEY = "mesa.story.arrive";
 
 // Seamless chapter-to-chapter scrolling. The end of each page is the beginning of the next one: its heading
@@ -33,8 +33,10 @@ export function StorySeams({ pathname }: { pathname: string }) {
 
   useEffect(() => {
     if (index < 0) return;
-    if (next) router.prefetch(next.href);
-    if (previous) router.prefetch(previous.href);
+    // Full prefetch (data included) of both neighbours, so moving between chapters never waits on the server.
+    const full = { kind: "full" } as unknown as Parameters<typeof router.prefetch>[1];
+    if (next) router.prefetch(next.href, full);
+    if (previous) router.prefetch(previous.href, full);
     const amount = { down: 0, up: 0 };
     const arrived = { down: 0, up: 0 };
     let lastInput = 0;
@@ -48,8 +50,7 @@ export function StorySeams({ pathname }: { pathname: string }) {
       if (!target || leaving.current) return;
       leaving.current = true;
       try { if (direction === "up") window.sessionStorage.setItem(ARRIVE_KEY, "bottom"); } catch { /* storage may be blocked */ }
-      document.documentElement.dataset.storyLeave = direction;
-      window.setTimeout(() => router.push(target.href, { scroll: direction === "down" }), 320);
+      router.push(target.href, { scroll: direction === "down" });
     };
     const relax = () => {
       if (leaving.current) return;

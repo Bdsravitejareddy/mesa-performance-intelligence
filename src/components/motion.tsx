@@ -89,7 +89,7 @@ export function useRevealOnScroll(dependency: unknown) {
     }, { rootMargin: "0px 0px -6% 0px" });
     nodes.forEach((node, index) => {
       node.classList.add("reveal");
-      node.style.setProperty("--reveal-delay", `${Math.min(index % 8, 7) * 55}ms`);
+      node.style.setProperty("--reveal-delay", `${Math.min(index % 8, 7) * 25}ms`);
       observer.observe(node);
     });
     // Never leave content hidden if an element is not reported as intersecting (e.g. inside a closed section).

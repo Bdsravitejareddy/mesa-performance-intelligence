@@ -9,6 +9,8 @@ const nextConfig: NextConfig = {
     "/api/materials/extract": ["./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"],
   },
   turbopack: { root: process.cwd() },
+  // Keep visited and prefetched pages in the browser briefly so moving between chapters is instant.
+  experimental: { staleTimes: { dynamic: 60, static: 300 } },
 };
 
 export default nextConfig;
