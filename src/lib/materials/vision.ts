@@ -12,6 +12,17 @@ const QUOTA_RETRY_AFTER_MS = 12 * 60 * 60 * 1000;
 const PAGES_PER_REQUEST = 4;
 export const VECTOR_ONLY = "The flagged slides contain only vector graphics or shapes that cannot be extracted as images.";
 
+// Each slide's parts start with its "Slide N of ..." text, followed by its images.
+export function splitBatch(batch: { parts: VisionPart[]; pages: number[] }): { parts: VisionPart[]; pages: number[] }[] {
+  const out: { parts: VisionPart[]; pages: number[] }[] = [];
+  for (const part of batch.parts) {
+    const slide = "text" in part ? part.text.match(/^Slide (\d+) of /) : null;
+    if (slide) out.push({ pages: [Number(slide[1])], parts: [part] });
+    else out.at(-1)?.parts.push(part);
+  }
+  return out;
+}
+
 function chunk<T>(items: T[], size: number): T[][] {
   const out: T[][] = [];
   for (let index = 0; index < items.length; index += size) out.push(items.slice(index, index + size));
@@ -90,6 +101,8 @@ export async function describeMaterial(client: SupabaseClient, materialId: strin
       described += rows.length;
     } catch (failure) {
       if (failure instanceof QuotaExhaustedError) return { ...(await record({ materialId, status: "failed", requested: requested.length, described, message: failure.message }, model)), quotaExhausted: true };
+      // A malformed reply for a multi-slide request is retried one slide at a time.
+      if (batch.pages.length > 1 && material.mime_type === PPTX) { batches.push(...splitBatch(batch)); continue; }
       errors.push(failure instanceof Error ? failure.message : "Description failed.");
     }
   }

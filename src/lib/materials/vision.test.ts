@@ -122,3 +122,14 @@ describe("batched slide requests", () => {
     expect(outcome).toMatchObject({ status: "succeeded", requested: 6, described: 6 });
   });
 });
+
+describe("splitting a failed batch", () => {
+  it("keeps each slide's images with its own context", async () => {
+    const { splitBatch } = await import("./vision");
+    const image = { inlineData: { mimeType: "image/png", data: "AA==" } };
+    expect(splitBatch({ pages: [3, 5], parts: [{ text: "Slide 3 of \"D\"." }, image, { text: "Slide 5 of \"D\"." }, image, image] })).toEqual([
+      { pages: [3], parts: [{ text: "Slide 3 of \"D\"." }, image] },
+      { pages: [5], parts: [{ text: "Slide 5 of \"D\"." }, image, image] },
+    ]);
+  });
+});
