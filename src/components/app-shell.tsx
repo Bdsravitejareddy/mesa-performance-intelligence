@@ -115,5 +115,8 @@ export function AppShell({ children, demoMode }: { children: React.ReactNode; de
 
 function pageTitle(pathname: string) {
   if (pathname === "/") return "Overview";
-  return pathname.split("/").filter(Boolean).at(-1)?.replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) ?? "Overview";
+  const parts = pathname.split("/").filter(Boolean);
+  // Record pages end in an ID; name them after their section instead (e.g. /materials/<id> → "Materials").
+  const last = parts.at(-1) && /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(parts.at(-1)!) ? parts.at(-2) : parts.at(-1);
+  return last?.replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) ?? "Overview";
 }
