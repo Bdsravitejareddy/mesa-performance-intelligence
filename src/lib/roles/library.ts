@@ -33,7 +33,7 @@ const RULES: [RegExp, string][] = [
   [/operations|supply chain|manufacturing|workflow|process|mrp|erp|procure/i, "execution.operations"],
 ];
 // Experience length, degrees, travel and domain background describe eligibility, not demonstrable skill.
-const ELIGIBILITY = /^\s*(\d+\+?\s*years|bachelor|relevant technical degree|mba|ability and interest to travel|travel|relevant experience)|\byears' experience\b|\d+\+ years/i;
+const ELIGIBILITY = /^\s*(\d+\+?\s*years|bachelor|relevant technical degree|mba|ability and interest to travel|travel|relevant experience|a background in)|\byears' experience\b|\d+\+ years|\bbackground in (financial|healthcare|banking)/i;
 
 export function mapRequirement(quote: string): { competencyIds: string[]; eligibility: boolean } {
   const competencyIds: string[] = [];

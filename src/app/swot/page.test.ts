@@ -31,7 +31,8 @@ describe("evidence-based SWOT page", () => {
     const html = renderToStaticMarkup(await SwotPage());
     expect(html).toContain('data-demo="false"');
     expect(html).toContain("Clarity is a demonstrated strength");
-    expect(html).toContain("Build proof of sql");
+    expect(html).toContain("skills your primary roles require");
+    expect(html).toContain("SQL —");
     expect(html).not.toMatch(/SQL is a demonstrated development area/);
     expect(inserts.some((item) => item.table === "swot_snapshots")).toBe(true);
   });

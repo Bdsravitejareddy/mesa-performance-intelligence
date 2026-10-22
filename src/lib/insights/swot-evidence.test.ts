@@ -27,8 +27,9 @@ describe("evidence-based SWOT", () => {
   });
 
   it("turns role-required unproven skills into opportunities and role-required gaps into threats", () => {
-    expect(keys).toContain("opportunity:proof:technical.sql");
-    expect(keys).not.toContain("opportunity:proof:leadership.conflict_resolution");
+    const proof = items.find((item) => item.key === "opportunity:proof:primary")!;
+    expect(proof.evidence.some((line) => line.startsWith("SQL —"))).toBe(true);
+    expect(proof.evidence.some((line) => line.startsWith("Conflict resolution"))).toBe(false);
     expect(keys).toContain("threat:gap:technical.python");
     expect(items.find((item) => item.key === "threat:gap:technical.python")?.impact).toBe("high");
   });

@@ -26,6 +26,7 @@ import {
   Target,
   Route,
   Brain,
+  ClipboardCheck,
 } from "lucide-react";
 
 const groups = [
@@ -46,6 +47,7 @@ const groups = [
     links: [
       { href: "/competencies", label: "Competency map", icon: Network },
       { href: "/thinking", label: "Thinking & behaviour", icon: Brain },
+      { href: "/tests", label: "Reasoning & personality", icon: ClipboardCheck },
       { href: "/swot", label: "SWOT analysis", icon: Target },
       { href: "/roadmap", label: "Growth roadmap", icon: Route },
       { href: "/correlations", label: "Correlations", icon: ChartNoAxesCombined },

@@ -55,3 +55,16 @@ describe("criterion mappings", () => {
     expect(domains[1].competencies[0].assessment.why.evidence[0].mark).toBeNull();
   });
 });
+
+describe("reasoning test evidence", () => {
+  it("adds practice-test sections as labelled evidence capped below high confidence", () => {
+    const tests = [1, 2].map((n) => ({ id: `t${n}`, submitted_at: `2026-10-2${n}T00:00:00Z`, result: { sections: { numerical: { correct: 4, total: 4, percent: 100 }, logical: { correct: 4, total: 4, percent: 100 }, verbal: { correct: 3, total: 4, percent: 75 } } } }));
+    const domains = buildCompetencyMap({ competencies: [...competencies, { id: "analytical.logical_reasoning", domain_key: "analytical", domain_name: "Analytical reasoning", name: "Logical reasoning", description: "", sort_order: 3 }], courses, assessments, submissions: [], mappings: [], tests }, now);
+    const numerical = domains[0].competencies.find((item) => item.id === "analytical.numerical_analysis")!;
+    const logical = domains[0].competencies.find((item) => item.id === "analytical.logical_reasoning")!;
+    expect(numerical.assessment.state).toBe("demonstrated_strength");
+    expect(numerical.assessment.confidence).toBe("medium");
+    expect(numerical.assessment.why.limitations.join(" ")).toMatch(/self-administered practice test/);
+    expect(logical.assessment.why.evidence.map((row) => row.mark)).toEqual([88, 88]);
+  });
+});

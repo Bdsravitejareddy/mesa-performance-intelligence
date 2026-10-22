@@ -10,7 +10,9 @@ export type CourseRow = { id: string; title: string };
 export type CompetencyMapEntry = CompetencyRow & { assessment: CompetencyAssessment; mappedAssessments: number };
 export type CompetencyDomain = { key: string; name: string; competencies: CompetencyMapEntry[] };
 
-export function buildCompetencyMap(input: { competencies: CompetencyRow[]; mappings: MappingRow[]; assessments: AssessmentRow[]; submissions: SubmissionRow[]; courses: CourseRow[] }, now: Date = new Date()): CompetencyDomain[] {
+export type TestEvidence = { id: string; submitted_at: string; result: { sections?: Record<string, { correct: number; total: number; percent: number }> } };
+
+export function buildCompetencyMap(input: { competencies: CompetencyRow[]; mappings: MappingRow[]; assessments: AssessmentRow[]; submissions: SubmissionRow[]; courses: CourseRow[]; tests?: TestEvidence[] }, now: Date = new Date()): CompetencyDomain[] {
   const assessmentById = new Map(input.assessments.map((row) => [row.id, row]));
   const courseById = new Map(input.courses.map((row) => [row.id, row.title]));
   const submissionsByAssessment = new Map<string, SubmissionRow[]>();
@@ -36,6 +38,21 @@ export function buildCompetencyMap(input: { competencies: CompetencyRow[]; mappi
         return { ...common, granularity: "criterion" as const, criterionLabel: mapping.criterion_label, assessmentTitle: `${assessment.title} · ${mapping.criterion_label}`, mark: criterion ? criterion.percent : null, source: criterion ? `${common.source} · criterion ${criterion.score}/${criterion.max} in official feedback` : `${common.source} · criterion not found in feedback` };
       });
     evidenceByCompetency.set(mapping.competency_id, [...(evidenceByCompetency.get(mapping.competency_id) ?? []), ...items]);
+  }
+
+  // Reasoning practice tests: numerical section → numerical analysis; logical and verbal → logical reasoning.
+  for (const test of input.tests ?? []) {
+    const sections = test.result.sections ?? {};
+    const add = (competencyId: string, label: string, parts: string[]) => {
+      const correct = parts.reduce((sum, part) => sum + (sections[part]?.correct ?? 0), 0);
+      const total = parts.reduce((sum, part) => sum + (sections[part]?.total ?? 0), 0);
+      if (!total) return;
+      const row: CompetencyEvidence = { submissionId: test.id, assessmentId: `test:${test.id}:${competencyId}`, assessmentTitle: `Reasoning test · ${label}`, course: "Practice tests", mark: Math.round((correct / total) * 100), feedback: "", date: test.submitted_at, source: `Practice reasoning test (${correct}/${total})`, mappingSource: "practice_test", granularity: "whole_assessment" };
+      evidenceByCompetency.set(competencyId, [...(evidenceByCompetency.get(competencyId) ?? []), row]);
+      mappedCount.set(competencyId, (mappedCount.get(competencyId) ?? 0) + 1);
+    };
+    add("analytical.numerical_analysis", "numerical", ["numerical"]);
+    add("analytical.logical_reasoning", "logical and verbal", ["logical", "verbal"]);
   }
 
   const domains = new Map<string, CompetencyDomain>();

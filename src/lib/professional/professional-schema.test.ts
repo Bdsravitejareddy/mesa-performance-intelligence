@@ -22,3 +22,17 @@ describe("professional evidence tables", () => {
     }
   });
 });
+
+describe("test attempts", () => {
+  it("freezes submitted attempts", async () => {
+    const db = await createTestDatabase();
+    try {
+      await db.exec("reset role");
+      const id = (await db.query<{ id: string }>("insert into public.test_attempts(user_id,kind,version,seed) values($1,'reasoning','v1',42) returning id", [owner])).rows[0].id;
+      await expect(db.query("update public.test_attempts set seed=7 where id=$1", [id])).rejects.toThrow(/cannot be changed/);
+      await db.query("update public.test_attempts set result='{\"correct\":9}', submitted_at=now() where id=$1", [id]);
+      await expect(db.query("update public.test_attempts set result='{\"correct\":12}' where id=$1", [id])).rejects.toThrow(/already|cannot be changed/);
+      await expect(db.query("insert into public.test_attempts(user_id,kind,version) values($1,'reasoning','v1')", [owner])).rejects.toThrow();
+    } finally { await db.close(); }
+  });
+});

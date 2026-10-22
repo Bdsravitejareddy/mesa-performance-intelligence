@@ -27,7 +27,7 @@ export type CompetencyEvidence = {
   feedback: string;
   date: string | null;
   source: string;
-  mappingSource: "user_tagged" | "official_rubric" | "learning_objective" | "ai_suggested";
+  mappingSource: "user_tagged" | "official_rubric" | "learning_objective" | "ai_suggested" | "practice_test";
   // A whole-assessment mark is indirect evidence for each competency the assessment covers.
   granularity: "whole_assessment" | "criterion";
   // Set for criterion-level evidence, e.g. "Customer, market & competition".
@@ -156,6 +156,7 @@ function buildLimitations(evidence: EvidenceRow[], scored: EvidenceRow[], now: D
   const limitations: string[] = [];
   if (scored.length && scored.every((item) => item.granularity === "whole_assessment")) limitations.push("Uses whole-assessment marks only, so each mark reflects everything the assessment tested, not this competency alone. Confidence cannot be high without criterion-level evidence.");
   if (evidence.some((item) => item.mappingSource === "user_tagged")) limitations.push("The link between an assessment and this competency was tagged by a workspace member, not taken from an official rubric.");
+  if (evidence.some((item) => item.mappingSource === "practice_test")) limitations.push("Includes self-administered practice test results (not proctored); they count as evidence but are less reliable than official assessments.");
   if (evidence.some((item) => item.mappingSource === "ai_suggested")) limitations.push("Some assessments were mapped to this competency automatically by AI from their titles and feedback, not from an official rubric. Remove a mapping on the Competency map if it is wrong.");
   if (scored.length && new Set(scored.map((item) => item.course)).size === 1) limitations.push("All scored evidence comes from one course, so it may not transfer to other contexts.");
   if (evidence.some((item) => item.feedback.trim())) limitations.push("Evaluator feedback is shown for context but is not scored automatically.");

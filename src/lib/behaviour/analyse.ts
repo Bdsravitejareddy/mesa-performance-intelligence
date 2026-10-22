@@ -8,7 +8,7 @@ export const DIMENSIONS = [
   "Decision-making under uncertainty", "Prioritisation under constraints", "Reflection and feedback adoption",
 ] as const;
 
-export type Source = { id: string; kind: "official_feedback" | "quality_check" | "evaluation_finding" | "own_ai_conversation"; label: string; text: string };
+export type Source = { id: string; kind: "official_feedback" | "quality_check" | "evaluation_finding" | "own_ai_conversation" | "self_report" | "reasoning_test"; label: string; text: string };
 export type Observation = { sourceId: string; quote: string; verified: boolean };
 export type DimensionAnalysis = {
   dimension: string;
@@ -33,6 +33,7 @@ export async function gatherSources(supabase: SupabaseClient, options: { include
     supabase.from("evaluation_evidence").select("id, criterion, finding, submission_quote").limit(80),
     options.includeConversations ? supabase.from("conversation_imports").select("id, title, user_messages") : Promise.resolve({ data: [] }),
   ]);
+  const { data: tests } = await supabase.from("test_attempts").select("kind, result, submitted_at").not("submitted_at", "is", null).order("submitted_at", { ascending: false }).limit(10);
   const titles = new Map((assessments.data ?? []).map((row) => [row.id as string, row.title as string]));
   const sources: Source[] = [];
   (submissions.data ?? []).forEach((row, index) => sources.push({ id: `F${index + 1}`, kind: "official_feedback", label: `Official feedback · ${titles.get(row.assessment_id as string) ?? "Assessment"}`, text: String(row.official_feedback).slice(0, 4000) }));
@@ -46,6 +47,17 @@ export async function gatherSources(supabase: SupabaseClient, options: { include
     const messages = (Array.isArray(row.user_messages) ? row.user_messages as { text: string }[] : []).slice(-150);
     if (messages.length) sources.push({ id: `C${index + 1}`, kind: "own_ai_conversation", label: `Your AI conversations · ${row.title}`, text: messages.map((message) => message.text).join("\n---\n").slice(0, 12000) });
   }
+  // Self-report preferences and practice-test results are context, labelled as such for the model.
+  const personality = (tests ?? []).find((row) => row.kind === "personality");
+  if (personality?.result && typeof personality.result === "object") {
+    const factors = (personality.result as { factors?: Record<string, { score: number; band: string }> }).factors ?? {};
+    sources.push({ id: "P1", kind: "self_report", label: "Mini-IPIP self-report (preferences, not ability)", text: Object.entries(factors).map(([factor, value]) => `${factor}: ${value.score}/20 (${value.band} on the scale)`).join("\n") });
+  }
+  const reasoning = (tests ?? []).filter((row) => row.kind === "reasoning").slice(0, 2);
+  reasoning.forEach((row, index) => {
+    const result = row.result as { sections?: Record<string, { correct: number; total: number }>; overtime?: boolean } | null;
+    if (result?.sections) sources.push({ id: `R${index + 1}`, kind: "reasoning_test", label: "Practice reasoning test (self-administered)", text: `${Object.entries(result.sections).map(([section, value]) => `${section}: ${value.correct}/${value.total}`).join("; ")}${result.overtime ? "; submitted after the time limit" : ""}` });
+  });
   return sources;
 }
 
