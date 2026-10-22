@@ -26,6 +26,8 @@ function workKind(title: string, format: string): WorkKind {
 }
 
 type AssessmentRow = { id: string; course_id: string; title: string; assessment_format: string; brief: string | null };
+// Brief-derived criteria are reused only while the brief they came from is unchanged.
+const briefBasis = (assessment: AssessmentRow) => createHash("sha256").update(assessment.brief ?? "").digest("hex").slice(0, 16);
 
 // Criteria from the assignment's own brief: its questions, deliverables and any stated marks (used as weights).
 async function deriveFromBrief(client: SupabaseClient, assessment: AssessmentRow): Promise<Standard | null> {
@@ -35,7 +37,7 @@ async function deriveFromBrief(client: SupabaseClient, assessment: AssessmentRow
     JSON.stringify({ assignment: assessment.title, brief: (assessment.brief ?? "").slice(0, 8000), courseExcerpts: refs.slice(0, 4).map((ref) => `[${ref.label}] ${ref.excerpt}`).join("\n\n").slice(0, 4000) }),
   );
   const criteria = parseCriteria(draft.criteria);
-  return criteria.length ? { source: "assignment_brief_inferred", label: `${PROVENANCE_LABELS.assignment_brief_inferred} · ${assessment.title}`, criteria } : null;
+  return criteria.length ? { source: "assignment_brief_inferred", label: `${PROVENANCE_LABELS.assignment_brief_inferred} · ${assessment.title}`, criteria, basis: briefBasis(assessment) } as Standard : null;
 }
 
 // One inferred standard per assessment: later gradings reuse it, so scores stay comparable over time. An official
@@ -46,7 +48,8 @@ async function standardFor(client: SupabaseClient, assessment: AssessmentRow, ai
   if (!hasRubric) {
     const preferred = (assessment.brief ?? "").trim().length > 40 ? "assignment_brief_inferred" : "course_objectives_inferred";
     const { data: previous } = await client.from("submission_gradings").select("standard").eq("assessment_id", assessment.id).eq("standard_source", preferred).order("created_at", { ascending: false }).limit(1).maybeSingle();
-    if (previous?.standard && Array.isArray((previous.standard as Standard).criteria)) return previous.standard as Standard;
+    const reusable = previous?.standard && Array.isArray((previous.standard as Standard).criteria) && (preferred !== "assignment_brief_inferred" || (previous.standard as { basis?: string }).basis === briefBasis(assessment));
+    if (reusable) return previous!.standard as Standard;
     if (!aiAllowed) return null;
     if (preferred === "assignment_brief_inferred") {
       const fromBrief = await deriveFromBrief(client, assessment);

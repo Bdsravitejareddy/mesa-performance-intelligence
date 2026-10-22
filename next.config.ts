@@ -8,6 +8,8 @@ const nextConfig: NextConfig = {
     "/api/drive-agent/finalize": ["./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"],
     "/api/materials/extract": ["./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"],
     "/api/imports/nexus-submission": ["./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"],
+    "/api/lms-sync": ["./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"],
+    "/api/cron/lms-sync": ["./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"],
     "/api/submissions/[id]/documents": ["./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"],
   },
   turbopack: { root: process.cwd() },

@@ -7,7 +7,9 @@ import { matchingCourseId, suggestCourseForTitle, type CourseIdentity } from "./
 import { recordCompetencySnapshots } from "@/lib/competency/history";
 import { mergeAssignmentRecords } from "./merge";
 import { normalizeAssignmentRecords, unwrapToolResult, type MesaAssignmentRecord } from "./normalize";
-import { briefFromAssignment } from "./brief";
+import { attachedMaterialFiles, briefFromAssignment } from "./brief";
+import { extractPdfPages, extractPptxSlides } from "@/lib/documents";
+import { extractDocxPages, extractXlsxSheets } from "@/lib/office-documents";
 import { toAssessmentRow, toSubmissionRow } from "./records";
 import { assignmentDetailArguments, selectAssignmentReadTools, toolArgumentVariants } from "./tool-selection";
 
@@ -212,7 +214,8 @@ export async function syncMesaLms(): Promise<SyncResult> {
 }
 
 async function refreshBriefs(client: SupabaseClient, mcp: MesaMcpClient, tool: McpTool): Promise<number> {
-  const stale = new Date(Date.now() - 7 * 86_400_000).toISOString();
+  // Briefs fetched before attachments were read (2026-10-23T12:00Z) are refreshed once; others weekly.
+  const stale = new Date(Math.max(Date.now() - 7 * 86_400_000, Date.parse("2026-10-23T12:00:00Z"))).toISOString();
   const { data: rows } = await client.from("assessments").select("id, source_record_id, brief_fetched_at").like("source_record_id", "mesa-lms:assignment:%").or(`brief_fetched_at.is.null,brief_fetched_at.lt.${stale}`).limit(60);
   let saved = 0;
   const list = rows ?? [];
@@ -223,11 +226,33 @@ async function refreshBriefs(client: SupabaseClient, mcp: MesaMcpClient, tool: M
       const args = assignmentDetailArguments(tool, assignmentId);
       if (!args) return;
       try {
-        const brief = briefFromAssignment(unwrapToolResult(await mcp.callTool(tool.name, args)));
+        const reply = unwrapToolResult(await mcp.callTool(tool.name, args));
+        // The question paper and exhibits usually carry the actual task, so their text joins the brief.
+        const attached = await readAttachedMaterials(attachedMaterialFiles(reply, assignmentId));
+        const brief = [briefFromAssignment(reply), ...attached].join("\n\n").slice(0, 20_000);
         const { error } = await client.from("assessments").update({ brief, brief_fetched_at: new Date().toISOString() }).eq("id", row.id);
         if (!error && brief) saved += 1;
       } catch { /* a brief that cannot be read is retried on the next sync */ }
     }));
   }
   return saved;
+}
+
+async function readAttachedMaterials(files: { name: string; url: string }[]): Promise<string[]> {
+  const texts: string[] = [];
+  for (const file of files) {
+    try {
+      const response = await fetch(file.url, { redirect: "error", signal: AbortSignal.timeout(30_000) });
+      if (!response.ok || Number(response.headers.get("content-length") ?? 0) > 20 * 1024 * 1024) continue;
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      const kind = new URL(file.url).pathname.split(".").pop()?.toLowerCase();
+      const pages = kind === "pdf" ? await extractPdfPages(bytes.slice(), { maxPages: 40 })
+        : kind === "docx" ? await extractDocxPages(bytes)
+        : kind === "xlsx" ? await extractXlsxSheets(bytes)
+        : (await extractPptxSlides(bytes)).map((slide) => ({ pageNumber: slide.slideNumber, text: slide.text }));
+      const text = pages.map((page) => page.text).join("\n").replace(/\u0000/g, "").trim();
+      if (text) texts.push(`Attached ${file.name}:\n${text.slice(0, 8000)}`);
+    } catch { /* an unreadable attachment leaves the brief as the LMS text */ }
+  }
+  return texts;
 }
