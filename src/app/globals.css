@@ -397,3 +397,11 @@ html.tour-open{overflow:hidden}
 @media(max-width:900px){.glass-ui{--sb:68px}.chapter-rail{display:none}.glass-ui .topbar,.glass-ui .demo-banner{margin-right:var(--gap)}.glass-ui .main-content{padding-right:24px}.tour-acts{grid-template-columns:1fr}}
 @media(max-width:620px){.glass-ui{--sb:54px;--gap:8px}.glass-ui .main-content{padding-right:12px}.next-chapter{min-height:60vh;padding:40px 22px;border-radius:26px}.next-chapter-back{position:static}.tour-cover-lede{font-size:15px}}
 @media (prefers-reduced-motion: reduce){.scene-orb,.next-chapter-hint svg,.tour-scroll-visual svg,.tour-scroll-meter i{animation:none}.scene-sun,.scene-ridge{transform:none}html.story-leaving .main-content{transition:none}}
+/* Compact glass sidebar so all chapters fit on laptop-height screens; a soft fade hints at any overflow. */
+.glass-ui .nav-link{min-height:31px;height:31px}
+.glass-ui .nav-group-label{margin-bottom:4px}
+.glass-ui .brand-lockup{padding-bottom:14px}
+.glass-ui .workspace-switcher{margin-bottom:10px}
+.glass-ui .main-nav{mask-image:linear-gradient(180deg,#000 calc(100% - 28px),transparent);padding-bottom:18px;scrollbar-width:none}
+.glass-ui .sidebar-bottom .profile-card{padding-top:8px}
+@media(max-height:760px){.glass-ui .workspace-switcher{display:none}.glass-ui .nav-link{height:28px;min-height:28px}}
