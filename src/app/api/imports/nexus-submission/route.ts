@@ -9,7 +9,7 @@ import { MAX_FILE_BYTES, MIME, cleanCapture, detectFormat, driveFileId, storedSo
 export const maxDuration = 120;
 const limits = { maxPages: 500, maxTextCharacters: 1_000_000, timeoutMs: 45_000, maxZipEntries: 4_096, maxUncompressedBytes: 80 * 1024 * 1024, maxEntryBytes: 16 * 1024 * 1024, maxSlideBytes: 4 * 1024 * 1024 } as const;
 
-type Body = { assignmentId?: unknown; capture?: unknown; links?: unknown; files?: unknown };
+type Body = { assignmentId?: unknown; capture?: unknown; links?: unknown; files?: unknown; answer?: unknown };
 type Outcome = { name: string; status: "attached" | "duplicate" | "rejected"; note?: string };
 
 async function extract(format: FileFormat, bytes: Uint8Array) {
@@ -49,7 +49,9 @@ export async function POST(request: NextRequest) {
     submission = created;
   }
   if (!submission) return NextResponse.json({ error: "Nexus does not show this assignment as submitted." }, { status: 409 });
-  await supabase.from("submissions").update({ page_capture: capture }).eq("id", submission.id);
+  // A typed answer shown on the page is the submission itself; keep it as the answer text.
+  const answer = typeof body?.answer === "string" ? body.answer.trim().slice(0, 20_000) : "";
+  await supabase.from("submissions").update(answer ? { page_capture: capture, answer_text: answer } : { page_capture: capture }).eq("id", submission.id);
 
   const links = (Array.isArray(body?.links) ? body.links : []).filter((link): link is string => typeof link === "string").slice(0, 20);
   for (const url of links) {
