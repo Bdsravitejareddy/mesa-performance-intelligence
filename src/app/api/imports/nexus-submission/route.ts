@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
         extraction_status: pages.some((page) => "hasVisuals" in page && page.hasVisuals) ? "needs_visual_review" : "complete",
         source_version: sourceVersion,
       });
-      if (error) throw new Error(`The file was read but could not be saved as evidence (${error.code ?? "error"}).`);
+      if (error) throw new Error(`The file was read but could not be saved as evidence (${error.code ?? "error"}: ${(error.message ?? "").slice(0, 120)}).`);
       objectPath = null;
       return { name, status: "attached" };
     } catch (reason) {
