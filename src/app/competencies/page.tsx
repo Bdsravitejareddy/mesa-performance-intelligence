@@ -1,6 +1,6 @@
 import { AppShell } from "@/components/app-shell";
 import { AssessmentCompetencyTagger } from "@/components/assessment-competency-tagger";
-import { CompetencyWhy, type HistoryRow } from "@/components/competency-why";
+import { CompetencyWhy, type ClaimRow, type HistoryRow } from "@/components/competency-why";
 import { CompetencyChallenge, type ChallengeRow } from "@/components/competency-challenge";
 import { STATE_LABELS, type CompetencyState } from "@/lib/competency/classify";
 import { buildCompetencyMap, type SubmissionRow } from "@/lib/competency/map";
@@ -18,6 +18,8 @@ export default async function CompetenciesPage() {
   const data = demoMode || !hasSupabaseConfig() ? null : await loadData();
   const historyById = new Map<string, HistoryRow[]>();
   for (const row of data?.history ?? []) historyById.set(row.competency_id, [...(historyById.get(row.competency_id) ?? []), row]);
+  const claimsById = new Map<string, ClaimRow[]>();
+  for (const row of data?.claims ?? []) claimsById.set(row.competency_id, [...(claimsById.get(row.competency_id) ?? []), row]);
   const challengesById = new Map<string, ChallengeRow[]>();
   for (const row of data?.challenges ?? []) challengesById.set(row.competency_id, [...(challengesById.get(row.competency_id) ?? []), row]);
   const domains = data ? buildCompetencyMap(data) : [];
@@ -41,7 +43,7 @@ export default async function CompetenciesPage() {
             <div><strong>{item.name}</strong><small>{item.description}</small></div>
             <div className="competency-verdict"><span className={`competency-state state-${item.assessment.state}`}>{STATE_LABELS[item.assessment.state]}</span><small>{item.assessment.headline} · {item.assessment.confidence === "insufficient" ? "no confidence rating" : `${item.assessment.confidence} confidence`}</small>{(challengesById.get(item.id) ?? []).some((row) => row.status === "open") && <small className="challenge-badge">Challenged · under review</small>}</div>
           </div>
-          <CompetencyWhy assessment={item.assessment} history={historyById.get(item.id) ?? []}>{(item.assessment.why.evidence.length > 0 || (challengesById.get(item.id) ?? []).length > 0) && <CompetencyChallenge competencyId={item.id} currentState={item.assessment.state} stateLabel={STATE_LABELS[item.assessment.state]} challenges={challengesById.get(item.id) ?? []} />}</CompetencyWhy>
+          <CompetencyWhy assessment={item.assessment} history={historyById.get(item.id) ?? []} claims={claimsById.get(item.id) ?? []}>{(item.assessment.why.evidence.length > 0 || (challengesById.get(item.id) ?? []).length > 0) && <CompetencyChallenge competencyId={item.id} currentState={item.assessment.state} stateLabel={STATE_LABELS[item.assessment.state]} challenges={challengesById.get(item.id) ?? []} />}</CompetencyWhy>
         </article>)}</div>
       </section>)}
       <section className="content-panel"><h2>Map assessments to competencies <span className="panel-count">{data.assessments.length}</span></h2><p className="empty-hint">Tag each assessment with the competencies it actually tested. Tags are visible to both workspace members and are labelled as member-tagged in every explanation, not as official Mesa rubric criteria.</p>
@@ -66,11 +68,14 @@ function latestCriteria(submissions: SubmissionRow[], assessmentId: string) {
 
 async function loadData() {
   const supabase = await createClient();
-  const [inputs, history, challenges] = await Promise.all([
+  const [inputs, history, challenges, claims, evidence] = await Promise.all([
     loadCompetencyInputs(supabase),
     supabase.from("competency_snapshots").select("competency_id, state, confidence, headline, reason, recorded_at").order("recorded_at", { ascending: false }).limit(1000),
     supabase.from("competency_challenges").select("id, competency_id, disputed_state, statement, counterevidence, status, resolution_note, created_at, resolved_at").order("created_at", { ascending: false }),
+    supabase.from("professional_claims").select("competency_id, claim, status, evidence_id").not("competency_id", "is", null).neq("status", "withdrawn"),
+    supabase.from("professional_evidence").select("id, title"),
   ]);
+  const evidenceTitle = new Map((evidence.data ?? []).map((row) => [row.id as string, row.title as string]));
   if (history.error || challenges.error) throw new Error("Could not load competency history. Check that the history migration is applied.");
-  return { ...inputs, history: (history.data ?? []) as (HistoryRow & { competency_id: string })[], challenges: (challenges.data ?? []) as (ChallengeRow & { competency_id: string })[] };
+  return { ...inputs, claims: (claims.data ?? []).map((row) => ({ competency_id: row.competency_id as string, claim: row.claim as string, status: row.status as string, source: evidenceTitle.get(row.evidence_id as string) ?? "Professional evidence" })), history: (history.data ?? []) as (HistoryRow & { competency_id: string })[], challenges: (challenges.data ?? []) as (ChallengeRow & { competency_id: string })[] };
 }

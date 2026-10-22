@@ -8,6 +8,7 @@ import {
   ArrowUpRight,
   BookOpen,
   BriefcaseBusiness,
+  FileUser,
   ChartNoAxesCombined,
   ChevronDown,
   CircleHelp,
@@ -45,6 +46,7 @@ const groups = [
       { href: "/swot", label: "SWOT analysis", icon: Target },
       { href: "/correlations", label: "Correlations", icon: ChartNoAxesCombined },
       { href: "/career", label: "Career readiness", icon: BriefcaseBusiness },
+      { href: "/professional", label: "Resume & portfolio", icon: FileUser },
     ],
   },
   {
