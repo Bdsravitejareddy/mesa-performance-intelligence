@@ -10,13 +10,23 @@ export function NexusImporter() {
     event.preventDefault();
     setBusy(true);
     setResult("Importing…");
-    const form = new FormData();
-    form.set("payload", payload);
     const input = event.currentTarget.elements.namedItem("file") as HTMLInputElement | null;
-    for (const file of Array.from(input?.files ?? [])) form.append("file", file);
+    const files = Array.from(input?.files ?? []);
     try {
-      const response = await fetch("/api/imports/nexus-submission", { method: "POST", body: form });
-      setResult(JSON.stringify(await response.json(), null, 2));
+      // One page, or a batch: files are matched to their page by the "<first 8 id characters>__" name prefix.
+      const parsed = JSON.parse(payload) as { assignmentId: string } | { assignmentId: string }[];
+      const pages = Array.isArray(parsed) ? parsed : [parsed];
+      const results: unknown[] = [];
+      for (const page of pages) {
+        const form = new FormData();
+        form.set("payload", JSON.stringify(page));
+        const prefix = `${page.assignmentId.slice(0, 8)}__`;
+        for (const file of files.filter((item) => !Array.isArray(parsed) || item.name.startsWith(prefix))) form.append("file", new File([file], file.name.replace(/^[0-9a-f]{8}__/, ""), { type: file.type }));
+        const response = await fetch("/api/imports/nexus-submission", { method: "POST", body: form });
+        const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as { assessment?: string; error?: string; files?: { name: string; status: string; note?: string }[]; links?: number };
+        results.push({ id: page.assignmentId.slice(0, 8), assessment: body.assessment, error: body.error, links: body.links, files: body.files?.map((file) => `${file.status}: ${file.name}${file.note ? ` (${file.note})` : ""}`) });
+      }
+      setResult(JSON.stringify(results, null, 1));
       if (input) input.value = "";
     } catch {
       setResult("Import failed.");
