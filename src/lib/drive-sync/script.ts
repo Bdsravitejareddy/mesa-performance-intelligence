@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-export type DriveScriptConfig = { baseUrl: string; storageOrigin: string; pairingCode: string };
+export type DriveScriptConfig = { baseUrl: string; storageOrigin: string; pairingCode?: string };
 
 function httpsOrigin(value: string): string {
   const url = new URL(value);
@@ -13,10 +13,11 @@ function httpsOrigin(value: string): string {
 
 /** Produces a standalone script; credentials issued after pairing never enter this source. */
 export async function renderDriveScript(config: DriveScriptConfig): Promise<{ code: string; manifest: string }> {
-  if (typeof config.pairingCode !== "string" || !config.pairingCode || config.pairingCode.length > 4096) {
+  if (config.pairingCode !== undefined && (typeof config.pairingCode !== "string" || !config.pairingCode || config.pairingCode.length > 4096)) {
     throw new Error("A valid pairing code is required");
   }
-  const bootstrap = { baseUrl: httpsOrigin(config.baseUrl), storageOrigin: httpsOrigin(config.storageOrigin), pairingCode: config.pairingCode };
+  // Without a pairing code the script uses device pairing, so the file contains no secret.
+  const bootstrap = { baseUrl: httpsOrigin(config.baseUrl), storageOrigin: httpsOrigin(config.storageOrigin), ...(config.pairingCode ? { pairingCode: config.pairingCode } : {}) };
   const directory = path.join(process.cwd(), "integrations", "apps-script");
   const [template, manifest] = await Promise.all([readFile(path.join(directory, "Code.gs"), "utf8"), readFile(path.join(directory, "appsscript.json"), "utf8")]);
   const encoded = JSON.stringify(bootstrap).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");

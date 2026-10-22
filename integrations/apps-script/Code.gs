@@ -1,6 +1,7 @@
 /**
  * Paste the generated Code.gs and manifest into a standalone Apps Script project.
  * Run install once and approve the three scopes. No web app deployment is needed.
+ * Without an embedded pairing code, install logs a short code to approve on the Drive sync page.
  * The Drive advanced-service manifest enables Drive API in the default Cloud
  * project. For a standard Cloud project, enable Drive API in Cloud Console too:
  * https://developers.google.com/apps-script/guides/services/advanced
@@ -23,11 +24,27 @@ function install() {
   if (!lock.tryLock(1000)) return;
   try {
     var properties = PropertiesService.getScriptProperties();
-    if (!properties.getProperty("connectorToken")) {
-      var pair = driveApi("pair", { code: DRIVE_AGENT_CONFIG.pairingCode }, true);
-      if (!driveString(pair.token) || !driveString(pair.connectionId)) throw driveError("Invalid pairing response", true);
-      properties.setProperty("connectorToken", pair.token);
-      properties.setProperty("connectionId", pair.connectionId);
+    if (DRIVE_AGENT_CONFIG.pairingCode) {
+      if (!properties.getProperty("connectorToken")) driveStorePairing(properties, driveApi("pair", { code: DRIVE_AGENT_CONFIG.pairingCode }, true));
+    } else {
+      // Device pairing: this file holds no secret. The script makes its own one-time code, registers only its
+      // hash, and pairs once a signed-in member approves the short code it logs. Re-installing re-pairs.
+      properties.deleteProperty("connectorToken");
+      properties.deleteProperty("connectionId");
+      var code = drivePairingCode(), hash = driveSha256Hex(code);
+      var request = driveApi("pair-request", { codeHash: hash }, true);
+      if (!driveString(request.displayCode)) throw driveError("Invalid pairing request response", true);
+      Logger.log("Approve this code on the Drive sync page within 5 minutes: " + request.displayCode);
+      var approved = false, until = Date.now() + 300000;
+      while (!approved && Date.now() < until) {
+        Utilities.sleep(5000);
+        var status = driveApi("pair-status", { codeHash: hash }, true);
+        if (status.expired) throw driveError("Pairing request expired; run install again", false);
+        approved = status.approved === true;
+      }
+      if (!approved) throw driveError("Not approved within 5 minutes; run install again", false);
+      driveStorePairing(properties, driveApi("pair", { code: code }, true));
+      Logger.log("Paired. The first scan starts now.");
     }
     var found = false;
     ScriptApp.getProjectTriggers().forEach(function(trigger) {
@@ -39,6 +56,22 @@ function install() {
     if (!found) ScriptApp.newTrigger("syncDrive").timeBased().everyDays(1).atHour(3).create();
   } finally { lock.releaseLock(); }
   syncDrive();
+}
+
+function driveStorePairing(properties, pair) {
+  if (!driveString(pair.token) || !driveString(pair.connectionId)) throw driveError("Invalid pairing response", true);
+  properties.setProperty("connectorToken", pair.token);
+  properties.setProperty("connectionId", pair.connectionId);
+}
+
+// 32 random bytes as 43 URL-safe characters, generated inside Google and never shown.
+function drivePairingCode() {
+  var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, Utilities.getUuid() + Utilities.getUuid() + Date.now(), Utilities.Charset.UTF_8);
+  return Utilities.base64EncodeWebSafe(bytes).replace(/=+$/, "").slice(0, 43);
+}
+
+function driveSha256Hex(text) {
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, text, Utilities.Charset.UTF_8).map(function(value) { var byte = (value + 256) % 256; return (byte < 16 ? "0" : "") + byte.toString(16); }).join("");
 }
 
 function syncDrive() { driveRun(); }

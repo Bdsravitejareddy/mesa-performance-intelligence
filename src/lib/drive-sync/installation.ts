@@ -21,3 +21,9 @@ export async function issueInstallation(connectionId: string) {
   const pairing = await issuePairing(connectionId);
   return {...pairing, setup: await renderDriveScript({baseUrl,storageOrigin,pairingCode:pairing.pairingCode})};
 }
+
+// The secret-free installer for device pairing.
+export async function deviceInstaller() {
+  const {baseUrl,storageOrigin}=requireInstallationConfig();
+  return renderDriveScript({baseUrl,storageOrigin});
+}
