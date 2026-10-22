@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describeVisualPages, MAX_INLINE_BYTES, QuotaExhaustedError, visionAvailable, type VisionPart } from "@/lib/ai/gemini-vision";
+import { resolveProviderSettings } from "@/lib/ai/settings";
 import { extractSlideAssets } from "./pptx-assets";
 import { summarizeMaterialPages, type ReviewPage } from "./review";
 
@@ -19,7 +20,7 @@ export function composeNote(description: { readableText: string; visualDescripti
 }
 
 // With redo, pages that already have an AI description are described again (e.g. after the instructions improve).
-export async function describeMaterial(client: SupabaseClient, materialId: string, options: { redo?: boolean } = {}): Promise<VisionOutcome> {
+export async function describeMaterial(client: SupabaseClient, materialId: string, options: { redo?: boolean; keys?: string[] } = {}): Promise<VisionOutcome> {
   const available = visionAvailable();
   if (!available.ok) return { materialId, status: "skipped", requested: 0, described: 0, message: available.reason };
   const { data: material, error } = await client.from("course_materials").select("id, user_id, name, mime_type, storage_path").eq("id", materialId).maybeSingle();
@@ -63,7 +64,7 @@ export async function describeMaterial(client: SupabaseClient, materialId: strin
   }
 
   try {
-    const result = await describeVisualPages(parts, requested);
+    const result = await describeVisualPages(parts, requested, process.env, options.keys);
     const rows = result.pages.map((page) => ({ user_id: material.user_id, material_id: material.id, page_number: page.page, author_kind: "ai_vision", provider_model: result.model, note: composeNote(page), colour_meaning: page.colourMeaning, decorative: page.decorative, updated_at: new Date().toISOString() })).filter((row) => row.note);
     if (rows.length) {
       const { error: saveError } = await client.from("material_page_notes").upsert(rows, { onConflict: "material_id,page_number,author_kind" });
@@ -89,17 +90,32 @@ export async function describePendingMaterials(client: SupabaseClient, budgetMs:
   ]);
   const latestRun = new Map<string, { status: string; message: string; ran_at: string }>();
   for (const run of runs ?? []) if (!latestRun.has(run.material_id)) latestRun.set(run.material_id, run);
-  const outcomes: VisionOutcome[] = [];
-  for (const { id } of flagged ?? []) {
-    // Each document takes up to ~50s; stop before the platform limit.
-    if (Date.now() > deadline - 55_000) break;
+  const queue = (flagged ?? []).map((row) => row.id as string).filter((id) => {
     const last = latestRun.get(id);
     const wait = last?.message.startsWith("Gemini quota") ? QUOTA_RETRY_AFTER_MS : RETRY_AFTER_MS;
-    if (last && last.status !== "succeeded" && now - new Date(last.ran_at).getTime() < wait) continue;
-    const outcome = await describeMaterial(client, id);
-    if (outcome.status !== "skipped" || outcome.requested > 0) outcomes.push(outcome);
-    // No key has quota left: stop instead of marking every remaining document as failed.
-    if (outcome.quotaExhausted) break;
-  }
+    return !(last && last.status !== "succeeded" && now - new Date(last.ran_at).getTime() < wait);
+  });
+  const outcomes: VisionOutcome[] = [];
+  let next = 0;
+  // Every key but the last gets its own worker; the last key is a shared reserve each worker falls back to.
+  const worker = async (keys: string[]) => {
+    while (next < queue.length) {
+      // Each document takes up to ~50s; stop before the platform limit.
+      if (Date.now() > deadline - 55_000) return;
+      const id = queue[next];
+      next += 1;
+      const outcome = await describeMaterial(client, id, { keys });
+      if (outcome.status !== "skipped" || outcome.requested > 0) outcomes.push(outcome);
+      // This worker's key and the reserve are out of quota: stop rather than fail every remaining document.
+      if (outcome.quotaExhausted) return;
+    }
+  };
+  await Promise.all(workerKeySets(resolveProviderSettings().keys).map(worker));
   return outcomes;
+}
+
+export function workerKeySets(keys: string[]): string[][] {
+  if (keys.length <= 1) return [keys];
+  const reserve = keys[keys.length - 1];
+  return keys.slice(0, -1).map((key) => [key, reserve]);
 }

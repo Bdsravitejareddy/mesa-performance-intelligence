@@ -32,7 +32,7 @@ export default async function MaterialReviewListPage() {
     {[["Slides still to describe", open], ["Described by AI or reviewed", done], ["Flagged only for decoration — nothing to add", nothing]].map(([label, list]) => (list as typeof rows).length > 0 && <section className="content-panel" key={label as string}><h2>{label as string} <span className="panel-count">{(list as typeof rows).length}</span></h2>
       <div className="review-list">{(list as typeof rows).map((row) => <Link href={`/materials/${row.id}`} className="review-row" key={row.id}>
         <span><strong>{row.name}</strong><small>{row.course}</small></span>
-        <span className="review-stats"><small>{row.summary.pages} slides · {row.summary.noText} without text · {row.summary.attention.length - row.summary.noText} mostly image</small><small>{row.aiNotes ? `${row.aiNotes} described by AI` : "Not described yet"}{row.notes ? ` · ${row.notes} member note${row.notes > 1 ? "s" : ""}` : ""}{row.review ? ` · ${row.review === "reviewed" ? "Reviewed" : "Marked not needed"}` : ""}</small></span>
+        <span className="review-stats"><small>{row.summary.pages} slides · {row.summary.noText} without text · {row.summary.attention.length - row.summary.noText} mostly image</small><small>{row.aiNotes ? `${row.aiNotes} described by AI` : "Not described yet"}{row.notes ? ` · ${row.notes} member note${row.notes > 1 ? "s" : ""}` : ""}{row.review ? ` · ${row.review === "reviewed" ? "Reviewed" : "Marked not needed"}` : ""}</small>{row.lastRun && row.lastRun.status !== "succeeded" && <small className="review-run-issue">Last attempt {row.lastRun.status}: {row.lastRun.message}</small>}</span>
       </Link>)}</div>
     </section>)}
     {!rows.length && <section className="content-panel"><p className="empty-hint">{demoMode ? "Preview mode has no imported materials." : "No imported materials are flagged for review."}</p></section>}
@@ -45,12 +45,13 @@ async function loadQueue() {
   if (error) throw new Error("Could not load materials.");
   const ids = (current ?? []).map((row) => row.id as string);
   if (!ids.length) return [];
-  const [materials, links, courses, reviews, notes] = await Promise.all([
+  const [materials, links, courses, reviews, notes, runs] = await Promise.all([
     supabase.from("course_materials").select("id, name, course_id").in("id", ids).eq("extraction_status", "needs_visual_review").order("name"),
     supabase.from("course_links").select("assessment_course_id, material_course_id"),
     supabase.from("courses").select("id, title"),
     supabase.from("material_reviews").select("material_id, outcome"),
     supabase.from("material_page_notes").select("material_id, page_number, author_kind"),
+    supabase.from("material_vision_runs").select("material_id, status, message, ran_at").order("ran_at", { ascending: false }).limit(500),
   ]);
   const failed = materials.error ?? links.error ?? courses.error ?? reviews.error ?? notes.error;
   if (failed) throw new Error("Could not load the review queue. Check that the material review migration is applied.");
@@ -69,6 +70,8 @@ async function loadQueue() {
     counts.set(row.material_id, (counts.get(row.material_id) ?? 0) + 1);
     described.set(row.material_id, (described.get(row.material_id) ?? new Set<number>()).add(row.page_number as number));
   }
+  const lastRun = new Map<string, { status: string; message: string }>();
+  for (const run of runs.data ?? []) if (!lastRun.has(run.material_id)) lastRun.set(run.material_id, run);
   const pagesBy = new Map<string, ReviewPage[]>();
   for (const row of pages ?? []) pagesBy.set(row.material_id, [...(pagesBy.get(row.material_id) ?? []), row as ReviewPage]);
   return flagged.map((row) => ({
@@ -78,6 +81,7 @@ async function loadQueue() {
     summary: summarizeMaterialPages(pagesBy.get(row.id) ?? []),
     notes: noteCount.get(row.id) ?? 0,
     aiNotes: aiCount.get(row.id) ?? 0,
+    lastRun: lastRun.get(row.id) ?? null,
     describedPages: described.get(row.id) ?? new Set<number>(),
     review: review.get(row.id) ?? null,
   })).sort((a, b) => a.course.localeCompare(b.course) || b.summary.noText - a.summary.noText);

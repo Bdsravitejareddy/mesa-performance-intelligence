@@ -84,3 +84,12 @@ describe("describing flagged materials", () => {
     expect(composeNote({ readableText: "", visualDescription: "", decorative: false })).toBe("");
   });
 });
+
+describe("parallel key workers", () => {
+  it("gives every key but the last its own worker, each falling back to the last", async () => {
+    const { workerKeySets } = await import("./vision");
+    expect(workerKeySets(["a", "b", "c", "d"])).toEqual([["a", "d"], ["b", "d"], ["c", "d"]]);
+    expect(workerKeySets(["a", "b"])).toEqual([["a", "b"]]);
+    expect(workerKeySets(["a"])).toEqual([["a"]]);
+  });
+});

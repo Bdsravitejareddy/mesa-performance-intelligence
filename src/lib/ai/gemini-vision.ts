@@ -32,13 +32,14 @@ export const VISION_INSTRUCTIONS = [
   "Return only JSON: {\"pages\":[{\"page\":number,\"readable_text\":string,\"visual_description\":string,\"colour_meaning\":string,\"decorative\":boolean}]} with one entry per requested page.",
 ].join(" ");
 
-export async function describeVisualPages(parts: VisionPart[], requestedPages: number[], env: NodeJS.ProcessEnv = process.env): Promise<{ model: string; pages: PageDescription[] }> {
+// keys overrides the configured order, so parallel workers can each start on their own key.
+export async function describeVisualPages(parts: VisionPart[], requestedPages: number[], env: NodeJS.ProcessEnv = process.env, keys?: string[]): Promise<{ model: string; pages: PageDescription[] }> {
   const available = visionAvailable(env);
   if (!available.ok) throw new Error(available.reason);
   const size = parts.reduce((sum, part) => sum + ("inlineData" in part ? part.inlineData.data.length * 0.75 : part.text.length), 0);
   if (size > MAX_INLINE_BYTES) throw new Error("The visual content is too large for one inline request.");
   const settings = resolveProviderSettings(env);
-  const response = await fetchWithKeyFailover(settings.keys, (key) => fetch(`${GEMINI_API}/${encodeURIComponent(available.model)}:generateContent`, {
+  const response = await fetchWithKeyFailover(keys?.length ? keys : settings.keys, (key) => fetch(`${GEMINI_API}/${encodeURIComponent(available.model)}:generateContent`, {
     method: "POST",
     headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
     body: JSON.stringify({
