@@ -75,7 +75,7 @@ export function DashboardView({ data }: { data: DashboardSnapshot }) {
         <article className="panel performance-panel">
           <div className="panel-heading"><div><h2>By course, for your target roles</h2></div><Link className="text-link" href="/grading">Graded work <ArrowRight size={14} /></Link></div>
           {data.standings.length ? <div className="standing-table">{data.standings.sort((a, b) => (b.standing ?? -1) - (a.standing ?? -1)).map((row) => <StandingRow key={row.courseId} row={row} />)}</div> : <p className="empty-hint">No courses in this term yet.</p>}
-          <Why>Standing is the official weighted average, or the blind AI grade where no mark is released yet (marked “AI”). “Shown” is how much of the course's assessment weight has a mark or a grading. A course is core for a role when it assesses a large share of that role's skills (bar 75) and supporting otherwise (bar 65).</Why>
+          <Why>Standing combines, per assessment, the official mark where released and the blind AI grade where not, weighted by maximum marks (“+AI” when mixed, “AI” when no official mark exists). “Shown” is how much of the course's assessment weight has a mark or a grading. A course is core for a role when it assesses a large share of that role's skills (bar 75) and supporting otherwise (bar 65).</Why>
         </article>
 
         <article className="panel focus-panel">
@@ -125,7 +125,7 @@ const shortRole = (role: string) => role.replace(/Senior Technical Product Manag
 function StandingRow({ row }: { row: CourseStanding }) {
   return <div className="standing-row">
     <span className="standing-name"><strong>{row.title.replace(/\s+with\s+.*$/i, "")}</strong><small>{row.evidenced} of {row.assessments} assessed · {Math.round(row.demonstratedShare * 100)}% shown</small></span>
-    <span className={`standing-value basis-${row.basis}`}>{row.standing === null ? "—" : row.standing}{row.basis === "ai" && <em>AI</em>}</span>
+    <span className={`standing-value basis-${row.basis}`}>{row.standing === null ? "—" : row.standing}{row.basis === "ai" && <em>AI</em>}{row.basis === "mixed" && <em>+AI</em>}</span>
     <span className="standing-roles">{row.roles.map((role) => <span key={role.role} className={`role-chip verdict-${role.verdict}`} title={`${role.relevance} for ${role.role}: bar ${role.threshold}`}>{shortRole(role.role)} · {role.relevance} · {VERDICT_LABEL[role.verdict]}</span>)}</span>
   </div>;
 }

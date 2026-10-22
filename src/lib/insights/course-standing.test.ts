@@ -34,3 +34,10 @@ describe("course standing", () => {
     expect(rows.find((row) => row.courseId === "brand")).toMatchObject({ standing: 82, basis: "ai" });
   });
 });
+
+describe("mixed standing", () => {
+  it("uses the official mark where released and the AI grade elsewhere", () => {
+    const rows = courseStanding({ courses: [{ id: "e", title: "E101", term: "Term 1" }], assessments: [{ id: "mid", course_id: "e", official_max_mark: 100 }, { id: "end", course_id: "e", official_max_mark: 100 }], marks: [{ assessment_id: "mid", mark: 51, weight: 100 }], gradings: [{ assessment_id: "end", ai_score: 83.5 }, { assessment_id: "mid", ai_score: 40 }], mappings: [], roles: [] });
+    expect(rows[0]).toMatchObject({ standing: 67.3, basis: "mixed", official: 51 });
+  });
+});

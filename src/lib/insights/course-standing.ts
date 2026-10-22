@@ -19,7 +19,7 @@ export type RoleView = { role: string; relevance: Relevance; overlap: number; th
 export type CourseStanding = {
   courseId: string; title: string; term: string | null;
   assessments: number; evidenced: number; demonstratedShare: number;
-  official: number | null; ai: number | null; standing: number | null; basis: "official" | "ai" | "none";
+  official: number | null; ai: number | null; standing: number | null; basis: "official" | "mixed" | "ai" | "none";
   roles: RoleView[];
 };
 
@@ -58,7 +58,13 @@ export function courseStanding(input: StandingInput): CourseStanding[] {
     const markWeight = marks.reduce((sum, row) => sum + row.weight, 0);
     const official = marks.length && markWeight ? round1(marks.reduce((sum, row) => sum + row.mark * row.weight, 0) / markWeight) : null;
     const ai = gradings.length ? round1(gradings.reduce((sum, row) => sum + row.ai_score!, 0) / gradings.length) : null;
-    const standing = official ?? ai;
+    // Per assessment: the official mark where released, otherwise the blind AI grade; weighted by maximum marks.
+    const officialOf = new Map(marks.map((row) => [row.assessment_id, row.mark]));
+    const aiOf = new Map(gradings.map((row) => [row.assessment_id, row.ai_score!]));
+    const parts = [...evidencedIds].map((id) => ({ value: officialOf.get(id) ?? aiOf.get(id)!, weight: weightOf(id), official: officialOf.has(id) }));
+    const partWeight = parts.reduce((sum, part) => sum + part.weight, 0);
+    const standing = parts.length && partWeight ? round1(parts.reduce((sum, part) => sum + part.value * part.weight, 0) / partWeight) : null;
+    const basis: CourseStanding["basis"] = !parts.length ? "none" : parts.every((part) => part.official) ? "official" : parts.some((part) => part.official) ? "mixed" : "ai";
     const roleViews: RoleView[] = roles.map((role) => {
       const share = overlap(course.id, role.required);
       const relevance: Relevance = share >= 0.2 || topThree.get(role.name)?.has(course.id) ? "core" : share > 0 ? "supporting" : "peripheral";
@@ -68,7 +74,7 @@ export function courseStanding(input: StandingInput): CourseStanding[] {
     return {
       courseId: course.id, title: course.title, term: course.term,
       assessments: assessments.length, evidenced: evidencedIds.size, demonstratedShare: totalWeight ? Math.round((evidencedWeight / totalWeight) * 100) / 100 : 0,
-      official, ai, standing, basis: official !== null ? "official" : ai !== null ? "ai" : "none", roles: roleViews,
+      official, ai, standing, basis, roles: roleViews,
     } satisfies CourseStanding;
   }).filter((row): row is CourseStanding => row !== null);
 }
