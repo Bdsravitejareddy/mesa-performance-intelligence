@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAllowedEmails } from "@/lib/supabase/config";
 import { MesaMcpClient, getMesaMcpEndpoint } from "./mcp-client";
-import { matchingCourseId, type CourseIdentity } from "./course-matching";
+import { matchingCourseId, suggestCourseForTitle, type CourseIdentity } from "./course-matching";
 import { recordCompetencySnapshots } from "@/lib/competency/history";
 import { mergeAssignmentRecords } from "./merge";
 import { normalizeAssignmentRecords, unwrapToolResult, type MesaAssignmentRecord } from "./normalize";
@@ -37,7 +37,7 @@ function courseKey(value: string): string {
   return value.normalize("NFKD").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
-async function persistRecords(client: SupabaseClient, defaultUserId: string, workspaceUserIds: string[], records: MesaAssignmentRecord[]) {
+export async function persistRecords(client: SupabaseClient, defaultUserId: string, workspaceUserIds: string[], records: MesaAssignmentRecord[]) {
   const { data: existingCourses, error: courseError } = await client.from("courses").select("id,user_id,title,lms_course_id").in("user_id", workspaceUserIds);
   if (courseError) throw new Error("Course lookup failed.");
   const byLmsId = new Map<string, string>();
@@ -49,6 +49,12 @@ async function persistRecords(client: SupabaseClient, defaultUserId: string, wor
     const key = courseKey(course.title);
     byTitle.set(key, [...(byTitle.get(key) ?? []), course.id]);
   }
+  // Assignments the LMS sends without a course are held, not dropped, and resolved from confirmed or unambiguous evidence.
+  const { data: heldRows, error: heldError } = await client.from("lms_unassigned_assignments").select("source_record_id, resolved_course_id, resolution, resolved_by, resolved_at");
+  if (heldError) throw new Error("Unassigned LMS records could not be loaded.");
+  const held = new Map((heldRows ?? []).map((row) => [row.source_record_id as string, row]));
+  const assessmentCourses = (existingCourses ?? []).filter((course) => course.lms_course_id).map((course) => ({ id: course.id as string, title: course.title as string }));
+  let resolvedUnassigned = 0;
   const courseIds = new Map<string, string>();
   let createdOrLinkedCourses = 0;
   let assessmentCount = 0;
@@ -58,9 +64,32 @@ async function persistRecords(client: SupabaseClient, defaultUserId: string, wor
   let skippedCount = 0;
 
   for (const record of records) {
-    if (!record.courseId && !record.courseTitle) { skippedCount += 1; continue; }
-    const key = record.courseId || courseKey(record.courseTitle) || "unknown";
-    let courseRowId = courseIds.get(key) ?? (record.courseId ? byLmsId.get(record.courseId) : undefined);
+    let heldCourseId: string | null = null;
+    if (!record.courseId && !record.courseTitle) {
+      const sourceRecordId = `mesa-lms:assignment:${record.assignmentId}`;
+      const previous = held.get(sourceRecordId);
+      const suggestion = suggestCourseForTitle(record.title, assessmentCourses);
+      const memberChoice = previous?.resolution === "member" && previous.resolved_course_id && courseByRowId.has(previous.resolved_course_id) ? previous.resolved_course_id : null;
+      heldCourseId = memberChoice ?? suggestion?.courseId ?? null;
+      const { error: holdError } = await client.from("lms_unassigned_assignments").upsert({
+        user_id: defaultUserId,
+        source_record_id: sourceRecordId,
+        title: record.title,
+        record,
+        suggested_course_id: suggestion?.courseId ?? null,
+        suggestion_basis: suggestion?.basis ?? "",
+        resolved_course_id: heldCourseId,
+        resolution: memberChoice ? "member" : heldCourseId ? "auto_title" : null,
+        resolved_by: memberChoice ? previous?.resolved_by ?? null : null,
+        resolved_at: heldCourseId ? previous?.resolved_at ?? new Date().toISOString() : null,
+        last_seen_at: new Date().toISOString(),
+      }, { onConflict: "source_record_id" });
+      if (holdError) throw new Error("Unassigned LMS record could not be saved.");
+      if (!heldCourseId) { skippedCount += 1; continue; }
+      resolvedUnassigned += 1;
+    }
+    const key = heldCourseId ?? (record.courseId || courseKey(record.courseTitle) || "unknown");
+    let courseRowId = heldCourseId ?? courseIds.get(key) ?? (record.courseId ? byLmsId.get(record.courseId) : undefined);
     if (!courseRowId && record.courseTitle) {
       const matches = byTitle.get(courseKey(record.courseTitle)) ?? [];
       if (record.courseId) courseRowId = matchingCourseId(matches, courseByRowId, record.courseId);
@@ -103,7 +132,7 @@ async function persistRecords(client: SupabaseClient, defaultUserId: string, wor
     if (record.score !== null) markCount += 1;
     if (record.feedback) feedbackCount += 1;
   }
-  return { courses: createdOrLinkedCourses, assessments: assessmentCount, submissions: submissionCount, marks: markCount, feedback: feedbackCount, skipped: skippedCount };
+  return { courses: createdOrLinkedCourses, assessments: assessmentCount, submissions: submissionCount, marks: markCount, feedback: feedbackCount, skipped: skippedCount, resolvedUnassigned };
 }
 
 export async function syncMesaLms(): Promise<SyncResult> {
@@ -165,7 +194,7 @@ export async function syncMesaLms(): Promise<SyncResult> {
     }
     const counts = await persistRecords(client, ownerId, members, records);
     const hasPartialData = failedReads || counts.skipped || !counts.assessments || !counts.marks;
-    const summary: SyncResult = { status: hasPartialData ? "partial" : "succeeded", runId: run.id, courses: counts.courses, assessments: counts.assessments, submissions: counts.submissions, marks: counts.marks, feedback: counts.feedback, message: hasPartialData ? `Imported ${counts.assessments} assessment(s), ${counts.marks} marks, and ${counts.feedback} feedback records. ${counts.skipped} record(s) were skipped because the LMS provided no course reference; ${failedReads} read operation(s) failed.` : `Synced ${counts.assessments} assessments, ${counts.marks} marks, and ${counts.feedback} feedback records. Scores are converted to the 0–100 scale, and original LMS marks are retained.` };
+    const summary: SyncResult = { status: hasPartialData ? "partial" : "succeeded", runId: run.id, courses: counts.courses, assessments: counts.assessments, submissions: counts.submissions, marks: counts.marks, feedback: counts.feedback, message: hasPartialData ? `Imported ${counts.assessments} assessment(s), ${counts.marks} marks, and ${counts.feedback} feedback records. ${counts.resolvedUnassigned ? `${counts.resolvedUnassigned} course-less record(s) were filed by title or member confirmation; ` : ""}${counts.skipped} record(s) without a course are held for review; ${failedReads} read operation(s) failed.` : `Synced ${counts.assessments} assessments, ${counts.marks} marks, and ${counts.feedback} feedback records. Scores are converted to the 0–100 scale, and original LMS marks are retained.` };
     const { error } = await client.from("sync_runs").update({ status: summary.status, finished_at: new Date().toISOString(), message: summary.message }).eq("id", run.id).eq("user_id", ownerId);
     if (error) throw new Error("Sync status could not be saved.");
     // New or regraded marks can change competency conclusions; append history after the sync is recorded.

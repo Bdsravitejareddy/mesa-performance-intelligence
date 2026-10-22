@@ -31,7 +31,7 @@ describe("course links migration", () => {
       create function storage.foldername(object_name text) returns text[] language sql immutable as $$ select regexp_split_to_array(object_name,'/') $$;
       grant usage on schema storage to authenticated;
     `);
-    for (const name of ["20261019062743_create_course_intelligence_schema.sql", "20261019063732_shared_workspace_access.sql", "20261022090000_submission_documents.sql", "20261022090008_submission_document_integrity.sql", "20261022130000_course_links.sql", "20261022160000_material_review_notes.sql"]) await db.exec(await migration(name));
+    for (const name of ["20261019062743_create_course_intelligence_schema.sql", "20261019063732_shared_workspace_access.sql", "20261022090000_submission_documents.sql", "20261022090008_submission_document_integrity.sql", "20261022130000_course_links.sql", "20261022160000_material_review_notes.sql", "20261022180000_lms_unassigned_assignments.sql"]) await db.exec(await migration(name));
     await db.exec(`
       insert into private.workspace_access(email) values ('a@example.com'),('b@example.com');
       insert into auth.users(id,email,email_confirmed_at) values ('${A}','a@example.com',now()),('${B}','b@example.com',now()),('${OUT}','out@example.com',now());
@@ -66,10 +66,19 @@ describe("course links migration", () => {
     await db.exec(`insert into public.material_reviews(material_id,user_id,outcome) values ('e0000000-0000-4000-8000-000000000001','${A}','reviewed')`);
     await expect(db.exec(`insert into public.material_reviews(material_id,user_id,outcome) values ('e0000000-0000-4000-8000-000000000001','${A}','approved')`)).rejects.toThrow();
 
+    // Course-less LMS records: only the resolution may be changed by members, and a course needs a stated basis.
+    await db.exec("reset role");
+    await db.exec(`insert into public.lms_unassigned_assignments(user_id,source_record_id,title,record) values ('${A}','mesa-lms:assignment:w1','Week 1 Assignment','{"assignmentId":"w1"}')`);
+    await db.exec("set role authenticated");
+    await expect(db.exec(`update public.lms_unassigned_assignments set resolved_course_id='${LMS}'`)).rejects.toThrow();
+    await db.exec(`update public.lms_unassigned_assignments set resolved_course_id='${LMS}', resolution='member', resolved_at=now()`);
+    await expect(db.exec(`insert into public.lms_unassigned_assignments(user_id,source_record_id,title,record) values ('${A}','mesa-lms:assignment:w2','x','{}')`)).rejects.toThrow();
+
     // Unlinking is allowed; outsiders see nothing.
     await db.exec("select set_config('request.jwt.claim.sub','" + OUT + "',false)");
     expect((await db.query("select id from public.course_links")).rows).toHaveLength(0);
     expect((await db.query("select id from public.material_page_notes")).rows).toHaveLength(0);
+    expect((await db.query("select id from public.lms_unassigned_assignments")).rows).toHaveLength(0);
     await db.exec("select set_config('request.jwt.claim.sub','" + A + "',false)");
     expect((await db.query("delete from public.course_links returning id")).rows).toHaveLength(1);
   });
