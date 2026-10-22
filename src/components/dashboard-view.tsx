@@ -16,6 +16,7 @@ import {
 import type { DashboardSnapshot } from "@/lib/dashboard-data";
 import { formatOfficialMark } from "@/lib/scoring";
 import { IntelligenceVisual } from "@/components/intelligence-visual";
+import { CountUp, ParallaxHero } from "@/components/motion";
 import { InsightSummary } from "@/components/insight-summary";
 
 export function DashboardView({ data }: { data: DashboardSnapshot }) {
@@ -24,7 +25,7 @@ export function DashboardView({ data }: { data: DashboardSnapshot }) {
 
   return (
     <div className="dashboard-page page-enter">
-      <section className="overview-hero">
+      <ParallaxHero className="overview-hero">
         <div className="overview-hero-copy">
           <div className="eyebrow"><span className="eyebrow-line" /> Your learning, in context</div>
           <h1>See the signal in your performance.</h1>
@@ -34,7 +35,7 @@ export function DashboardView({ data }: { data: DashboardSnapshot }) {
         <IntelligenceVisual />
         <div className="hero-counter" aria-label={`${data.markCount} marked submissions`}>{String(data.markCount).padStart(2, "0")}<small>/ {String(data.assessmentCount).padStart(2, "0")} marked</small></div>
         <nav className="hero-links" aria-label="Evidence shortcuts"><Link href="/evidence">Evidence</Link><Link href="/competencies">Competencies</Link><Link href="/marks">Marks</Link></nav>
-      </section>
+      </ParallaxHero>
 
       <InsightSummary demoMode={data.demoMode} />
 
@@ -99,7 +100,7 @@ export function DashboardView({ data }: { data: DashboardSnapshot }) {
 function MetricCard({ label, value, meta, icon, accent, trend }: { label: string; value: string; meta: string; icon: React.ReactNode; accent: string; trend?: string }) {
   return <article className="metric-card">
     <div className="metric-top"><span>{label}</span><span className={`metric-icon metric-${accent}`}>{icon}</span></div>
-    <div className="metric-value-row"><strong>{value}</strong>{trend && <span className="metric-trend"><ArrowUpRight size={13} /> {trend}</span>}</div>
+    <div className="metric-value-row"><strong><CountUp value={value} /></strong>{trend && <span className="metric-trend"><ArrowUpRight size={13} /> {trend}</span>}</div>
     <small>{meta}</small>
   </article>;
 }

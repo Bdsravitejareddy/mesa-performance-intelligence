@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useRevealOnScroll } from "@/components/motion";
 import {
   Activity,
   ArrowUpRight,
@@ -54,6 +55,7 @@ const groups = [
 
 export function AppShell({ children, demoMode }: { children: React.ReactNode; demoMode: boolean }) {
   const pathname = usePathname();
+  useRevealOnScroll(pathname);
 
   return (
     <div className="app-frame" data-theme="nature">
