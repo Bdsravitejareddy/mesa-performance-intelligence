@@ -50,8 +50,9 @@ export async function gatherSources(supabase: SupabaseClient, options: { include
   // Self-report preferences and practice-test results are context, labelled as such for the model.
   const personality = (tests ?? []).find((row) => row.kind === "personality");
   if (personality?.result && typeof personality.result === "object") {
-    const factors = (personality.result as { factors?: Record<string, { score: number; band: string }> }).factors ?? {};
-    sources.push({ id: "P1", kind: "self_report", label: "Mini-IPIP self-report (preferences, not ability)", text: Object.entries(factors).map(([factor, value]) => `${factor}: ${value.score}/20 (${value.band} on the scale)`).join("\n") });
+    const result = personality.result as { factors?: Record<string, { score: number; band: string }>; scale?: string; note?: string };
+    const scale = result.scale === "mean_1_5" ? "/5 mean" : "/20";
+    sources.push({ id: "P1", kind: "self_report", label: "IPIP self-report (preferences, not ability; the member's own note gives context)", text: [...Object.entries(result.factors ?? {}).map(([factor, value]) => `${factor}: ${value.score}${scale} (${value.band} on the scale)`), ...(result.note ? [`Member's own context: ${result.note}`] : [])].join("\n") });
   }
   const reasoning = (tests ?? []).filter((row) => row.kind === "reasoning").slice(0, 2);
   reasoning.forEach((row, index) => {

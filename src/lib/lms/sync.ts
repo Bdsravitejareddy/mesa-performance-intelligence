@@ -2,15 +2,16 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAllowedEmails } from "@/lib/supabase/config";
-import { MesaMcpClient, getMesaMcpEndpoint } from "./mcp-client";
+import { MesaMcpClient, getMesaMcpEndpoint, type McpTool } from "./mcp-client";
 import { matchingCourseId, suggestCourseForTitle, type CourseIdentity } from "./course-matching";
 import { recordCompetencySnapshots } from "@/lib/competency/history";
 import { mergeAssignmentRecords } from "./merge";
 import { normalizeAssignmentRecords, unwrapToolResult, type MesaAssignmentRecord } from "./normalize";
+import { briefFromAssignment } from "./brief";
 import { toAssessmentRow, toSubmissionRow } from "./records";
 import { assignmentDetailArguments, selectAssignmentReadTools, toolArgumentVariants } from "./tool-selection";
 
-type SyncResult = { status: "succeeded" | "partial"; runId: string; courses: number; assessments: number; submissions: number; marks: number; feedback: number; message: string; competencySnapshots?: number | null };
+type SyncResult = { status: "succeeded" | "partial"; runId: string; courses: number; assessments: number; submissions: number; marks: number; feedback: number; message: string; competencySnapshots?: number | null; briefs?: number };
 
 async function workspaceMembers(client: SupabaseClient): Promise<string[]> {
   const emails = new Set(getAllowedEmails());
@@ -197,6 +198,10 @@ export async function syncMesaLms(): Promise<SyncResult> {
     const summary: SyncResult = { status: hasPartialData ? "partial" : "succeeded", runId: run.id, courses: counts.courses, assessments: counts.assessments, submissions: counts.submissions, marks: counts.marks, feedback: counts.feedback, message: hasPartialData ? `Imported ${counts.assessments} assessment(s), ${counts.marks} marks, and ${counts.feedback} feedback records. ${counts.resolvedUnassigned ? `${counts.resolvedUnassigned} course-less record(s) were filed by title or member confirmation; ` : ""}${counts.skipped} record(s) without a course are held for review; ${failedReads} read operation(s) failed.` : `Synced ${counts.assessments} assessments, ${counts.marks} marks, and ${counts.feedback} feedback records. Scores are converted to the 0–100 scale, and original LMS marks are retained.` };
     const { error } = await client.from("sync_runs").update({ status: summary.status, finished_at: new Date().toISOString(), message: summary.message }).eq("id", run.id).eq("user_id", ownerId);
     if (error) throw new Error("Sync status could not be saved.");
+    // Briefs for assessments that have none yet (or are a week old), so grading can use the task's own requirements.
+    if (assignmentDetailTool) {
+      try { summary.briefs = await refreshBriefs(client, mcp, assignmentDetailTool); } catch { summary.briefs = 0; }
+    }
     // New or regraded marks can change competency conclusions; append history after the sync is recorded.
     try { summary.competencySnapshots = await recordCompetencySnapshots(client, ownerId); } catch { summary.competencySnapshots = null; }
     return summary;
@@ -204,4 +209,25 @@ export async function syncMesaLms(): Promise<SyncResult> {
     await client.from("sync_runs").update({ status: "failed", finished_at: new Date().toISOString(), message: "LMS sync failed. Check connector configuration and try again." }).eq("id", run.id).eq("user_id", ownerId);
     throw error instanceof Error ? error : new Error("LMS sync failed.");
   }
+}
+
+async function refreshBriefs(client: SupabaseClient, mcp: MesaMcpClient, tool: McpTool): Promise<number> {
+  const stale = new Date(Date.now() - 7 * 86_400_000).toISOString();
+  const { data: rows } = await client.from("assessments").select("id, source_record_id, brief_fetched_at").like("source_record_id", "mesa-lms:assignment:%").or(`brief_fetched_at.is.null,brief_fetched_at.lt.${stale}`).limit(60);
+  let saved = 0;
+  const list = rows ?? [];
+  // Six at a time keeps a manual sync inside its time limit.
+  for (let start = 0; start < list.length; start += 6) {
+    await Promise.all(list.slice(start, start + 6).map(async (row) => {
+      const assignmentId = String(row.source_record_id).replace("mesa-lms:assignment:", "");
+      const args = assignmentDetailArguments(tool, assignmentId);
+      if (!args) return;
+      try {
+        const brief = briefFromAssignment(unwrapToolResult(await mcp.callTool(tool.name, args)));
+        const { error } = await client.from("assessments").update({ brief, brief_fetched_at: new Date().toISOString() }).eq("id", row.id);
+        if (!error && brief) saved += 1;
+      } catch { /* a brief that cannot be read is retried on the next sync */ }
+    }));
+  }
+  return saved;
 }

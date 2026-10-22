@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { requestJsonFromProvider } from "@/lib/ai/provider";
 import { retrieveRelevantReferences } from "@/lib/ai/retrieval";
 
-export type StandardSource = "official_rubric" | "approved_rubric" | "course_objectives_inferred" | "role_profile" | "model_general" | "member_supplied";
+export type StandardSource = "official_rubric" | "approved_rubric" | "assignment_brief_inferred" | "course_objectives_inferred" | "role_profile" | "model_general" | "member_supplied";
 export type Criterion = { name: string; description: string; weight: number };
 export type Standard = { source: StandardSource; label: string; criteria: Criterion[] };
 export type WorkKind = "written_answer" | "case_solution" | "presentation" | "resume" | "project" | "proposal" | "interview_response" | "other";
@@ -10,6 +10,7 @@ export type WorkKind = "written_answer" | "case_solution" | "presentation" | "re
 export const PROVENANCE_LABELS: Record<StandardSource, string> = {
   official_rubric: "Official Mesa rubric",
   approved_rubric: "Member-approved rubric (inferred from course material)",
+  assignment_brief_inferred: "AI-derived criteria from the assignment brief — not an official Mesa rubric",
   course_objectives_inferred: "AI-generated provisional criteria from course material — not an official Mesa standard",
   role_profile: "Saved target-role requirements",
   model_general: "The model's general expectations for this role — not sourced from a job posting",
@@ -70,7 +71,7 @@ export async function resolveStandard(supabase: SupabaseClient, input: { mode: "
   };
 }
 
-function parseCriteria(value: unknown): Criterion[] {
+export function parseCriteria(value: unknown): Criterion[] {
   if (!Array.isArray(value)) return [];
   return value.slice(0, 10).flatMap((item) => {
     const row = item as Record<string, unknown>;
@@ -112,8 +113,9 @@ export function buildBlindReport(raw: Record<string, unknown>, standard: Standar
   return { overall, dimensions, strengths: list(raw.strengths), issues: list(raw.issues), missingRequirements: list(raw.missingRequirements), summary: clip(raw.summary, 800), confidence, label: "Model evaluation — not an official Mesa grade or an employer decision." };
 }
 
-export async function blindEvaluate(work: string, standard: Standard, workKind: WorkKind): Promise<BlindReport> {
-  const raw = await requestJsonFromProvider(BLIND_SYSTEM, JSON.stringify({ workKind, standard: { provenance: standard.label, criteria: standard.criteria }, work: work.slice(0, 60000) }), { timeoutMs: 100_000 });
+// The task (assignment brief) tells the evaluator what was asked; it never contains marks or the author's identity.
+export async function blindEvaluate(work: string, standard: Standard, workKind: WorkKind, task = ""): Promise<BlindReport> {
+  const raw = await requestJsonFromProvider(BLIND_SYSTEM, JSON.stringify({ workKind, ...(task ? { task: task.slice(0, 6000) } : {}), standard: { provenance: standard.label, criteria: standard.criteria }, work: work.slice(0, 60000) }), { timeoutMs: 100_000 });
   return buildBlindReport(raw, standard, work);
 }
 

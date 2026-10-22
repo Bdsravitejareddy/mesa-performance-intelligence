@@ -17,7 +17,7 @@ type Waiting = { assessment: string; course: string; reason: string };
 
 const num = (value: unknown) => (value === null || value === undefined ? null : Number(value));
 const fmt = (value: number | null) => (value === null ? "—" : Number.isInteger(value) ? String(value) : value.toFixed(1));
-const SOURCE_LABEL: Record<string, string> = { official_rubric: "Official rubric", approved_rubric: "Approved rubric", course_objectives_inferred: "Provisional criteria from course material" };
+const SOURCE_LABEL: Record<string, string> = { official_rubric: "Official rubric", approved_rubric: "Approved rubric", assignment_brief_inferred: "Criteria drawn from the assignment brief (AI-derived, not an official rubric)", course_objectives_inferred: "Provisional criteria from course material" };
 
 export default async function GradingPage() {
   const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";

@@ -64,10 +64,11 @@ export function PersonalityQuestionnaire() {
   const router = useRouter();
   const [attempt, setAttempt] = useState<{ id: string; items: { id: string; text: string }[] } | null>(null);
   const [answers, setAnswers] = useState<Record<string, number>>({});
+  const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
   async function start() {
-    setDone(false); setAnswers({});
+    setDone(false); setAnswers({}); setNote("");
     const response = await fetch("/api/tests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "personality" }) });
     const value = await response.json() as { attemptId: string; items: { id: string; text: string }[]; error?: string };
     if (!response.ok) { setError(value.error ?? "Could not start."); return; }
@@ -75,14 +76,15 @@ export function PersonalityQuestionnaire() {
   }
   async function submit() {
     if (!attempt) return;
-    const response = await fetch("/api/tests", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ attemptId: attempt.id, answers }) });
+    const response = await fetch("/api/tests", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ attemptId: attempt.id, answers, note }) });
     const value = await response.json() as { error?: string };
     if (!response.ok) { setError(value.error ?? "Could not submit."); return; }
     setDone(true); setAttempt(null); router.refresh();
   }
-  if (!attempt) return <div><p className="empty-hint">20 statements about how you usually are. Describe yourself as you generally are now, not as you wish to be. Takes about 3 minutes.</p>{done && <p className="form-success">Saved. Your results are below.</p>}<button className="button button-primary" type="button" onClick={() => void start()}>Start questionnaire</button>{error && <p className="form-error">{error}</p>}</div>;
+  if (!attempt) return <div><p className="empty-hint">30 statements drawn at random from a 50-statement public-domain pool, in a new order each time. Describe yourself as you generally are now, not as you wish to be. About 4 minutes.</p>{done && <p className="form-success">Saved. Your results are below.</p>}<button className="button button-primary" type="button" onClick={() => void start()}>Start questionnaire</button>{error && <p className="form-error">{error}</p>}</div>;
   return <div className="personality-form">
     {attempt.items.map((item, position) => <fieldset key={item.id}><legend>{position + 1}. I {item.text.charAt(0).toLowerCase()}{item.text.slice(1)}</legend><div className="likert">{SCALE.map((label, value) => <label key={label} className={answers[item.id] === value + 1 ? "selected" : ""}><input type="radio" name={item.id} checked={answers[item.id] === value + 1} onChange={() => setAnswers((current) => ({ ...current, [item.id]: value + 1 }))} />{label}</label>)}</div></fieldset>)}
+    <label className="field"><span>In your own words (optional): anything the statements miss, e.g. &quot;I prefer objective decisions, but I do empathise; it depends on the stakeholders and the room&quot;</span><textarea rows={3} maxLength={800} value={note} onChange={(event) => setNote(event.target.value)} /></label>
     <button className="button button-primary" type="button" disabled={Object.keys(answers).length < attempt.items.length} onClick={() => void submit()}>Submit ({Object.keys(answers).length}/{attempt.items.length})</button>
     {error && <p className="form-error">{error}</p>}
   </div>;
