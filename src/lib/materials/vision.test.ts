@@ -61,8 +61,23 @@ describe("describing flagged materials", () => {
       material_page_notes: [],
     }, new Uint8Array([1]));
     const outcome = await describeMaterial(client as never, "m1");
-    expect(outcome).toMatchObject({ status: "failed", message: "Gemini returned HTTP 429." });
+    expect(outcome).toMatchObject({ status: "failed", quotaExhausted: true });
     expect(client.writes.some((write) => write.table === "material_page_notes")).toBe(false);
+  });
+
+  it("marks quota exhaustion separately so the next daily run retries", async () => {
+    vi.stubEnv("GEMINI_API_KEY_2", "g-key-2");
+    const fetchMock = vi.fn(async () => new Response("quota", { status: 429 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = fakeClient({
+      course_materials: [{ id: "m1", user_id: "owner", name: "Key.pdf", mime_type: "application/pdf", storage_path: "p" }],
+      material_pages: [{ material_id: "m1", page_number: 1, extracted_text: "", table_data: [], has_visuals: false }],
+      material_page_notes: [],
+    }, new Uint8Array([1]));
+    const outcome = await describeMaterial(client as never, "m1");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(outcome).toMatchObject({ status: "failed", quotaExhausted: true });
+    expect(outcome.message).toMatch(/next daily run/);
   });
 
   it("composes notes from description and visible text", () => {

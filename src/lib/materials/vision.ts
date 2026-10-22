@@ -1,14 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { describeVisualPages, MAX_INLINE_BYTES, visionAvailable, type VisionPart } from "@/lib/ai/gemini-vision";
+import { describeVisualPages, MAX_INLINE_BYTES, QuotaExhaustedError, visionAvailable, type VisionPart } from "@/lib/ai/gemini-vision";
 import { extractSlideAssets } from "./pptx-assets";
 import { summarizeMaterialPages, type ReviewPage } from "./review";
 
 const PDF = "application/pdf";
 const PPTX = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
-// Failed documents are retried after a cool-down rather than on every run.
+// Failed documents are retried after a cool-down rather than on every run; quota exhaustion only waits for the next daily run.
 const RETRY_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
+const QUOTA_RETRY_AFTER_MS = 12 * 60 * 60 * 1000;
 
-export type VisionOutcome = { materialId: string; status: "succeeded" | "failed" | "skipped"; requested: number; described: number; message: string };
+export type VisionOutcome = { materialId: string; status: "succeeded" | "failed" | "skipped"; requested: number; described: number; message: string; quotaExhausted?: boolean };
 
 const toBase64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64");
 
@@ -69,6 +70,7 @@ export async function describeMaterial(client: SupabaseClient, materialId: strin
     }
     return record({ materialId, status: "succeeded", requested: requested.length, described: rows.length, message: `Described ${rows.length} of ${requested.length} page(s).` }, result.model);
   } catch (failure) {
+    if (failure instanceof QuotaExhaustedError) return { ...(await record({ materialId, status: "failed", requested: requested.length, described: 0, message: failure.message }, available.model)), quotaExhausted: true };
     return record({ materialId, status: "failed", requested: requested.length, described: 0, message: failure instanceof Error ? failure.message : "Description failed." }, available.model);
   }
 }
@@ -82,18 +84,21 @@ export async function describePendingMaterials(client: SupabaseClient, budgetMs:
   if (!ids.length) return [];
   const [{ data: flagged }, { data: runs }] = await Promise.all([
     client.from("course_materials").select("id").in("id", ids).eq("extraction_status", "needs_visual_review").order("created_at"),
-    client.from("material_vision_runs").select("material_id, status, pages_described, ran_at").order("ran_at", { ascending: false }).limit(1000),
+    client.from("material_vision_runs").select("material_id, status, pages_described, message, ran_at").order("ran_at", { ascending: false }).limit(1000),
   ]);
-  const latestRun = new Map<string, { status: string; ran_at: string }>();
+  const latestRun = new Map<string, { status: string; message: string; ran_at: string }>();
   for (const run of runs ?? []) if (!latestRun.has(run.material_id)) latestRun.set(run.material_id, run);
   const outcomes: VisionOutcome[] = [];
   for (const { id } of flagged ?? []) {
     // Each document takes up to ~50s; stop before the platform limit.
     if (Date.now() > deadline - 55_000) break;
     const last = latestRun.get(id);
-    if (last && last.status !== "succeeded" && now - new Date(last.ran_at).getTime() < RETRY_AFTER_MS) continue;
+    const wait = last?.message.startsWith("Gemini quota") ? QUOTA_RETRY_AFTER_MS : RETRY_AFTER_MS;
+    if (last && last.status !== "succeeded" && now - new Date(last.ran_at).getTime() < wait) continue;
     const outcome = await describeMaterial(client, id);
     if (outcome.status !== "skipped" || outcome.requested > 0) outcomes.push(outcome);
+    // No key has quota left: stop instead of marking every remaining document as failed.
+    if (outcome.quotaExhausted) break;
   }
   return outcomes;
 }

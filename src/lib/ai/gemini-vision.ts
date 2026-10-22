@@ -6,6 +6,11 @@ import { stripJsonFence } from "./provider";
 const GEMINI_API = "https://generativelanguage.googleapis.com/v1beta/models";
 export const MAX_INLINE_BYTES = 18 * 1024 * 1024;
 
+// Every configured key hit its rate or daily quota; work resumes on the next scheduled run.
+export class QuotaExhaustedError extends Error {
+  constructor() { super("Gemini quota is used up on every configured key; this will resume on the next daily run."); this.name = "QuotaExhaustedError"; }
+}
+
 export type VisionPart = { text: string } | { inlineData: { mimeType: string; data: string } };
 export type PageDescription = { page: number; readableText: string; visualDescription: string; colourMeaning: string; decorative: boolean };
 
@@ -44,6 +49,7 @@ export async function describeVisualPages(parts: VisionPart[], requestedPages: n
     signal: AbortSignal.timeout(50_000),
     cache: "no-store",
   }));
+  if (response.status === 429) throw new QuotaExhaustedError();
   if (!response.ok) throw new Error(`Gemini returned HTTP ${response.status}.`);
   const body = await response.json() as { candidates?: { content?: { parts?: { text?: unknown }[] } }[] };
   const text = (body.candidates?.[0]?.content?.parts ?? []).map((part) => typeof part.text === "string" ? part.text : "").join("");
