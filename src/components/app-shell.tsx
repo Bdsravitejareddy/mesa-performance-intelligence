@@ -7,7 +7,7 @@ import { CommandPalette } from "@/components/command-palette";
 import { useEffect, useState } from "react";
 import { Activity, ArrowUpRight, ChevronDown, CircleHelp, Compass, GraduationCap, Search, Sparkles } from "lucide-react";
 import { groups, sectionIndex, chapters } from "@/components/navigation";
-import { NextChapter, ChapterRail } from "@/components/story-flow";
+import { StorySeams, ChapterRail } from "@/components/story-flow";
 import { GuidedTour, tourSeen } from "@/components/guided-tour";
 import { GlassBackdrop } from "@/components/glass-backdrop";
 
@@ -80,7 +80,7 @@ export function AppShell({ children, demoMode }: { children: React.ReactNode; de
           </div>
         </header>
         {demoMode && <div className="demo-banner"><span className="demo-banner-icon"><Sparkles size={14} /></span><strong>Illustrative preview</strong><span>Sample figures are synthetic and are not actual Mesa student records.</span><Link href="/setup">Connect your workspace <ArrowUpRight size={13} /></Link></div>}
-        <main className="main-content">{children}<NextChapter pathname={pathname} /></main>
+        <main className="main-content">{children}<StorySeams pathname={pathname} /></main>
       </div>
       <ChapterRail pathname={pathname} />
       <GuidedTour open={tourOpen} onClose={() => setTourOpen(false)} />

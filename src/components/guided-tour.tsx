@@ -10,7 +10,7 @@ type Step = { target?: string; kicker: string; title: string; body: string; visu
 const STEPS: Step[] = [
   { kicker: "Welcome", title: "Your performance, told as one story.", body: "" },
   { target: "nav", kicker: "01 · Chapters", title: "Every page is a chapter.", body: "They run in order, in three acts: your material first, then what it means, then tools to sharpen your work. Click any chapter to jump straight to it." },
-  { kicker: "02 · Keep scrolling", title: "Scroll on to the next chapter.", body: "At the end of a page, keep scrolling and the next chapter opens on its own. A meter fills as you go, so it never happens by accident. You can also click the next-chapter card.", visual: "scroll" },
+  { kicker: "02 · Keep scrolling", title: "One continuous scroll.", body: "The next chapter's title is waiting at the end of every page — keep scrolling and it takes over. At the top of a page, keep scrolling up to return to the previous chapter. A short pause at each edge stops it happening by accident.", visual: "scroll" },
   { target: "rail", kicker: "03 · Where you are", title: "The rail shows your place.", body: "Each dot is a chapter. Filled dots are behind you, the bright one is where you are, and the thin line at the top shows how far down this page you have read." },
   { target: "search", kicker: "04 · Shortcut", title: "Press ⌘K to go anywhere.", body: "Jump to any chapter or run an action — sync the LMS, map assessments, describe slides — without leaving the keyboard." },
   { target: "sync", kicker: "05 · Your data", title: "Synced every night.", body: "Marks and feedback come from the Mesa LMS and your Drive course folders at 03:00 UTC. If a sync has a problem, it shows up here and on the overview." },

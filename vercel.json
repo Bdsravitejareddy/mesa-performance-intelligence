@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/lms-sync",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/grading",
+      "schedule": "30 3 * * *"
     }
   ],
   "regions": [

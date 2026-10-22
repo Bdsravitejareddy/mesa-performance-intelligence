@@ -1,0 +1,147 @@
+import Link from "next/link";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { AppShell } from "@/components/app-shell";
+import { RunGrading } from "@/components/run-grading";
+import { Why } from "@/components/why";
+import { cachedRead } from "@/lib/data/cached";
+import { hasSupabaseConfig } from "@/lib/supabase/config";
+import type { CodeReport } from "@/lib/grading/code-score";
+import type { Comparison } from "@/lib/grading/compare";
+import type { BlindReport } from "@/lib/quality/engine";
+
+export const dynamic = "force-dynamic";
+
+type Grading = { id: string; submission_id: string; assessment_id: string; standard_source: string; standard_label: string; code_score: number | null; code_report: CodeReport; ai_score: number | null; ai_report: BlindReport | null; ai_status: string; official_mark: number | null; comparison: Comparison; provider_model: string; created_at: string };
+type Row = Grading & { assessment: string; course: string; feedback: string };
+type Waiting = { assessment: string; course: string; reason: string };
+
+const num = (value: unknown) => (value === null || value === undefined ? null : Number(value));
+const fmt = (value: number | null) => (value === null ? "—" : Number.isInteger(value) ? String(value) : value.toFixed(1));
+const SOURCE_LABEL: Record<string, string> = { official_rubric: "Official rubric", approved_rubric: "Approved rubric", course_objectives_inferred: "Provisional criteria from course material" };
+
+export default async function GradingPage() {
+  const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+  const data = demoMode || !hasSupabaseConfig() ? null : await cachedRead("grading", loadGrading);
+  const rows = data?.rows ?? [];
+  const withOfficial = rows.filter((row) => row.official_mark !== null && row.ai_score !== null);
+  const meanGap = withOfficial.length ? withOfficial.reduce((sum, row) => sum + Math.abs(row.ai_score! - row.official_mark!), 0) / withOfficial.length : null;
+  const close = withOfficial.filter((row) => Math.abs(row.ai_score! - row.official_mark!) <= 7.5).length;
+  const facultyPoints = rows.reduce((sum, row) => sum + (row.comparison?.agreed?.length ?? 0) + (row.comparison?.facultyOnly?.length ?? 0), 0);
+  const agreedPoints = rows.reduce((sum, row) => sum + (row.comparison?.agreed?.length ?? 0), 0);
+
+  const headline = !rows.length
+    ? "Nothing has been graded yet."
+    : withOfficial.length
+      ? `The AI lands within 7.5 points of your faculty on ${close} of ${withOfficial.length} marked submission${withOfficial.length === 1 ? "" : "s"}.`
+      : `${rows.length} submission${rows.length === 1 ? "" : "s"} graded; none has an official mark to compare with yet.`;
+
+  return <AppShell demoMode={demoMode}><div className="section-page grading-page">
+    <div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> Graded against your course content</div><h1>Graded work</h1><p className="page-subtitle">{headline}</p></div>{data && !data.missing && <RunGrading />}</div>
+
+    {data?.missing && <p className="info-callout">Grading storage is not set up yet. Apply the submission-gradings migration, then grade.</p>}
+
+    {data && !data.missing && <section className="stat-strip" aria-label="Grading summary">
+      <Stat value={`${rows.length}`} unit={`of ${data.assessmentCount}`} label="Assessments graded" />
+      <Stat value={meanGap === null ? "—" : fmt(Math.round(meanGap * 10) / 10)} unit="pts" label="Typical AI vs official gap" />
+      <Stat value={facultyPoints ? `${Math.round((agreedPoints / facultyPoints) * 100)}` : "—"} unit={facultyPoints ? "%" : ""} label="Faculty points the AI also raised" />
+      <Stat value={`${data.waiting.length}`} unit="" label="Waiting for your work" />
+    </section>}
+
+    {rows.length > 0 && <section className="grade-list" aria-label="Graded submissions">
+      <div className="grade-legend"><span><i className="mark-official" /> Official</span><span><i className="mark-ai" /> AI (blind)</span><span><i className="mark-code" /> Code</span></div>
+      {rows.map((row) => <article key={row.id} className="content-panel grade-row">
+        <header className="grade-row-head">
+          <div><h2>{row.assessment}</h2><small>{row.course}</small></div>
+          <span className={`agreement agreement-${row.comparison?.agreement ?? "no_official_mark"}`}>{agreementLabel(row.comparison?.agreement)}</span>
+        </header>
+        <ScoreTrack official={row.official_mark} ai={row.ai_score} code={row.code_score} />
+        <div className="grade-figures">
+          <Figure label="Official" value={row.official_mark} />
+          <Figure label="AI" value={row.ai_score} note={row.ai_status === "complete" ? undefined : row.ai_status === "skipped" ? "not run" : "retrying"} />
+          <Figure label="Code" value={row.code_score} />
+        </div>
+        {row.comparison && (row.comparison.agreed.length > 0 || row.comparison.facultyOnly.length > 0) && <p className="grade-insight">{insightLine(row.comparison)}</p>}
+        <Why label="See the reasoning">
+          <p className="scope-note">{SOURCE_LABEL[row.standard_source] ?? row.standard_source}. {row.comparison?.note}</p>
+          <table className="criteria-table"><thead><tr><th>Criterion</th><th>AI /10</th><th>Code /10</th><th>Terms found</th></tr></thead><tbody>
+            {(row.code_report?.criteria ?? []).map((criterion) => {
+              const dimension = row.ai_report?.dimensions.find((item) => item.name === criterion.name);
+              return <tr key={criterion.name}><td>{criterion.name}{dimension?.issue && <small>{dimension.issue}</small>}</td><td>{fmt(dimension?.score ?? null)}</td><td>{fmt(criterion.score)}</td><td><small>{criterion.matched.length} of {criterion.expected.length}{criterion.expected.length - criterion.matched.length > 0 && ` · missing ${criterion.expected.filter((term) => !criterion.matched.includes(term)).slice(0, 4).join(", ")}`}</small></td></tr>;
+            })}
+          </tbody></table>
+          <div className="grade-compare">
+            <div><h3>Faculty and AI agree</h3>{row.comparison?.agreed.length ? <ul>{row.comparison.agreed.map((item) => <li key={item.feedback}><q>{item.feedback}</q><small>AI: {item.ai}</small></li>)}</ul> : <p className="empty-hint">{row.feedback ? "No shared points." : "No faculty feedback recorded."}</p>}</div>
+            <div><h3>Only the faculty raised</h3>{row.comparison?.facultyOnly.length ? <ul>{row.comparison.facultyOnly.map((item) => <li key={item}>{item}</li>)}</ul> : <p className="empty-hint">—</p>}</div>
+            <div><h3>Only the AI raised</h3>{row.comparison?.aiOnly.length ? <ul>{row.comparison.aiOnly.slice(0, 6).map((item) => <li key={item}>{item}</li>)}</ul> : <p className="empty-hint">—</p>}</div>
+          </div>
+          <p className="scope-note">{row.code_report?.method} {row.code_report?.adjustments?.join("; ")} The AI graded blind: it never saw the official mark or feedback. {row.ai_report?.label} Graded {new Date(row.created_at).toLocaleString()}{row.provider_model ? ` · ${row.provider_model}` : ""}.</p>
+        </Why>
+      </article>)}
+    </section>}
+
+    {data && !data.missing && data.waiting.length > 0 && <section className="content-panel">
+      <h2>Waiting for your work <span className="panel-count">{data.waiting.length}</span></h2>
+      <p className="empty-hint">These can be graded once a submitted file is found in the course's Drive folder. Matching runs every night, or from <Link href="/materials/review">Material review</Link>.</p>
+      <Why label={`Show all ${data.waiting.length}`}><ul className="waiting-list">{data.waiting.map((item) => <li key={`${item.course}-${item.assessment}`}><strong>{item.assessment}</strong><small>{item.course} · {item.reason}</small></li>)}</ul></Why>
+    </section>}
+  </div></AppShell>;
+}
+
+function agreementLabel(value: Comparison["agreement"] | undefined) {
+  return value === "close" ? "AI close to official" : value === "moderate" ? "Moderate gap" : value === "far" ? "Large gap" : "No official mark";
+}
+
+function insightLine(comparison: Comparison) {
+  const total = comparison.agreed.length + comparison.facultyOnly.length;
+  return `The AI independently raised ${comparison.agreed.length} of the faculty's ${total} point${total === 1 ? "" : "s"}${comparison.aiOnly.length ? `, and ${comparison.aiOnly.length} the faculty did not mention` : ""}.`;
+}
+
+function Stat({ value, unit, label }: { value: string; unit: string; label: string }) {
+  return <div className="stat"><strong>{value}<small>{unit}</small></strong><span>{label}</span></div>;
+}
+
+function Figure({ label, value, note }: { label: string; value: number | null; note?: string }) {
+  return <div className={`grade-figure figure-${label.toLowerCase()}`}><span>{label}</span><strong>{fmt(value)}</strong><small>{note ?? (value === null ? "none" : "/100")}</small></div>;
+}
+
+function ScoreTrack({ official, ai, code }: { official: number | null; ai: number | null; code: number | null }) {
+  const marker = (value: number | null, kind: string) => value === null ? null : <i className={`track-mark mark-${kind}`} style={{ left: `${Math.max(0, Math.min(100, value))}%` }} title={`${kind}: ${fmt(value)}`} />;
+  const values = [official, ai, code].filter((value): value is number => value !== null);
+  const span = values.length > 1 ? { left: `${Math.min(...values)}%`, width: `${Math.max(...values) - Math.min(...values)}%` } : null;
+  return <div className="score-track" aria-hidden="true">{span && <span className="track-span" style={span} />}{marker(code, "code")}{marker(ai, "ai")}{marker(official, "official")}</div>;
+}
+
+async function loadGrading(supabase: SupabaseClient) {
+  const [gradings, submissions, assessments, courses, documents] = await Promise.all([
+    supabase.from("submission_gradings").select("id, submission_id, assessment_id, standard_source, standard_label, code_score, code_report, ai_score, ai_report, ai_status, official_mark, comparison, provider_model, created_at").order("created_at", { ascending: false }),
+    supabase.from("submissions").select("id, assessment_id, official_feedback"),
+    supabase.from("assessments").select("id, course_id, title").order("title"),
+    supabase.from("courses").select("id, title"),
+    supabase.from("submission_documents").select("submission_id, extraction_status"),
+  ]);
+  if (gradings.error) return { missing: true as const, rows: [] as Row[], waiting: [] as Waiting[], assessmentCount: 0 };
+  const course = new Map((courses.data ?? []).map((row) => [row.id as string, row.title as string]));
+  const assessment = new Map((assessments.data ?? []).map((row) => [row.id as string, { title: row.title as string, course: course.get(row.course_id as string) ?? "" }]));
+  const feedback = new Map((submissions.data ?? []).map((row) => [row.id as string, (row.official_feedback as string) ?? ""]));
+  const seen = new Set<string>();
+  const rows: Row[] = [];
+  for (const raw of gradings.data ?? []) {
+    if (seen.has(raw.submission_id as string)) continue;
+    seen.add(raw.submission_id as string);
+    const meta = assessment.get(raw.assessment_id as string);
+    rows.push({ ...(raw as unknown as Grading), code_score: num(raw.code_score), ai_score: num(raw.ai_score), official_mark: num(raw.official_mark), assessment: meta?.title ?? "Assessment", course: meta?.course ?? "", feedback: feedback.get(raw.submission_id as string) ?? "" });
+  }
+  const gradedAssessments = new Set(rows.map((row) => row.assessment_id));
+  const submissionsByAssessment = new Map<string, string[]>();
+  for (const row of submissions.data ?? []) submissionsByAssessment.set(row.assessment_id as string, [...(submissionsByAssessment.get(row.assessment_id as string) ?? []), row.id as string]);
+  const docStatus = new Map<string, string[]>();
+  for (const row of documents.data ?? []) docStatus.set(row.submission_id as string, [...(docStatus.get(row.submission_id as string) ?? []), row.extraction_status as string]);
+  const waiting: Waiting[] = (assessments.data ?? []).filter((row) => !gradedAssessments.has(row.id as string)).map((row) => {
+    const subs = submissionsByAssessment.get(row.id as string) ?? [];
+    const statuses = subs.flatMap((id) => docStatus.get(id) ?? []);
+    const reason = !statuses.length ? (subs.length ? "mark recorded, but no submitted file found yet" : "no submitted file found yet") : statuses.some((status) => status !== "complete") ? "submitted file still being read" : "ready — grades on the next run";
+    return { assessment: row.title as string, course: course.get(row.course_id as string) ?? "", reason };
+  });
+  rows.sort((a, b) => a.course.localeCompare(b.course) || a.assessment.localeCompare(b.assessment));
+  return { missing: false as const, rows, waiting, assessmentCount: (assessments.data ?? []).length };
+}

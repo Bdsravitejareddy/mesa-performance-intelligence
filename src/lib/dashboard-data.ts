@@ -24,7 +24,7 @@ export type DashboardSnapshot = {
   assessmentCount: number;
   topicCount: number;
   syncHealth: SyncHealth | null;
-  insights: { markedAssessments: number; competenciesAssessed: number; competenciesTotal: number; strengths: number; gaps: number; readiness: { role: string; evidenced: number; total: number }[]; focus: { title: string; why: string; tag: string }[] } | null;
+  insights: { markedAssessments: number; competenciesAssessed: number; competenciesTotal: number; strengths: number; gaps: number; readiness: { role: string; evidenced: number; total: number }[]; focus: { title: string; why: string; tag: string }[]; grading: { graded: number; compared: number; close: number; meanGap: number | null } | null } | null;
 };
 
 const demoSnapshot: DashboardSnapshot = {
@@ -158,8 +158,19 @@ async function buildInsights(supabase: SupabaseClient, markedAssessments: number
       gaps: entries.filter((entry) => entry.assessment.state === "development_area").length,
       readiness: readiness.map((item) => ({ role: item.role.name, evidenced: item.evidenced, total: item.skillRequirements })),
       focus,
+      grading: await gradingSummary(supabase),
     };
   } catch {
     return null;
   }
+}
+
+// Latest grading per submission: how often the blind AI lands close to the official mark.
+async function gradingSummary(supabase: SupabaseClient): Promise<{ graded: number; compared: number; close: number; meanGap: number | null } | null> {
+  const { data, error } = await supabase.from("submission_gradings").select("submission_id, ai_score, official_mark, created_at").order("created_at", { ascending: false });
+  if (error) return null;
+  const latest = new Map<string, { ai: number | null; official: number | null }>();
+  for (const row of data ?? []) if (!latest.has(row.submission_id as string)) latest.set(row.submission_id as string, { ai: row.ai_score === null ? null : Number(row.ai_score), official: row.official_mark === null ? null : Number(row.official_mark) });
+  const pairs = [...latest.values()].filter((row) => row.ai !== null && row.official !== null).map((row) => Math.abs(row.ai! - row.official!));
+  return { graded: latest.size, compared: pairs.length, close: pairs.filter((gap) => gap <= 7.5).length, meanGap: pairs.length ? Math.round((pairs.reduce((sum, gap) => sum + gap, 0) / pairs.length) * 10) / 10 : null };
 }
