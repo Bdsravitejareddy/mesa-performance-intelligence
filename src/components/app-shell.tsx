@@ -5,69 +5,22 @@ import { usePathname } from "next/navigation";
 import { useRevealOnScroll, useSpotlight } from "@/components/motion";
 import { CommandPalette } from "@/components/command-palette";
 import { useEffect, useState } from "react";
-import {
-  Activity,
-  ArrowUpRight,
-  BookOpen,
-  BriefcaseBusiness,
-  FileUser,
-  ChartNoAxesCombined,
-  ChevronDown,
-  CircleHelp,
-  FileCheck2,
-  GraduationCap,
-  CloudDownload,
-  LayoutDashboard,
-  Library,
-  MessageSquareText,
-  Network,
-  ScanSearch,
-  Search,
-  ShieldCheck,
-  Sparkles,
-  Target,
-  Route,
-  Brain,
-  ClipboardCheck,
-} from "lucide-react";
+import { Activity, ArrowUpRight, ChevronDown, CircleHelp, Compass, GraduationCap, Search, Sparkles } from "lucide-react";
+import { groups, sectionIndex, chapters } from "@/components/navigation";
+import { NextChapter, ChapterRail } from "@/components/story-flow";
+import { GuidedTour, tourSeen } from "@/components/guided-tour";
+import { GlassBackdrop } from "@/components/glass-backdrop";
 
-const groups = [
-  {
-    label: "Workspace",
-    links: [
-      { href: "/", label: "Overview", icon: LayoutDashboard },
-      { href: "/courses", label: "Courses & content", icon: BookOpen },
-      { href: "/drive-sync", label: "Drive sync", icon: CloudDownload },
-      { href: "/materials/review", label: "Material review", icon: ScanSearch },
-      { href: "/assessments", label: "Assessments", icon: FileCheck2 },
-      { href: "/marks", label: "Marks & feedback", icon: MessageSquareText },
-      { href: "/evidence", label: "Evidence library", icon: Library },
-    ],
-  },
-  {
-    label: "Insights",
-    links: [
-      { href: "/competencies", label: "Competency map", icon: Network },
-      { href: "/thinking", label: "Thinking & behaviour", icon: Brain },
-      { href: "/tests", label: "Reasoning & personality", icon: ClipboardCheck },
-      { href: "/swot", label: "SWOT analysis", icon: Target },
-      { href: "/roadmap", label: "Growth roadmap", icon: Route },
-      { href: "/correlations", label: "Correlations", icon: ChartNoAxesCombined },
-      { href: "/career", label: "Career readiness", icon: BriefcaseBusiness },
-      { href: "/professional", label: "Resume & portfolio", icon: FileUser },
-    ],
-  },
-  {
-    label: "Tools",
-    links: [{ href: "/quality-check", label: "Quality checker", icon: ShieldCheck }],
-  },
-];
 
 export function AppShell({ children, demoMode }: { children: React.ReactNode; demoMode: boolean }) {
   const pathname = usePathname();
   useRevealOnScroll(pathname);
   useSpotlight();
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [tourOpen, setTourOpen] = useState(false);
+  // First visit on this browser opens the guided tour once; it can be replayed from the top bar.
+  useEffect(() => { if (!tourSeen()) { const timer = window.setTimeout(() => setTourOpen(true), 500); return () => window.clearTimeout(timer); } }, []);
+  const tone = chapters[sectionIndex(pathname)]?.tone ?? "gold";
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setPaletteOpen((open) => !open); } };
     window.addEventListener("keydown", onKey);
@@ -75,7 +28,8 @@ export function AppShell({ children, demoMode }: { children: React.ReactNode; de
   }, []);
 
   return (
-    <div className="app-frame" data-theme="nature">
+    <div className="app-frame glass-ui" data-theme="nature" data-tone={tone}>
+      <GlassBackdrop />
       <aside className="sidebar">
         <Link href="/" className="brand-lockup" aria-label="Mesa Performance Intelligence home">
           <span className="brand-mark"><Activity size={18} strokeWidth={2.5} /></span>
@@ -88,7 +42,7 @@ export function AppShell({ children, demoMode }: { children: React.ReactNode; de
           <ChevronDown size={15} className="muted-icon" />
         </button>
 
-        <nav className="main-nav" aria-label="Main navigation">
+        <nav className="main-nav" aria-label="Main navigation" data-tour="nav">
           {groups.map((group) => (
             <div className="nav-group" key={group.label}>
               <p className="nav-group-label">{group.label}</p>
@@ -106,7 +60,7 @@ export function AppShell({ children, demoMode }: { children: React.ReactNode; de
         </nav>
 
         <div className="sidebar-bottom">
-          <div className="sync-status"><span className="status-dot" /><span><strong>LMS sync</strong><small>{demoMode ? "Preview only" : "Sync in Marks & feedback"}</small></span><Link href="/marks" title="Open marks and run an LMS sync" aria-label="Open marks and run an LMS sync"><ArrowUpRight size={14} /></Link></div>
+          <div className="sync-status" data-tour="sync"><span className="status-dot" /><span><strong>LMS sync</strong><small>{demoMode ? "Preview only" : "Sync in Marks & feedback"}</small></span><Link href="/marks" title="Open marks and run an LMS sync" aria-label="Open marks and run an LMS sync"><ArrowUpRight size={14} /></Link></div>
           <Link href="/setup" className="nav-link"><CircleHelp size={17} /><span>Setup & help</span></Link>
           <div className="profile-card">
             <div className="profile-avatar">MP</div>
@@ -120,14 +74,16 @@ export function AppShell({ children, demoMode }: { children: React.ReactNode; de
         <header className="topbar">
           <div className="breadcrumb"><span>Performance intelligence</span><span className="crumb-divider">/</span><strong>{pageTitle(pathname)}</strong></div>
           <div className="topbar-actions">
-            <button className="search-trigger" type="button" aria-label="Open command palette" onClick={() => setPaletteOpen(true)}><Search size={16} /><span>Search or run…</span><kbd>⌘ K</kbd></button>
-            <button className="icon-button" title="AI insights" type="button"><Sparkles size={17} /></button>
+            <button className="search-trigger" data-tour="search" type="button" aria-label="Open command palette" onClick={() => setPaletteOpen(true)}><Search size={16} /><span>Search or run…</span><kbd>⌘ K</kbd></button>
+            <button className="icon-button tour-trigger" data-tour="tour" title="Guided tour" aria-label="Replay the guided tour" type="button" onClick={() => setTourOpen(true)}><Compass size={17} /></button>
             <div className="topbar-date"><span className="date-dot" /> October 2026</div>
           </div>
         </header>
         {demoMode && <div className="demo-banner"><span className="demo-banner-icon"><Sparkles size={14} /></span><strong>Illustrative preview</strong><span>Sample figures are synthetic and are not actual Mesa student records.</span><Link href="/setup">Connect your workspace <ArrowUpRight size={13} /></Link></div>}
-        <main className="main-content">{children}</main>
+        <main className="main-content">{children}<NextChapter pathname={pathname} /></main>
       </div>
+      <ChapterRail pathname={pathname} />
+      <GuidedTour open={tourOpen} onClose={() => setTourOpen(false)} />
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} links={groups.flatMap((group) => group.links.map(({ href, label }) => ({ href, label, group: group.label })))} />
     </div>
   );
