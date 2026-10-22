@@ -51,7 +51,8 @@ export async function PUT(request: NextRequest) {
 
   const { data: existing, error: existingError } = await supabase.from("assessment_competencies").select("competency_id, mapping_source, criterion_label").eq("assessment_id", assessmentId);
   if (existingError) return NextResponse.json({ error: "Could not load existing mappings." }, { status: 500 });
-  const memberRows = (existing ?? []).filter((row) => row.mapping_source === "user_tagged");
+  // Member and AI mappings are editable here; official-rubric and learning-objective mappings are not.
+  const memberRows = (existing ?? []).filter((row) => row.mapping_source === "user_tagged" || row.mapping_source === "ai_suggested");
   const keyOf = (competencyId: string, label: string | null) => `${competencyId}|${(label ?? "").toLowerCase()}`;
   const wanted = new Map<string, { competencyId: string; label: string | null }>([
     ...competencyIds.map((id) => [keyOf(id, null), { competencyId: id, label: null }] as const),
@@ -62,7 +63,7 @@ export async function PUT(request: NextRequest) {
   const additions = [...wanted.entries()].filter(([key]) => !existingKeys.has(key)).map(([, value]) => value);
 
   for (const row of removals) {
-    const query = supabase.from("assessment_competencies").delete().eq("assessment_id", assessmentId).eq("mapping_source", "user_tagged").eq("competency_id", row.competency_id);
+    const query = supabase.from("assessment_competencies").delete().eq("assessment_id", assessmentId).eq("mapping_source", row.mapping_source).eq("competency_id", row.competency_id);
     const { error } = row.criterion_label ? await query.eq("criterion_label", row.criterion_label) : await query.is("criterion_label", null);
     if (error) return NextResponse.json({ error: "Could not update mappings." }, { status: 500 });
   }

@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { STATE_LABELS, type CompetencyAssessment, type CompetencyState } from "@/lib/competency/classify";
 import { formatOfficialMark } from "@/lib/scoring";
 
-const MAPPING_LABELS = { user_tagged: "member-tagged", official_rubric: "official rubric", learning_objective: "learning objective", ai_suggested: "AI-suggested, reviewed" } as const;
+const MAPPING_LABELS = { user_tagged: "member-tagged", official_rubric: "official rubric", learning_objective: "learning objective", ai_suggested: "AI-mapped" } as const;
 
 export type HistoryRow = { state: CompetencyState; confidence: string; headline: string; reason: "initial" | "evidence_changed" | "mapping_changed" | "rules_changed"; recorded_at: string };
 const REASONS: Record<HistoryRow["reason"], string> = { initial: "First recorded", evidence_changed: "Evidence changed (new or regraded marks)", mapping_changed: "Mapping changed (tags added or removed)", rules_changed: "Classification rules changed" };

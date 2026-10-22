@@ -156,6 +156,7 @@ function buildLimitations(evidence: EvidenceRow[], scored: EvidenceRow[], now: D
   const limitations: string[] = [];
   if (scored.length && scored.every((item) => item.granularity === "whole_assessment")) limitations.push("Uses whole-assessment marks only, so each mark reflects everything the assessment tested, not this competency alone. Confidence cannot be high without criterion-level evidence.");
   if (evidence.some((item) => item.mappingSource === "user_tagged")) limitations.push("The link between an assessment and this competency was tagged by a workspace member, not taken from an official rubric.");
+  if (evidence.some((item) => item.mappingSource === "ai_suggested")) limitations.push("Some assessments were mapped to this competency automatically by AI from their titles and feedback, not from an official rubric. Remove a mapping on the Competency map if it is wrong.");
   if (scored.length && new Set(scored.map((item) => item.course)).size === 1) limitations.push("All scored evidence comes from one course, so it may not transfer to other contexts.");
   if (evidence.some((item) => item.feedback.trim())) limitations.push("Evaluator feedback is shown for context but is not scored automatically.");
   const unscored = evidence.filter((item) => item.band === "unscored").length;

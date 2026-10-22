@@ -65,3 +65,23 @@ function AssessmentTags({ assessment, byDomain, names }: { assessment: Assessmen
     </div>
   </details>;
 }
+
+// Maps every untagged assessment with Gemini; mappings are labelled AI-mapped and can be unticked below.
+export function AutoTagButton({ untagged }: { untagged: number }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  async function run() {
+    setBusy(true); setMessage("Mapping assessments with Gemini…");
+    try {
+      const response = await fetch("/api/assessment-competencies/auto", { method: "POST" });
+      const result = await response.json() as { error?: string; assessments?: number; accepted?: number; suggested?: number; criteria?: number };
+      if (!response.ok) throw new Error(result.error ?? "Auto-mapping failed.");
+      setMessage(`Mapped ${result.assessments} assessments: ${result.accepted} competency links applied, ${result.criteria} criterion links, ${result.suggested} low-confidence suggestions held back.`);
+      router.refresh();
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Auto-mapping failed."); }
+    finally { setBusy(false); }
+  }
+  if (!untagged) return null;
+  return <div className="info-callout describe-action"><span>{untagged} assessment{untagged === 1 ? " is" : "s are"} not mapped. Gemini can map them from their titles, criteria and feedback; each mapping keeps its reason and can be unticked.</span><button className="button button-primary" type="button" disabled={busy} onClick={() => void run()}>{busy ? "Mapping…" : "Map assessments automatically"}</button>{message && <small role="status">{message}</small>}</div>;
+}

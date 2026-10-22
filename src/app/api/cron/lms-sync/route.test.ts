@@ -7,6 +7,7 @@ vi.mock("@/lib/lms/sync", () => ({ syncMesaLms }));
 const { describePendingMaterials } = vi.hoisted(() => ({ describePendingMaterials: vi.fn(async () => []) }));
 vi.mock("@/lib/materials/vision", () => ({ describePendingMaterials }));
 vi.mock("@/lib/materials/submission-matching", () => ({ matchDriveSubmissions: vi.fn(async () => []) }));
+vi.mock("@/lib/competency/auto-tag", () => ({ autoTagAssessments: vi.fn(async () => ({})) }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
 
 describe("daily LMS cron route", () => {

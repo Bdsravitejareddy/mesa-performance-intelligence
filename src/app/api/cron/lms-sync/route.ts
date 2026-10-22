@@ -3,6 +3,8 @@ import { syncMesaLms } from "@/lib/lms/sync";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { describePendingMaterials } from "@/lib/materials/vision";
 import { matchDriveSubmissions } from "@/lib/materials/submission-matching";
+import { autoTagAssessments } from "@/lib/competency/auto-tag";
+import { isProviderConfigured } from "@/lib/ai/settings";
 
 export const maxDuration = 300;
 
@@ -25,6 +27,15 @@ export async function GET(request: NextRequest) {
   } catch {
     materialVision = { error: "Material description did not run." };
   }
+  // Map newly imported assessments to competencies so the evidence model stays current.
+  let autoTag: unknown = null;
+  try {
+    const admin = createAdminClient();
+    const { data: owner } = await admin.from("sync_runs").select("user_id").order("started_at", { ascending: false }).limit(1).maybeSingle();
+    if (owner && isProviderConfigured()) autoTag = await autoTagAssessments(admin, owner.user_id as string);
+  } catch {
+    autoTag = { error: "Assessment auto-mapping did not run." };
+  }
   // Recognise newly imported submissions in course folders and attach them as evidence.
   let driveSubmissions: unknown = null;
   try {
@@ -32,5 +43,5 @@ export async function GET(request: NextRequest) {
   } catch {
     driveSubmissions = { error: "Drive submission matching did not run." };
   }
-  return NextResponse.json({ sync, materialVision, driveSubmissions }, { status: syncFailed ? 502 : 200 });
+  return NextResponse.json({ sync, materialVision, autoTag, driveSubmissions }, { status: syncFailed ? 502 : 200 });
 }
