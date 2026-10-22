@@ -46,7 +46,7 @@ export const groups: Act[] = [
       section("Insights", Network, "Competencies, strengths and patterns from your evidence.", [
         { href: "/competencies", label: "Competencies", blurb: "Thirty-five competencies, classified from evidence." },
         { href: "/swot", label: "SWOT", blurb: "Strengths, weaknesses, opportunities and threats, from evidence." },
-        { href: "/correlations", label: "Correlations", blurb: "Patterns across your results — never causes." },
+        { href: "/correlations", label: "Patterns", blurb: "What moves together in your results — never causes." },
       ]),
       section("You", Brain, "How you think and work, in context.", [
         { href: "/thinking", label: "Thinking & behaviour", blurb: "How you approach problems, as observed patterns." },
