@@ -60,3 +60,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: failure instanceof Error ? failure.message : "Evaluation failed." }, { status: 422 });
   }
 }
+
+// Deletes one of your saved checks (for example a test run that should not count as evidence about you).
+export async function DELETE(request: NextRequest) {
+  if (!hasSupabaseConfig()) return NextResponse.json({ error: "Connect Supabase first." }, { status: 503 });
+  const id = new URL(request.url).searchParams.get("id") ?? "";
+  if (!UUID.test(id)) return NextResponse.json({ error: "Unknown check." }, { status: 400 });
+  const supabase = await createClient();
+  const { data: claims } = await supabase.auth.getClaims();
+  if (typeof claims?.claims?.sub !== "string") return NextResponse.json({ error: "Sign in first." }, { status: 401 });
+  await supabase.from("quality_checks").update({ previous_check_id: null }).eq("previous_check_id", id);
+  const { data, error } = await supabase.from("quality_checks").delete().eq("id", id).select("id");
+  if (error || !data?.length) return NextResponse.json({ error: "Check not found." }, { status: 404 });
+  return NextResponse.json({ ok: true });
+}

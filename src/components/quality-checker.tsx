@@ -78,3 +78,8 @@ function QualityReport({ result }: { result: Result }) {
     {contextual && <div className="quality-context"><span className="eyebrow"><span className="eyebrow-line" /> Contextual assessment · uses {contextual.contextUsed.join(", ") || "no extra context"}</span><ul>{[...contextual.notes, ...contextual.priorities].map((item) => <li key={item}>{item}</li>)}</ul></div>}
   </div>;
 }
+
+export function DeleteCheckButton({ id }: { id: string }) {
+  const router = useRouter();
+  return <button className="button button-secondary" type="button" onClick={async () => { if (!window.confirm("Delete this check? It will no longer be used as evidence.")) return; await fetch(`/api/quality-checks?id=${id}`, { method: "DELETE" }); router.refresh(); }}>Delete</button>;
+}

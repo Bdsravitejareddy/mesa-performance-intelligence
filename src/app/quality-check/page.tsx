@@ -1,5 +1,5 @@
 import { AppShell } from "@/components/app-shell";
-import { QualityChecker } from "@/components/quality-checker";
+import { DeleteCheckButton, QualityChecker } from "@/components/quality-checker";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
 
@@ -11,7 +11,7 @@ export default async function QualityCheckPage() {
   return <AppShell demoMode={demoMode}><div className="section-page">
     <div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> Independent evaluation</div><h1>Quality checker</h1><p className="page-subtitle">A first-impression evaluation against a transparent standard, before context or reputation is considered.</p></div></div>
     <section className="content-panel">{data ? <QualityChecker assessments={data.assessments} roles={data.roles} documents={data.documents} /> : <p className="empty-hint">{demoMode ? "Preview mode does not run evaluations." : "Connect Supabase to run evaluations."}</p>}</section>
-    {data && data.history.length > 0 && <section className="content-panel"><h2>History <span className="panel-count">{data.history.length}</span></h2><div className="link-list">{data.history.map((row) => <div className="link-row" key={row.id}><span><strong>{row.title}</strong><small>{new Date(row.created_at).toLocaleString()} · {row.mode === "role" ? "Role" : "Criteria"} · {row.standard_label}</small></span><span className="link-arrow" aria-hidden>·</span><span><strong>{row.overall_score === null ? "Not scored" : `${Number(row.overall_score)}/100`}</strong><small>Model evaluation, not an official grade</small></span><span /></div>)}</div></section>}
+    {data && data.history.length > 0 && <section className="content-panel"><h2>History <span className="panel-count">{data.history.length}</span></h2><div className="link-list">{data.history.map((row) => <div className="link-row" key={row.id}><span><strong>{row.title}</strong><small>{new Date(row.created_at).toLocaleString()} · {row.mode === "role" ? "Role" : "Criteria"} · {row.standard_label}</small></span><span className="link-arrow" aria-hidden>·</span><span><strong>{row.overall_score === null ? "Not scored" : `${Number(row.overall_score)}/100`}</strong><small>Model evaluation, not an official grade</small></span><DeleteCheckButton id={row.id} /></div>)}</div></section>}
   </div></AppShell>;
 }
 
