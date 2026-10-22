@@ -188,3 +188,13 @@
 - **Drive fetch by link** (`20261023040000`, `20261023050000`): the Drive connector fetches captured links by file id and also searches owned files by assignment title; Google Sheets export as XLSX. Requires re-pairing the Drive connector (installer from Drive sync) so the updated Apps Script runs.
 - **First gradings:** Crafting Marketing Strategies end-term AI 85.7 / code 76.9 (no official mark yet); Business Reader AI 7 / code 29.3 — the provisional criteria were derived from generic course material and do not fit that assignment. Next: derive criteria from the assignment brief (`get_assignment` description/instructions).
 - Grading now accepts the requesting member's AI consent for shared submissions, and grades the text of files whose images await review (noted on the result).
+
+## Briefs, terms, role-relative insights (2026-10-23)
+- **Assignment briefs:** the LMS sync stores each assignment's brief, instructions and the text of attached question papers/exhibits (Nexus storage path for that assignment only). Grading derives criteria from the brief when no rubric exists (`assignment_brief_inferred`), the blind evaluator sees the task, and criteria are tied to the brief they came from. Business Reader moved from AI 7 (generic course criteria) to 97 against its question paper.
+- **Terms:** courses carry Pre-Term/Term 1/Term 2 and dates from `list_courses` (matched by title; assignment records carry no course id). A top-bar switch (cookie `mesa_term`) filters the overview and Graded work.
+- **Course standing** (`src/lib/insights/course-standing.ts`): per course, share of assessment weight demonstrated; standing combines official marks with blind AI grades per assessment (labelled official / +AI / AI); per primary role, core (≥20% of the role's skills or top-3, bar 75) / supporting (bar 65) / peripheral (bar 50) with a verdict.
+- **AI overview summary** (`overview_briefs`, `/api/overview-brief`): written from computed figures only, one per term, regenerated when they change; the overview opens with its headline, insights and focus. The old feedback-based narrative is removed.
+- **Resume:** members can confirm claims (`attested`), counted as supported and labelled "confirmed by you"; all 29 confirmed at the member's request.
+- **AI-assistant profiles** (`ai_context_reports`): replies to the profile prompt are parsed and used in the behaviour analysis as context only — an observation still needs a source from the member's own work or feedback.
+- **Grading:** multi-file submissions get per-file scores (data sheets their own AI grade); each grading lists reasons the AI, code and official scores differ.
+- Drive connector still "Pairing required" pending the member's Apps Script install.
