@@ -25,6 +25,7 @@ import {
   Sparkles,
   Target,
   Route,
+  Brain,
 } from "lucide-react";
 
 const groups = [
@@ -44,6 +45,7 @@ const groups = [
     label: "Insights",
     links: [
       { href: "/competencies", label: "Competency map", icon: Network },
+      { href: "/thinking", label: "Thinking & behaviour", icon: Brain },
       { href: "/swot", label: "SWOT analysis", icon: Target },
       { href: "/roadmap", label: "Growth roadmap", icon: Route },
       { href: "/correlations", label: "Correlations", icon: ChartNoAxesCombined },
