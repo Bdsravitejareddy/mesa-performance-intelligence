@@ -67,7 +67,7 @@ export default async function GradingPage() {
         {row.comparison?.reasons && row.comparison.reasons.length > 0 && <Why label="Why the scores differ"><ul className="reason-list">{row.comparison.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul></Why>}
         <Why label="See the reasoning">
           <p className="scope-note">{SOURCE_LABEL[row.standard_source] ?? row.standard_source}. {row.comparison?.note}</p>
-          {row.code_report?.parts && row.code_report.parts.length > 0 && <table className="criteria-table"><thead><tr><th>Part of the brief</th><th>Answered?</th></tr></thead><tbody>{row.code_report.parts.map((part) => <tr key={part.label}><td><b>{part.label}</b> {part.text.slice(0, 120)}</td><td>{part.how === "label" ? "Yes — labelled" : part.how === "keywords" ? "Yes — by content" : "Not found"}</td></tr>)}</tbody></table>}
+          {row.code_report?.parts && row.code_report.parts.length > 0 && <table className="criteria-table"><thead><tr><th>Part of the brief</th><th>Answered?</th></tr></thead><tbody>{row.code_report.parts.map((part) => <tr key={part.label}><td><b>{part.label}</b> {part.text.slice(0, 120)}</td><td>{part.how === "label" ? "Yes — labelled" : part.how === "formula" ? "Yes — formulas used" : part.how === "keywords" ? "Yes — by content" : "Not found"}</td></tr>)}</tbody></table>}
           <table className="criteria-table"><thead><tr><th>Criterion</th><th>AI /10</th><th>Code /10</th><th>Terms found</th></tr></thead><tbody>
             {(row.code_report?.criteria ?? []).map((criterion) => {
               const dimension = row.ai_report?.dimensions.find((item) => item.name === criterion.name);

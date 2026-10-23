@@ -56,4 +56,9 @@ describe("completeness against the brief", () => {
     expect(graded.report.completeness).toBe(100);
     expect(graded.score).toBeGreaterThan(75);
   });
+  it("counts a part answered when the workbook uses the functions it names, and ignores cell references", () => {
+    const sheetBrief = "Brief:\nQ1 LEFT, MID & RIGHT — slice text by position.\nQ5 SUBSTITUTE — find-and-replace inside a cell.\nQ9 TEXTJOIN & CONCAT — glue text together.";
+    const work = "Sheet: Answers\nBLR | Deluxe\nFormulas used: LEFT, MID, SUBSTITUTE (40 formula cells)\nFormula B2 =LEFT(Q1,3)\nFormula Q9 =MID(A2,4,2)";
+    expect(completeness(work, sheetBrief).parts.map((part) => part.how)).toEqual(["formula", "formula", "missing"]);
+  });
 });

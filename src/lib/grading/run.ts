@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { refreshSheetFormulas } from "./sheet-refresh";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAIProcessingConfig, isAIConsentCurrent } from "@/lib/ai/consent";
 import { resolveProviderSettings } from "@/lib/ai/settings";
@@ -63,6 +64,7 @@ async function standardFor(client: SupabaseClient, assessment: AssessmentRow, ai
 
 export async function gradeSubmissions(client: SupabaseClient, budgetMs: number, options: { submissionIds?: string[]; actorUserId?: string } = {}): Promise<GradingOutcome[]> {
   const deadline = Date.now() + budgetMs;
+  if (!options.submissionIds) await refreshSheetFormulas(client, 20_000).catch(() => 0);
   const [documents, submissions, assessments, consents, latest] = await Promise.all([
     client.from("submission_documents").select("submission_id, name, extracted_text, extraction_status, source_version"),
     client.from("submissions").select("id, user_id, assessment_id, answer_text, official_mark, official_feedback"),

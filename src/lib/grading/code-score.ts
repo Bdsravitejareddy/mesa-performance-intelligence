@@ -3,7 +3,7 @@ import { verifyArithmeticStatements, type ArithmeticCheck } from "@/lib/scoring"
 // A deterministic score: how much of each rubric criterion and of the relevant course material the work
 // addresses. It measures coverage, not quality or correctness of reasoning; the same work always gets the
 // same score, and every point can be traced to a matched term.
-export const CODE_RULES_VERSION = "code-completeness-v2";
+export const CODE_RULES_VERSION = "code-completeness-v3";
 export const FULL_COVERAGE = 0.6; // a criterion counts as fully addressed when 60% of its key terms appear
 const RUBRIC_SHARE = 0.8;
 const COURSE_SHARE = 0.2;
@@ -40,7 +40,7 @@ export function keyTerms(text: string, limit: number): string[] {
 
 export type CriterionInput = { name: string; description: string; weight: number };
 export type CriterionCoverage = { name: string; weight: number; expected: string[]; matched: string[]; coverage: number; score: number };
-export type BriefPart = { label: string; text: string; keywords: string[]; answered: boolean; how: "label" | "keywords" | "missing" };
+export type BriefPart = { label: string; text: string; keywords: string[]; answered: boolean; how: "label" | "keywords" | "formula" | "missing" };
 export type CodeReport = {
   rulesVersion: string;
   parts?: BriefPart[];
@@ -117,12 +117,31 @@ function labelPattern(label: string): RegExp {
   return new RegExp(`(^|[^A-Za-z0-9])${numeric}(?![0-9])`, "im");
 }
 
+// Spreadsheet functions a brief can ask for by name. A part that names functions counts as answered when the
+// submitted workbook's formulas use them, even if the answer sits on an unlabelled or merged sheet.
+const SHEET_FUNCTIONS = new Set(("LEFT MID RIGHT LEN FIND SEARCH SPLIT TEXTSPLIT TEXTBEFORE TEXTAFTER SUBSTITUTE REPLACE TRIM CLEAN UPPER LOWER PROPER VALUE TEXT TEXTJOIN CONCAT CONCATENATE "
+  + "SUM SUMIF SUMIFS SUMPRODUCT AVERAGE AVERAGEIF AVERAGEIFS COUNT COUNTA COUNTIF COUNTIFS MIN MAX MINIFS MAXIFS MEDIAN ROUND ROUNDUP ROUNDDOWN IF IFS IFERROR "
+  + "VLOOKUP HLOOKUP XLOOKUP INDEX MATCH XMATCH FILTER SORT SORTBY UNIQUE OFFSET INDIRECT CHOOSE SWITCH LET DATE DATEDIF EOMONTH YEAR MONTH DAY WEEKDAY NETWORKDAYS TODAY "
+  + "ISNUMBER ISBLANK ISTEXT ISERROR RANK PERCENTILE QUARTILE STDEV CORREL FORECAST TREND NPV IRR PMT FV PV QUERY ARRAYFORMULA REGEXMATCH REGEXEXTRACT REGEXREPLACE").split(" "));
+const namedFunctions = (text: string) => [...new Set([...text.matchAll(/\b([A-Z][A-Z0-9.]{1,14})\b/g)].map((match) => match[1]).filter((name) => SHEET_FUNCTIONS.has(name)))];
+export function formulaFunctions(work: string): Set<string> {
+  const used = new Set<string>();
+  for (const match of work.matchAll(/\b([A-Z][A-Z0-9.]*)\(/g)) used.add(match[1].replace(/^_xlfn\./, ""));
+  for (const line of work.matchAll(/^Formulas used: (.+)$/gm)) for (const name of line[1].replace(/\(.*$/, "").split(/,\s*/)) if (name && name !== "none") used.add(name.trim());
+  return used;
+}
+
 export function completeness(work: string, brief: string): { score: number | null; parts: BriefPart[] } {
   const found = briefParts(brief);
   if (found.length < 2) return { score: null, parts: [] };
+  const used = formulaFunctions(work);
+  // Formula lines hold cell references such as Q1, which must not be read as answer labels.
+  work = work.replace(/^Formula .*$/gm, "");
   const present = new Set(terms(work));
   const parts: BriefPart[] = found.map((part) => {
     if (labelPattern(part.label).test(work)) return { ...part, answered: true, how: "label" };
+    const named = namedFunctions(`${part.label} ${part.text}`);
+    if (named.length && named.filter((name) => used.has(name)).length >= Math.ceil(named.length / 2)) return { ...part, answered: true, how: "formula" };
     const hits = part.keywords.filter((term) => present.has(term)).length;
     const answered = part.keywords.length > 0 && hits >= Math.max(2, Math.ceil(part.keywords.length * 0.5));
     return { ...part, answered, how: answered ? "keywords" : "missing" };
@@ -145,6 +164,6 @@ export function codeGradeV2(work: string, criteria: CriterionInput[], courseExce
   return {
     score: round1(Math.max(0, Math.min(100, score))),
     report: { ...base.report, rulesVersion: CODE_RULES_VERSION, parts: check.parts, completeness: check.score, adjustments,
-      method: `Completeness: ${check.parts.filter((part) => part.answered).length} of ${check.parts.length} parts the brief asks for are answered (by matching label, or most of their distinctive words) — 75% of the score; criterion coverage — 25%. It checks that everything asked was attempted, not whether answers are correct; the AI and official marks judge quality.` },
+      method: `Completeness: ${check.parts.filter((part) => part.answered).length} of ${check.parts.length} parts the brief asks for are answered (by matching label, by using the spreadsheet functions they name, or most of their distinctive words) — 75% of the score; criterion coverage — 25%. It checks that everything asked was attempted, not whether answers are correct; the AI and official marks judge quality.` },
   };
 }

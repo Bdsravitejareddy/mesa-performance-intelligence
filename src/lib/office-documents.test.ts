@@ -40,6 +40,18 @@ describe("Excel extraction", () => {
     zip.file("xl/worksheets/sheet2.xml", `<worksheet><sheetData/></worksheet>`);
     zip.file("xl/worksheets/_rels/sheet1.xml.rels", `<Relationships><Relationship Id="d1" Type="drawing" Target="../drawings/drawing1.xml"/></Relationships>`);
     const pages = await extractXlsxSheets(await zip.generateAsync({ type: "uint8array" }));
-    expect(pages).toEqual([{ pageNumber: 1, text: "Sheet: Orders\nCity | Orders\nBangalore | 2500", tables: [[["City", "Orders"], ["Bangalore", "2500"]]], hasVisuals: true }]);
+    expect(pages).toEqual([{ pageNumber: 1, text: "Sheet: Orders\nCity | Orders\nBangalore | 2500\nFormulas used: none", tables: [[["City", "Orders"], ["Bangalore", "2500"]]], hasVisuals: true }]);
+  });
+
+  it("keeps the formulas behind the values, one example per filled-down pattern", async () => {
+    const zip = new JSZip();
+    zip.file("xl/workbook.xml", `<workbook><sheets><sheet name="Q1" sheetId="1" r:id="rId1"/></sheets></workbook>`);
+    zip.file("xl/_rels/workbook.xml.rels", `<Relationships><Relationship Id="rId1" Type="worksheet" Target="worksheets/sheet1.xml"/></Relationships>`);
+    zip.file("xl/worksheets/sheet1.xml", `<worksheet><sheetData><row r="1"><c r="A1" s="1"/><c r="B1" t="str"><f>LEFT(A1,3)</f><v>BLR</v></c></row><row r="2"><c r="B2" t="str"><f>LEFT(A2,3)</f><v>DEL</v></c><c r="C2"><f>_xlfn.TEXTJOIN("-",TRUE,A2:B2)</f><v>x</v></c><c r="D2"><f t="shared" si="0"/><v>1</v></c></row></sheetData></worksheet>`);
+    const [page] = await extractXlsxSheets(await zip.generateAsync({ type: "uint8array" }));
+    expect(page.text).toContain("Formulas used: LEFT, TEXTJOIN (4 formula cells)");
+    expect(page.text).toContain("Formula B1 =LEFT(A1,3)");
+    expect(page.text).not.toContain("Formula B2");
+    expect(page.text).toContain('Formula C2 =TEXTJOIN("-",TRUE,A2:B2)');
   });
 });

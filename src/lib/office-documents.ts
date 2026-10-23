@@ -8,6 +8,8 @@ const MAX_PART_BYTES = 15 * 1024 * 1024;
 const WORD_PAGE_CHARS = 3500;
 const MAX_SHEET_ROWS = 300;
 const MAX_SHEET_COLUMNS = 40;
+const MAX_FORMULA_EXAMPLES = 25;
+export const FORMULA_MARKER = "Formulas used:";
 
 const decode = (value: string) => value.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code))).replace(/&amp;/g, "&");
 const texts = (xml: string, tag: string) => [...xml.matchAll(new RegExp(`<${tag}(?:\\s[^>]*)?>([^<]*)</${tag}>`, "g"))].map((match) => decode(match[1]));
@@ -66,6 +68,17 @@ export async function extractXlsxSheets(bytes: Uint8Array): Promise<ExtractedPag
     const xml = await readPart(archive, path);
     if (!xml) continue;
     const rows: string[][] = [];
+    // Formulas are the work in a spreadsheet answer, so they are kept beside the values they produce.
+    // Filled-down copies differ only in their cell references, so one example per pattern is kept.
+    const formulas = new Map<string, string>();
+    const functionNames = new Set<string>();
+    const formulaCells = (xml.match(/<f[\s>/]/g) ?? []).length;
+    for (const formula of xml.matchAll(/<c r="([A-Z]+\d+)"[^>]*?(?<!\/)>(?:(?!<\/c>)[\s\S])*?<f(?:\s[^>]*)?>([^<]+)<\/f>/g)) {
+      const body = decode(formula[2]).trim().replace(/_xlfn\.|_xlws\./g, "");
+      for (const match of body.matchAll(/([A-Z][A-Z0-9.]*)\(/g)) functionNames.add(match[1]);
+      const pattern = body.replace(/\$?[A-Z]{1,3}\$?\d+/g, "#");
+      if (formulas.size < MAX_FORMULA_EXAMPLES && !formulas.has(pattern)) formulas.set(pattern, `${formula[1]} =${body}`);
+    }
     for (const row of [...xml.matchAll(/<row[ >][\s\S]*?<\/row>/g)].slice(0, MAX_SHEET_ROWS)) {
       const cells: string[] = [];
       for (const cell of row[0].matchAll(/<c ([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
@@ -82,7 +95,9 @@ export async function extractXlsxSheets(bytes: Uint8Array): Promise<ExtractedPag
     const sheetRels = (await readPart(archive, path.replace(/worksheets\//, "worksheets/_rels/") + ".rels")) ?? "";
     const name = decode(rawName);
     if (!rows.length && !/drawing/.test(sheetRels)) continue;
-    pages.push({ pageNumber: pages.length + 1, text: [`Sheet: ${name}`, ...rows.slice(0, 60).map((row) => row.filter(Boolean).join(" | "))].join("\n"), tables: rows.length ? [rows] : [], hasVisuals: /drawing/.test(sheetRels) });
+    const functions = [...functionNames];
+    const formulaLines = [`${FORMULA_MARKER} ${functions.length ? `${functions.join(", ")} (${formulaCells} formula cell${formulaCells === 1 ? "" : "s"})` : "none"}`, ...[...formulas.values()].map((item) => `Formula ${item}`)];
+    pages.push({ pageNumber: pages.length + 1, text: [`Sheet: ${name}`, ...rows.slice(0, 60).map((row) => row.filter(Boolean).join(" | ")), ...formulaLines].join("\n"), tables: rows.length ? [rows] : [], hasVisuals: /drawing/.test(sheetRels) });
   }
   if (!pages.length) throw new Error("Invalid Excel workbook: no readable sheets.");
   return pages;
