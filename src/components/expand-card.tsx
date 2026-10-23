@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
-// A compact card that opens its full detail as a whole-page view; Escape or the close button returns.
+// A compact card that opens its full detail as a whole-page view; Escape or the close button returns. The view is
+// rendered on the document body, because a transformed or blurred ancestor would otherwise trap a fixed overlay.
 export function ExpandCard({ title, badge, summary, meta, children }: { title: string; badge: ReactNode; summary: string; meta: string; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
@@ -19,11 +21,11 @@ export function ExpandCard({ title, badge, summary, meta, children }: { title: s
       <p>{summary}</p>
       <small>{meta} · <span className="expand-hint">Open the full reading →</span></small>
     </button>
-    {open && <div className="expand-overlay" role="dialog" aria-modal="true" aria-label={title} onClick={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
+    {open && createPortal(<div className="expand-overlay" role="dialog" aria-modal="true" aria-label={title} onClick={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
       <article className="expand-sheet">
         <header><div><h2>{title}</h2>{badge}</div><button type="button" className="icon-button" onClick={() => setOpen(false)} aria-label="Close"><X size={16} /></button></header>
         <div className="expand-body">{children}</div>
       </article>
-    </div>}
+    </div>, document.body)}
   </>;
 }
