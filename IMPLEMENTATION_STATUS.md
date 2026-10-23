@@ -198,3 +198,15 @@
 - **AI-assistant profiles** (`ai_context_reports`): replies to the profile prompt are parsed and used in the behaviour analysis as context only — an observation still needs a source from the member's own work or feedback.
 - **Grading:** multi-file submissions get per-file scores (data sheets their own AI grade); each grading lists reasons the AI, code and official scores differ.
 - Drive connector still "Pairing required" pending the member's Apps Script install.
+
+## Evidence integrity, views and refresh chain (2026-10-23, later)
+- **Drive connector:** paired by device code (no secret in the installer); scheduled scans running.
+- **Grading safeguards:** the blind grader first checks a file is this assessment's submission (`taskMatch`); a mismatch or a formula-less sheet the grader finds unanswered (likely blank template) is flagged, not scored, and can be detached (`/api/gradings/detach`, which records the Drive match as member-decided). Excerpts and truncation are disclosed to the grader; unjudgeable criteria are not assessable, not low. Spreadsheet formulas are read (`Formulas used:`), and the code check credits named spreadsheet functions.
+- **Stakes and rubric:** assessments are term exam / graded / practice by title (`src/lib/assessments/stakes.ts`). One workspace rubric (`rubric_settings`, `/rubric`) holds stakes multipliers, AI-grade weight, quantitative share, role benchmarks and result bands; standings, averages, competencies and skill views read it.
+- **Skills:** Marked, AI view (`ai_skill_views`, quote-verified) and Holistic lines. Competencies use labelled AI grades where no official mark exists; practice is set aside where graded work exists. Mapping is automatic from briefs and course materials (LMS course outlines are empty in the MCP; page reading is outside the approved exception).
+- **Thinking:** seven plain patterns with narrative overviews; evidence strength = independent sources; feedback adoption requires official feedback. Derived analyses are shared across the workspace's logins; raw assistant profiles and conversations stay private.
+- **Personality:** IPIP self-report, a quote-verified reading of written context, 16Personalities and CliftonStrengths as labelled self-reports, research links verified against Crossref, research-backed tips only where answers and context agree.
+- **Projects:** GitHub App (read-only) with nightly installation-token refresh; full README, repository structure and matched commits; blind case-study evaluation (deployment never assessed), own words required for communication criteria, weighted totals.
+- **Refresh chain:** platform sync → Drive matching and mapping → grading passes → GitHub, projects, thinking, personality reading → AI skill view; nightly and via Refresh everything.
+- **Overview:** About you, last 30 days (like-for-like by stakes), objectives, focus this week, tips, weekly practice (`weekly_practice`: computed-key quiz and trick items, case task on the weakest skill, everyday prompts).
+- **Methodology** page documents every figure with the live rubric.
