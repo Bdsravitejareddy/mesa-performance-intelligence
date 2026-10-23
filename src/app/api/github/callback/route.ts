@@ -29,7 +29,9 @@ export async function GET(request: NextRequest) {
     const response = back(`github=imported&repos=${rows.length}`);
     response.cookies.delete({ name: "mesa_github_state", path: "/api/github" });
     return response;
-  } catch {
+  } catch (error) {
+    // The message only: it never contains the token or the code.
+    console.error("GitHub import failed:", error instanceof Error ? error.message.slice(0, 200) : "unknown");
     return back("github=failed");
   }
 }
