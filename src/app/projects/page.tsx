@@ -26,7 +26,7 @@ export default async function ProjectsPage() {
       const evaluation = data!.evaluations.get(project.key);
       const contexts = data!.contexts.filter((item) => item.project_key === project.key);
       return <article key={project.key} className="content-panel project-card">
-        <header className="panel-head"><div><h2>{project.name}</h2><small>{[project.languages.slice(0, 3).join(", "), project.aiPackages.length ? `AI: ${project.aiPackages.slice(0, 3).join(", ")}` : "", `${project.commits} commits`].filter(Boolean).join(" · ")}</small></div>{evaluation && <span className="project-score"><b>{fmt(evaluation.report.overall)}</b><small>/100 blind</small></span>}</header>
+        <header className="panel-head"><div><h2>{project.name}</h2><small>{[project.languages.slice(0, 3).join(", "), project.aiPackages.length ? `AI: ${project.aiPackages.slice(0, 3).join(", ")}` : "", project.commits ? `${project.commits} matched commits` : "commits not matched to your login"].filter(Boolean).join(" · ")}</small></div>{evaluation && <span className="project-score"><b>{fmt(evaluation.report.overall)}</b><small>/100 blind</small></span>}</header>
         {project.description && <p>{project.description}</p>}
         {evaluation ? <>
           <p className="grade-insight">{evaluation.report.summary}</p>

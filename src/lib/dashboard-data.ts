@@ -32,7 +32,7 @@ export type DashboardSnapshot = {
   term: TermChoice;
   standings: CourseStanding[];
   brief: { brief: OverviewBrief; createdAt: string; model: string } | null;
-  insights: { markedAssessments: number; competenciesAssessed: number; competenciesTotal: number; strengths: number; gaps: number; readiness: { role: string; evidenced: number; total: number }[]; focus: { title: string; why: string; tag: string }[]; grading: { graded: number; compared: number; close: number; meanGap: number | null } | null } | null;
+  insights: { markedAssessments: number; competenciesAssessed: number; competenciesTotal: number; strengths: number; gaps: number; readiness: { role: string; evidenced: number; total: number; demonstrated?: number; partial?: number; claimed?: number }[]; focus: { title: string; why: string; tag: string }[]; grading: { graded: number; compared: number; close: number; meanGap: number | null } | null } | null;
 };
 
 const demoSnapshot: DashboardSnapshot = {
@@ -176,7 +176,7 @@ async function buildInsights(supabase: SupabaseClient, markedAssessments: number
       competenciesTotal: entries.length,
       strengths: entries.filter((entry) => entry.assessment.state === "demonstrated_strength").length,
       gaps: entries.filter((entry) => entry.assessment.state === "development_area").length,
-      readiness: readiness.map((item) => ({ role: item.role.name, evidenced: item.evidenced, total: item.skillRequirements })),
+      readiness: readiness.map((item) => ({ role: item.role.name, evidenced: item.evidenced, total: item.skillRequirements, demonstrated: item.demonstrated, partial: item.partial, claimed: item.claimed })),
       focus,
       grading: await gradingSummary(supabase),
     };

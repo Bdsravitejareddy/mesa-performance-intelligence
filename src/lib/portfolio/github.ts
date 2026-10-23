@@ -70,9 +70,15 @@ export async function collectGithub(token: string, deadline: number, installatio
       gh(`repos/${repo.full_name}/languages`),
       gh(`repos/${repo.full_name}/readme`).then((body) => ((body as { content?: string } | null)?.content ? Buffer.from((body as { content: string }).content, "base64").toString("utf8") : "")),
       file(repo.full_name, "package.json"), file(repo.full_name, "requirements.txt"), file(repo.full_name, "pyproject.toml"),
-      gh(`repos/${repo.full_name}/commits?per_page=100&author=${login}`),
+      // Commits matched to this account, up to 1,000 (ten pages); the count is labelled as matched, not total.
+      (async () => { const all: unknown[] = []; for (let page = 1; page <= 10; page += 1) { const batch = await gh(`repos/${repo.full_name}/commits?per_page=100&page=${page}&author=${login}`); if (!Array.isArray(batch) || !batch.length) break; all.push(...batch); if (batch.length < 100) break; } return all; })(),
       gh(`repos/${repo.full_name}/deployments?per_page=100`),
     ]);
+    // The repository's structure: what kinds of files exist, top folders, and whether tests are present.
+    const tree = await gh(`repos/${repo.full_name}/git/trees/HEAD?recursive=1`) as { tree?: { path: string; type: string }[]; truncated?: boolean } | null;
+    const files = (tree?.tree ?? []).filter((item) => item.type === "blob" && !/(^|\/)(node_modules|\.next|dist|build|vendor)\//.test(item.path));
+    const extensions = files.reduce<Record<string, number>>((counts, item) => { const ext = (item.path.match(/\.([a-z0-9]+)$/i)?.[1] ?? "other").toLowerCase(); counts[ext] = (counts[ext] ?? 0) + 1; return counts; }, {});
+    const structure = { files: files.length, extensions: Object.fromEntries(Object.entries(extensions).sort((a, b) => b[1] - a[1]).slice(0, 10)), topFolders: [...new Set(files.map((item) => item.path.split("/")[0]).filter((part, _, all) => all.filter((other) => other === part).length > 1))].slice(0, 15), hasTests: files.some((item) => /(^|\/)(tests?|__tests__|spec)\/|\.(test|spec)\.[a-z]+$/i.test(item.path)), hasCi: files.some((item) => item.path.startsWith(".github/workflows/")), partial: Boolean(tree?.truncated) };
     const names = new Set<string>();
     try { const json = JSON.parse(pkg || "{}") as Record<string, Record<string, string>>; for (const key of ["dependencies", "devDependencies"]) for (const name of Object.keys(json[key] ?? {})) names.add(name); } catch { /* not JSON */ }
     for (const line of requirements.split(/\n/)) { const name = line.trim().split(/[<>=!~[;\s]/)[0]; if (name && !name.startsWith("#") && !name.startsWith("-")) names.add(name.toLowerCase()); }
@@ -85,7 +91,7 @@ export async function collectGithub(token: string, deadline: number, installatio
       private: repo.private, description: repo.description ?? "", topics: repo.topics ?? [], homepage: repo.homepage ?? "", language: repo.language, languages: languages ?? {},
       createdAt: repo.created_at, pushedAt: repo.pushed_at, stars: repo.stargazers_count, aiPackages: [...names].filter((name) => AI_PACKAGES.test(name)), dependencyCount: names.size,
       commitMonths: months.reduce<Record<string, number>>((counts, month) => ({ ...counts, [month]: (counts[month] ?? 0) + 1 }), {}), commitsByYou: months.length,
-      readme: readme.replace(/<[^>]+>/g, " ").replace(/!\[[^\]]*\]\([^)]*\)/g, "").replace(/\s+/g, " ").trim().slice(0, 1500),
+      readme: readme.replace(/<[^>]+>/g, " ").replace(/!\[[^\]]*\]\([^)]*\)/g, "").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim().slice(0, 12000), readmeLength: readme.length, structure,
       deployments: deploys.length, productionDeployments: production.length, lastDeployed: production[0]?.created_at ?? deploys[0]?.created_at ?? null,
     } });
   }

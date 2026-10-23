@@ -3,7 +3,8 @@
 // much of the code, so it evidences what was built and shipped (product judgement, AI integration, delivery),
 // not hand-coding skill.
 export type PortfolioRow = { source: "github" | "vercel"; account: string; external_id: string; name: string; url: string | null; data: Record<string, unknown> };
-export type Project = { key: string; name: string; accounts: string[]; description: string; languages: string[]; aiPackages: string[]; commits: number; activeMonths: string[]; deployed: boolean; deployments: number; lastActivity: string | null; readme: string; isPublic: boolean };
+export type Structure = { files: number; extensions: Record<string, number>; topFolders: string[]; hasTests: boolean; hasCi: boolean; partial: boolean };
+export type Project = { structure: Structure | null; key: string; name: string; accounts: string[]; description: string; languages: string[]; aiPackages: string[]; commits: number; activeMonths: string[]; deployed: boolean; deployments: number; lastActivity: string | null; readme: string; isPublic: boolean };
 export type PortfolioSummary = { projects: Project[]; aiProjects: number; providers: string[]; languages: { name: string; projects: number }[]; deployed: number; activeMonths: number; firstActivity: string | null };
 
 const PROVIDER: [RegExp, string][] = [[/anthropic/i, "Anthropic (Claude)"], [/google.*(genai|generative)|^@google\/genai$/i, "Google (Gemini)"], [/^openai$/i, "OpenAI"], [/langchain/i, "LangChain"], [/^@ai-sdk|^ai$/i, "Vercel AI SDK"], [/groq/i, "Groq"], [/whisper|deepgram|assemblyai|elevenlabs/i, "Speech AI"], [/scikit|sklearn|xgboost|prophet|statsmodels/i, "Classical ML"], [/torch|tensorflow|transformers/i, "Deep learning"], [/modelcontextprotocol|^mcp$/i, "MCP"]];
@@ -22,10 +23,11 @@ export function summarisePortfolio(rows: PortfolioRow[]): PortfolioSummary {
     const months = Object.keys((data.commitMonths ?? {}) as Record<string, number>);
     const current = projects.get(id);
     const languages = Object.keys((data.languages ?? {}) as Record<string, number>);
-    const project: Project = current ?? { key: id, name: row.name, accounts: [], description: "", languages: [], aiPackages: [], commits: 0, activeMonths: [], deployed: false, deployments: 0, lastActivity: null, readme: "", isPublic: false };
+    const project: Project = current ?? { structure: null, key: id, name: row.name, accounts: [], description: "", languages: [], aiPackages: [], commits: 0, activeMonths: [], deployed: false, deployments: 0, lastActivity: null, readme: "", isPublic: false };
     project.accounts = [...new Set([...project.accounts, row.account])];
     project.description ||= String(data.description ?? "");
     project.readme ||= String(data.readme ?? "");
+    project.structure ||= (data.structure as Structure | undefined) ?? null;
     project.languages = [...new Set([...project.languages, ...languages])];
     project.aiPackages = [...new Set([...project.aiPackages, ...((data.aiPackages ?? []) as string[])])];
     project.commits += Number(data.commitsByYou ?? 0);

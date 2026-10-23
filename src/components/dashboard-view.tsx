@@ -23,8 +23,6 @@ export function DashboardView({ data, name = "there", glance = null }: { data: D
   const weakest = marked.length > 1 ? marked[marked.length - 1] : undefined;
   const attention = weakest && (weakest.weighted! < 65 || best.weighted! - weakest.weighted! >= 10) ? weakest : undefined;
   const readiness = data.insights?.readiness ?? [];
-  const evidenced = readiness.reduce((sum, role) => sum + role.evidenced, 0);
-  const required = readiness.reduce((sum, role) => sum + role.total, 0);
   const grading = data.insights?.grading ?? null;
   const markedCount = data.insights?.markedAssessments ?? data.markCount;
 
@@ -95,8 +93,8 @@ export function DashboardView({ data, name = "there", glance = null }: { data: D
       <section className="lower-grid">
         <article className="panel mastery-panel">
           <div className="panel-heading"><div><h2>Target roles</h2></div><Link className="text-link" href="/career">Career readiness <ArrowRight size={14} /></Link></div>
-          {readiness.length ? <div className="readiness-list">{readiness.map((role) => <div className="readiness-row" key={role.role}><span><strong>{role.role}</strong><small>{role.evidenced} of {role.total} skills evidenced</small></span><span className="readiness-track"><i style={{ width: `${role.total ? Math.round((role.evidenced / role.total) * 100) : 0}%` }} /></span><b>{role.total ? Math.round((role.evidenced / role.total) * 100) : 0}%</b></div>)}</div> : <p className="empty-hint">Appears once assessments are mapped to competencies.</p>}
-          {readiness.length > 0 && <Why>Requirements come from real job postings for these roles. A skill counts as evidenced when your assessed work demonstrates or partly demonstrates the competency behind it ({evidenced} of {required} so far). Experience and degree requirements are listed on Career readiness and never counted as skill gaps.</Why>}
+          {readiness.length ? <div className="readiness-list">{readiness.map((role) => <div className="readiness-row" key={role.role}><span><strong>{role.role}</strong><small>{role.evidenced} of {role.total} skills evidenced{role.demonstrated !== undefined ? ` · ${role.demonstrated} demonstrated, ${role.partial} partly shown, ${role.claimed} from your CV` : ""}</small></span><span className="readiness-track"><i style={{ width: `${role.total ? Math.round((role.evidenced / role.total) * 100) : 0}%` }} /></span><b>{role.total ? Math.round((role.evidenced / role.total) * 100) : 0}%</b></div>)}</div> : <p className="empty-hint">Appears once assessments are mapped to competencies.</p>}
+          {readiness.length > 0 && <Why>Requirements come from real job postings for these roles. A skill counts as evidenced when your assessed work demonstrates or partly demonstrates the competency behind it, or a supported CV claim covers it. Each role is counted on its own, and a skill asked for in two postings counts once. Experience and degree requirements are listed on Career readiness and never counted as skill gaps.</Why>}
         </article>
 
         <article className="panel recent-panel">
@@ -132,7 +130,7 @@ const shortRole = (role: string) => role.replace(/Senior Technical Product Manag
 
 function StandingRow({ row }: { row: CourseStanding }) {
   return <div className="standing-row">
-    <span className="standing-name"><strong>{row.title.replace(/\s+with\s+.*$/i, "")}</strong><small>{row.context?.assessedBy ? `assessed via ${row.context.assessedBy}${row.context.expected ? ` · due ${row.context.expected}` : ""}${row.context.scaleMax ? ` · cohort high ${row.context.scaleMax}` : ""}` : `${row.evidenced} of ${row.assessments} assessed · ${Math.round(row.demonstratedShare * 100)}% shown`}</small></span>
+    <span className="standing-name"><strong>{row.title.replace(/\s+with\s+.*$/i, "")}</strong><small>{row.context?.assessedBy ? `assessed via ${row.context.assessedBy}${row.context.expected ? ` · due ${row.context.expected}` : ""}${row.context.scaleMax ? ` · cohort high ${row.context.scaleMax}` : ""}` : `official marks cover ${Math.round(row.officialShare * 100)}% of the course weight${row.demonstratedShare > row.officialShare ? ` · ${Math.round(row.demonstratedShare * 100)}% with AI grades` : ""}`}</small></span>
     <span className={`standing-value basis-${row.basis}`}>{row.standing === null ? "—" : row.standing}{row.basis === "ai" && <em>AI</em>}{row.basis === "mixed" && row.projected !== null && row.projected !== row.standing && <small className="standing-projected">with AI estimates {row.projected}</small>}</span>
     <span className="standing-roles">{row.roles.map((role) => <span key={role.role} className={`role-chip verdict-${role.verdict}`} title={`${role.why} Dashboard benchmark for a ${role.relevance} course: ${role.threshold}/100 (an internal convention, not an employer requirement).`}>{shortRole(role.role)} · {role.relevance} · {VERDICT_LABEL[role.verdict]}</span>)}</span>
   </div>;

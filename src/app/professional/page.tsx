@@ -39,7 +39,7 @@ export default async function ProfessionalEvidencePage({ searchParams }: { searc
         <div className="portfolio-grid">{portfolio.projects.map((project) => <article key={project.name} className="portfolio-card">
           <header><strong>{project.name}</strong></header>
           {project.description && <p>{project.description}</p>}
-          <small>{[project.languages.slice(0, 3).join(", "), project.aiPackages.length ? `AI: ${project.aiPackages.slice(0, 3).join(", ")}` : "", project.commits ? `${project.commits} commits` : "", project.lastActivity ? `last ${project.lastActivity.slice(0, 10)}` : ""].filter(Boolean).join(" · ")}</small>
+          <small>{[project.languages.slice(0, 3).join(", "), project.aiPackages.length ? `AI: ${project.aiPackages.slice(0, 3).join(", ")}` : "", project.commits ? `${project.commits} matched commits` : "", project.lastActivity ? `last ${project.lastActivity.slice(0, 10)}` : ""].filter(Boolean).join(" · ")}</small>
         </article>)}</div>
         <Why label="How to read this">Self-chosen, ungraded work, so it shows what you choose to build when nothing is marked. Coding assistants may have written much of the code, so it evidences the thinking and design you built — product judgement and AI integration — rather than hand-coding skill. These are academic case studies, so deployment and real-world use are not assessed. Commit counts cover only commits made under each account&apos;s login.</Why>
       </> : <p className="empty-hint">Nothing imported yet.</p>}

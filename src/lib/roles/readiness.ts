@@ -34,7 +34,7 @@ function statusFor(competencyId: string, competencies: Map<string, CompetencyVie
 }
 
 export type RequirementReadiness = LibraryRequirement & { status: RequirementStatus };
-export type RoleReadiness = { role: LibraryRole; requirements: RequirementReadiness[]; skillRequirements: number; evidenced: number; gaps: number; unknown: number; eligibility: RequirementReadiness[] };
+export type RoleReadiness = { role: LibraryRole; requirements: RequirementReadiness[]; skillRequirements: number; evidenced: number; demonstrated: number; partial: number; claimed: number; gaps: number; unknown: number; eligibility: RequirementReadiness[] };
 
 // The best-evidenced competency behind a requirement decides its status; eligibility is listed, never scored.
 export function roleReadiness(role: LibraryRole, competencies: Map<string, CompetencyView>, claims: ClaimView[]): RoleReadiness {
@@ -44,12 +44,23 @@ export function roleReadiness(role: LibraryRole, competencies: Map<string, Compe
     const statuses = requirement.competencyIds.map((id) => statusFor(id, competencies, claims)).sort((a, b) => RANK.indexOf(a) - RANK.indexOf(b));
     return { ...requirement, status: statuses[0] };
   });
-  const skill = requirements.filter((item) => item.status !== "eligibility" && item.status !== "unmapped");
+  // The same skill asked for in two postings is one requirement: merge requirements that rest on the same
+  // competencies, keeping the first quote, so nothing is counted twice.
+  const seen = new Set<string>();
+  const skill = requirements.filter((item) => item.status !== "eligibility" && item.status !== "unmapped").filter((item) => {
+    const key = [...item.competencyIds].sort().join("|");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
   return {
     role,
     requirements,
     skillRequirements: skill.length,
     evidenced: skill.filter((item) => item.status === "demonstrated" || item.status === "partial" || item.status === "supported_claim").length,
+    demonstrated: skill.filter((item) => item.status === "demonstrated").length,
+    partial: skill.filter((item) => item.status === "partial").length,
+    claimed: skill.filter((item) => item.status === "supported_claim").length,
     gaps: skill.filter((item) => item.status === "gap" || item.status === "conflicting").length,
     unknown: skill.filter((item) => item.status === "missing_evidence" || item.status === "unverified_claim").length,
     eligibility: requirements.filter((item) => item.status === "eligibility"),

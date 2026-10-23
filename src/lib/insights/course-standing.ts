@@ -21,6 +21,8 @@ export type RoleView = { role: string; relevance: Relevance; overlap: number; th
 export type CourseStanding = {
   courseId: string; title: string; term: string | null;
   assessments: number; evidenced: number; demonstratedShare: number;
+  // Share of the course's weight that carries an official mark (AI grades excluded): how settled the standing is.
+  officialShare: number;
   official: number | null; ai: number | null; standing: number | null; basis: "official" | "mixed" | "ai" | "none";
   // Official marks first; "projected" adds AI estimates for unmarked work and is shown beside, never instead.
   projected: number | null; relative: number | null; context: CourseContext | null;
@@ -90,6 +92,7 @@ export function courseStanding(input: StandingInput): CourseStanding[] {
     return {
       courseId: course.id, title: course.title, term: course.term,
       assessments: assessments.length, evidenced: evidencedIds.size, demonstratedShare: totalWeight ? Math.round((evidencedWeight / totalWeight) * 100) / 100 : 0,
+      officialShare: totalWeight ? Math.round((marks.reduce((sum, row) => sum + weightOf(row.assessment_id), 0) / totalWeight) * 100) / 100 : 0,
       official, ai, standing, basis, projected, relative, context, roles: roleViews,
     } satisfies CourseStanding;
   }).filter((row): row is CourseStanding => row !== null);
