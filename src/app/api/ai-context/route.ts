@@ -2,7 +2,7 @@ import { after, NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { parseAiProfile } from "@/lib/behaviour/ai-profile";
-import { runBehaviourAnalysis } from "@/lib/behaviour/run";
+import { refreshReadings } from "@/lib/behaviour/refresh";
 
 export const maxDuration = 300;
 
@@ -27,8 +27,7 @@ export async function POST(request: NextRequest) {
   if (error) return NextResponse.json({ error: "The profile could not be saved." }, { status: 500 });
   // The behaviour analysis is re-run with the new profile in the background (about a minute), keeping the
   // member's earlier choice about including their own AI conversations.
-  const { data: last } = await auth.supabase.from("behaviour_analyses").select("included_conversations").order("created_at", { ascending: false }).limit(1).maybeSingle();
-  after(async () => { await runBehaviourAnalysis(auth.supabase, auth.userId, last?.included_conversations === true).catch(() => undefined); });
+  after(() => refreshReadings(auth.supabase, auth.userId));
   return NextResponse.json({ ok: true, source: profile.source, findings: profile.findings.length, changes: profile.changes.length, reanalysing: true }, { status: 201 });
 }
 

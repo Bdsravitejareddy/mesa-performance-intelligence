@@ -43,3 +43,48 @@ describe("reasoning test generator", () => {
     expect(item.options[item.answer].replace(/,/g, "")).toBe(String(Math.ceil(fixed / (price - cost))));
   });
 });
+
+import { abilityEstimate, generateLeveledTest, levelOf, versionFor } from "./reasoning";
+
+describe("hard and extreme levels", () => {
+  it("always produce 12 well-formed items with the key among four distinct options", () => {
+    for (const level of ["hard", "extreme"] as const) for (let seed = 1; seed <= 400; seed += 1) {
+      const items = generateLeveledTest(seed, level);
+      expect(items).toHaveLength(12);
+      for (const item of items) {
+        expect(new Set(item.options).size).toBe(4);
+        expect(item.answer).toBeGreaterThanOrEqual(0);
+        expect(item.answer).toBeLessThan(4);
+        expect(item.prompt.length).toBeGreaterThan(20);
+      }
+    }
+  });
+  it("extreme uses only the harder bank; hard mixes", () => {
+    expect(generateLeveledTest(7, "extreme").every((item) => item.difficulty === 1.5)).toBe(true);
+    expect(new Set(generateLeveledTest(7, "hard").map((item) => item.difficulty))).toEqual(new Set([-1, 1.5]));
+  });
+  it("keeps standard attempts scoreable from old versions", () => {
+    expect(levelOf("reasoning-v1")).toBe("standard");
+    expect(levelOf(versionFor("extreme"))).toBe("extreme");
+  });
+  it("rates the same number right higher on harder items, and stays finite at the extremes", () => {
+    const easy = generateLeveledTest(3, "standard"), hard = generateLeveledTest(3, "extreme");
+    const nine = Array.from({ length: 12 }, (_, index) => index < 9);
+    expect(abilityEstimate(hard, nine).theta).toBeGreaterThan(abilityEstimate(easy, nine).theta);
+    expect(Number.isFinite(abilityEstimate(hard, Array(12).fill(true)).theta)).toBe(true);
+    expect(abilityEstimate(easy, Array(12).fill(false)).scaled).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("item quality", () => {
+  it("never repeats a question type in an extreme test and never pads options with marked copies", () => {
+    for (let seed = 1; seed <= 300; seed += 1) {
+      const items = generateLeveledTest(seed, "extreme");
+      for (const section of ["numerical", "logical", "verbal"]) {
+        const stems = items.filter((item) => item.section === section).map((item) => item.prompt.slice(0, 18).replace(/[\d,.%₹]+/g, ""));
+        expect(new Set(stems).size).toBe(4);
+      }
+      for (const item of items) { expect(item.options.join(" ")).not.toMatch(/±|approx/); expect(item.options.join(" ")).not.toMatch(/\b1\d\d%/); }
+    }
+  });
+});

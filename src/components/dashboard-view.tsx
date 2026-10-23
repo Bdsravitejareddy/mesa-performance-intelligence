@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { ArrowDown, ArrowRight, FileText } from "lucide-react";
 import type { DashboardSnapshot } from "@/lib/dashboard-data";
+import { ProfileGlance } from "@/components/profile-glance";
+import type { Glance } from "@/lib/profile/glance";
 import { formatOfficialMark } from "@/lib/scoring";
 import { IntelligenceVisual } from "@/components/intelligence-visual";
 import { CountUp, ParallaxHero } from "@/components/motion";
@@ -13,7 +15,7 @@ const shortCourse = (name: string) => name.replace(/\s+with\s+.*$/i, "");
 
 // The overview reads top-down: a one-line summary, four highlights, then the breakdown. Reasoning sits
 // behind "Why?" so the page leads with what the evidence shows rather than how it was worked out.
-export function DashboardView({ data, name = "there" }: { data: DashboardSnapshot; name?: string }) {
+export function DashboardView({ data, name = "there", glance = null }: { data: DashboardSnapshot; name?: string; glance?: Glance | null }) {
   const average = data.averageMark;
   const marked = data.coursePerformance.filter((row) => row.weighted !== null).sort((a, b) => b.weighted! - a.weighted!);
   const best = marked[0];
@@ -52,6 +54,8 @@ export function DashboardView({ data, name = "there" }: { data: DashboardSnapsho
 
       {brief && <section className="brief-insights" aria-label="Insights">{brief.insights.map((item) => <article key={item.title} className={`brief-card kind-${item.kind}`}><span className="brief-kind">{item.kind}</span><h3>{item.title}</h3><p>{item.detail}</p></article>)}</section>}
       {brief && brief.focus.length > 0 && <section className="brief-focus"><span className="eyebrow"><span className="eyebrow-line" /> Focus next</span><ol>{brief.focus.map((item) => <li key={item}>{item}</li>)}</ol><small>AI-written from the figures below · {data.brief?.model} · {new Date(data.brief!.createdAt).toLocaleString()}</small></section>}
+
+      {glance && <ProfileGlance glance={glance} />}
 
       <section className="highlight-grid" aria-label="Highlights">
         <Highlight label="Weighted average" tone="mint" ring={average === null ? null : average / 100} value={average === null ? "—" : `${average}`} unit={average === null ? "" : "/100"}
