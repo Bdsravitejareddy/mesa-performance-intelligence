@@ -46,6 +46,9 @@ export async function fetchWithKeyFailover(keys: string[], send: (key: string) =
       if (!RETRYABLE.has(response.status)) return response;
       last = response;
     } catch (error) {
+      // A timeout means the model is slow, not that the key failed: trying the next key would only multiply
+      // the wait past the function's time limit.
+      if (error instanceof Error && error.name === "TimeoutError") throw new Error("The AI provider timed out.");
       lastError = error;
     }
   }

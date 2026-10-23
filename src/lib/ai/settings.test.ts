@@ -37,6 +37,13 @@ describe("fallback Gemini keys", () => {
     expect(tried).toEqual(["a", "b", "c"]);
   });
 
+  it("does not try further keys after a timeout, so the wait cannot multiply", async () => {
+    const { fetchWithKeyFailover } = await import("./settings");
+    const tried: string[] = [];
+    await expect(fetchWithKeyFailover(["a", "b", "c"], async (key) => { tried.push(key); throw Object.assign(new Error("slow"), { name: "TimeoutError" }); })).rejects.toThrow("The AI provider timed out.");
+    expect(tried).toEqual(["a"]);
+  });
+
   it("does not retry a request the provider rejected as malformed", async () => {
     const { fetchWithKeyFailover } = await import("./settings");
     const tried: string[] = [];
