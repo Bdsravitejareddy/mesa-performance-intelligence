@@ -771,3 +771,5 @@ html[data-story-enter="from-below"] .main-content{animation:storyDrop .28s cubic
 .tips-panel{display:grid;gap:10px}.tips-panel h2{margin:0;font-size:var(--fs-panel)}
 .tips-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:var(--gap-block,16px);align-items:stretch}
 .tip-card{display:grid;gap:8px;align-content:start;padding:var(--pad,18px);border-radius:var(--radius,16px);background:rgba(255,255,255,.45);border:1px solid rgba(18,20,18,.08)}.tip-card p{margin:0;line-height:1.6}
+.practice-link{display:grid;grid-template-columns:1fr auto;gap:2px 12px;align-items:center;padding:var(--pad,18px);border-radius:var(--radius,16px);background:rgba(255,255,255,.45);border:1px solid rgba(18,20,18,.08);transition:transform .15s}
+.practice-link:hover{transform:translateY(-1px)}.practice-link>.eyebrow,.practice-link>strong,.practice-link>small{grid-column:1}.practice-link>svg{grid-column:2;grid-row:1/4}.practice-link small{color:var(--ink-2)}

@@ -50,6 +50,7 @@ export function DashboardView({ data, name = "there", glance = null }: { data: D
 
       {!data.demoMode && data.courses.length === 0 && data.assessmentCount === 0 && data.marks.length === 0 && <div className="info-callout" role="status"><span><strong>No Mesa records yet.</strong> Run an LMS sync from Marks & feedback to begin.</span></div>}
 
+      {!data.demoMode && <Link href="/practice" className="practice-link"><span className="eyebrow"><span className="eyebrow-line" /> This week&apos;s practice</span><strong>Quiz, trick questions, a case task and two everyday prompts</strong><small>About 20 minutes · aimed at your weakest skill · new every Monday</small><ArrowRight size={16} /></Link>}
       {!data.demoMode && <WeeklyQuest name={name} suggestions={[...(brief?.focus ?? []).map((title) => ({ title: title.slice(0, 200), reason: "From your AI summary" })), ...(data.insights?.focus ?? []).map((item) => ({ title: item.title.slice(0, 200), reason: item.why.slice(0, 300) }))]} />}
 
       {brief && (brief.about || brief.changes?.length || brief.objectives?.length) ? <section className="you-summary" aria-label="About you">
