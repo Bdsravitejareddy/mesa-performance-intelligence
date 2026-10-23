@@ -16,6 +16,9 @@ function outline(value: unknown, path = "", out: Record<string, string> = {}, de
   return out;
 }
 
+// Course content nests materials inside topics, a level deeper than other replies.
+const outlineDeep = (value: unknown) => { const out: Record<string, string> = {}; const walk = (item: unknown, path: string, depth: number) => { if (depth > 9 || Object.keys(out).length > 400) return; if (Array.isArray(item)) { item.slice(0, 40).forEach((entry, index) => walk(entry, `${path}[${index}]`, depth + 1)); return; } if (item && typeof item === "object") { for (const [key, entry] of Object.entries(item)) walk(entry, path ? `${path}.${key}` : key, depth + 1); return; } out[path] = typeof item === "string" ? item.slice(0, 160) : String(item); }; walk(value, "", 0); return out; };
+
 export async function GET(request: NextRequest) {
   try {
     await requireWorkspaceMember();
@@ -29,7 +32,7 @@ export async function GET(request: NextRequest) {
     const content = request.nextUrl.searchParams.get("content");
     if (content) {
       if (!/^[\w-]{1,80}$/.test(content)) return NextResponse.json({ error: "Unknown course id." }, { status: 400 });
-      return NextResponse.json({ content: outline(unwrapToolResult(await mcp.callTool("get_course_content", { courseId: content }))) });
+      return NextResponse.json({ content: outlineDeep(unwrapToolResult(await mcp.callTool("get_course_content", { courseId: content }))) });
     }
     const id = request.nextUrl.searchParams.get("id");
     if (!id) {
