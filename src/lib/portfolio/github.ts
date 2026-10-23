@@ -57,7 +57,8 @@ export async function collectGithub(token: string, deadline: number): Promise<{ 
     const months = (Array.isArray(commits) ? commits as { commit?: { author?: { date?: string } } }[] : []).map((commit) => commit.commit?.author?.date?.slice(0, 7)).filter((month): month is string => Boolean(month));
     const deploys = Array.isArray(deployments) ? deployments as { environment?: string; created_at?: string }[] : [];
     const production = deploys.filter((deployment) => /production/i.test(deployment.environment ?? ""));
-    rows.push({ source: "github", account: login, external_id: repo.full_name, name: repo.name, url: repo.private ? null : repo.html_url, data: {
+    // One record per account and repository, so each account's own commits are kept and summed, not overwritten.
+    rows.push({ source: "github", account: login, external_id: `${login}:${repo.full_name}`, name: repo.name, url: repo.private ? null : repo.html_url, data: {
       private: repo.private, description: repo.description ?? "", topics: repo.topics ?? [], homepage: repo.homepage ?? "", language: repo.language, languages: languages ?? {},
       createdAt: repo.created_at, pushedAt: repo.pushed_at, stars: repo.stargazers_count, aiPackages: [...names].filter((name) => AI_PACKAGES.test(name)), dependencyCount: names.size,
       commitMonths: months.reduce<Record<string, number>>((counts, month) => ({ ...counts, [month]: (counts[month] ?? 0) + 1 }), {}), commitsByYou: months.length,
