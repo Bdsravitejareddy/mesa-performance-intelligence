@@ -1,4 +1,5 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
+import { handOff } from "@/lib/grading/chain";
 import { syncMesaLms } from "@/lib/lms/sync";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { describePendingMaterials } from "@/lib/materials/vision";
@@ -11,6 +12,18 @@ export const maxDuration = 300;
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
   if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) return new Response("Unauthorized", { status: 401 });
+  return run();
+}
+
+// A manual "refresh everything": acknowledged at once; the sync runs, then grading, then the remaining stages.
+export async function POST(request: NextRequest) {
+  const secret = process.env.CRON_SECRET;
+  if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) return new Response("Unauthorized", { status: 401 });
+  after(async () => { await run().catch(() => undefined); handOff("/api/cron/grading?pass=1"); });
+  return NextResponse.json({ accepted: true }, { status: 202 });
+}
+
+async function run() {
   const started = Date.now();
   let sync: unknown;
   let syncFailed = false;

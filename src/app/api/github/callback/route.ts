@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireWorkspaceMember } from "@/lib/drive-sync/auth";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { collectGithub, exchangeCode, githubAppConfig } from "@/lib/portfolio/github";
 
 export const maxDuration = 120;
@@ -20,7 +21,9 @@ export async function GET(request: NextRequest) {
   try {
     const { userId } = await requireWorkspaceMember();
     const token = await exchangeCode(code);
-    const { login, rows } = await collectGithub(token, Date.now() + 90_000);
+    const { login, rows, installations } = await collectGithub(token, Date.now() + 90_000);
+    // Remember which installations were connected (identifiers only) so the nightly refresh can re-read them.
+    if (installations.length) await createAdminClient().from("github_installations").upsert(installations.map((item) => ({ installation_id: item.id, user_id: userId, account: item.account })), { onConflict: "installation_id" });
     const supabase = await createClient();
     if (rows.length) {
       // A fresh import replaces this account's earlier records, so nothing is counted twice.

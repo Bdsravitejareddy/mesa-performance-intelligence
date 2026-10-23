@@ -1,7 +1,7 @@
 import { after, NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { gradeSubmissions } from "@/lib/grading/run";
-import { continueGrading, hasLeftover, MAX_PASSES } from "@/lib/grading/chain";
+import { continueGrading, handOff, hasLeftover, MAX_PASSES } from "@/lib/grading/chain";
 import { generateOverviewBrief } from "@/lib/insights/overview-brief";
 import type { TermChoice } from "@/lib/term";
 
@@ -23,6 +23,8 @@ async function runPass(pass: number) {
       for (const term of ["all", "Term 1", "Term 2"] as TermChoice[]) {
         try { if (owner && await generateOverviewBrief(client, owner.user_id as string, term)) briefs += 1; } catch { /* a term without figures is skipped */ }
       }
+      // Grading is complete: GitHub, project evaluations and the behaviour readings refresh next.
+      handOff("/api/cron/refresh");
     }
     return NextResponse.json({ pass, graded: outcomes.filter((row) => row.status === "graded").length, chained, briefs, outcomes });
   } catch {

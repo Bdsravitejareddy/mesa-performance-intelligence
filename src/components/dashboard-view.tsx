@@ -8,6 +8,7 @@ import { IntelligenceVisual } from "@/components/intelligence-visual";
 import { CountUp, ParallaxHero } from "@/components/motion";
 import { Why } from "@/components/why";
 import { BriefRefresh } from "@/components/brief-refresh";
+import { RefreshEverything } from "@/components/refresh-everything";
 import { WeeklyQuest } from "@/components/weekly-quest";
 import type { CourseStanding } from "@/lib/insights/course-standing";
 
@@ -42,7 +43,7 @@ export function DashboardView({ data, name = "there", glance = null }: { data: D
           <h1>{headline}</h1>
           {brief?.summary && <p className="summary-text">{brief.summary}</p>}
           <p className="summary-line">{average === null ? "No marks yet" : <><b>{average}</b> weighted average</>} · <b>{markedCount}</b> of {data.assessmentCount} assessments marked{data.insights ? <> · <b>{data.insights.competenciesAssessed}</b> of {data.insights.competenciesTotal} competencies evidenced</> : null}</p>
-          <div className="hero-actions"><a href="#breakdown" className="button button-light">The breakdown <ArrowDown size={15} /></a>{!data.demoMode && <BriefRefresh term={data.term} hasBrief={Boolean(brief)} />}{data.syncHealth && data.syncHealth.level !== "ok" && <Link href="/marks" className="sync-chip">LMS sync {data.syncHealth.level === "warning" ? "partial" : "needs attention"} ·  details</Link>}</div>
+          <div className="hero-actions"><a href="#breakdown" className="button button-light">The breakdown <ArrowDown size={15} /></a>{!data.demoMode && <BriefRefresh term={data.term} hasBrief={Boolean(brief)} />}{!data.demoMode && <RefreshEverything />}{data.syncHealth && data.syncHealth.level !== "ok" && <Link href="/marks" className="sync-chip">LMS sync {data.syncHealth.level === "warning" ? "partial" : "needs attention"} ·  details</Link>}</div>
         </div>
         <IntelligenceVisual />
       </ParallaxHero>

@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/app-shell";
+import { Cue } from "@/components/cue";
 import { AssessmentCompetencyTagger, AutoTagButton } from "@/components/assessment-competency-tagger";
 import { CompetencyWhy, type ClaimRow, type HistoryRow } from "@/components/competency-why";
 import { CompetencyChallenge, type ChallengeRow } from "@/components/competency-challenge";
@@ -39,7 +40,7 @@ export default async function CompetenciesPage() {
       </section>
       <p className="scope-note">{mappedTotal} of {all.length} competencies have at least one mapped assessment. Map more assessments below to widen evidence coverage.</p>
       {domains.map((domain) => <section className="content-panel competency-domain" key={domain.key}>
-        <h2>{domain.name} <span className="panel-count">{domain.competencies.length}</span></h2>
+        <h2><Cue label={domain.name} /> <span className="panel-count">{domain.competencies.length}</span></h2>
         <div className="competency-list">{domain.competencies.map((item) => <article className="competency-row" key={item.id}>
           <div className="competency-row-head">
             <div><strong>{item.name}</strong><small>{item.description}</small></div>

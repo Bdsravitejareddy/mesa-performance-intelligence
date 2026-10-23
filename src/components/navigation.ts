@@ -56,6 +56,7 @@ export const groups: Act[] = [
         { href: "/career", label: "Readiness", blurb: "Your evidence against real job postings." },
         { href: "/roadmap", label: "Roadmap", blurb: "What to do next, ranked by what matters." },
         { href: "/professional", label: "Resume & portfolio", blurb: "Every claim, and how it is supported." },
+        { href: "/projects", label: "Projects", blurb: "Your GitHub projects, evaluated against the problems they solve." },
       ]),
     ],
   },

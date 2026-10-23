@@ -22,3 +22,14 @@ export function continueGrading(pass: number) {
 }
 
 export const hasLeftover = (outcomes: { note: string }[]) => outcomes.some((outcome) => /out of time/i.test(outcome.note));
+
+// Hands one stage of the refresh to the next route on its own invocation (authenticated with the cron secret).
+export function handOff(path: "/api/cron/refresh" | "/api/cron/grading?pass=1" | "/api/cron/lms-sync?chain=1") {
+  const secret = process.env.CRON_SECRET;
+  const base = origin();
+  if (!secret || !base) return false;
+  after(async () => {
+    await fetch(`${base}${path}`, { method: "POST", headers: { authorization: `Bearer ${secret}` }, signal: AbortSignal.timeout(8_000) }).catch(() => undefined);
+  });
+  return true;
+}

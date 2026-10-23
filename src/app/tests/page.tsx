@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { AppShell } from "@/components/app-shell";
+import { Cue } from "@/components/cue";
 import { ContextReadingRefresh } from "@/components/context-reading-refresh";
 import { Radar } from "@/components/radar";
 import { PersonalityQuestionnaire, ReasoningTest } from "@/components/self-tests";
@@ -56,7 +57,7 @@ export default async function TestsPage() {
       <div className="trait-table" role="table">
         <div className="trait-head" role="row"><span>Trait</span><span>How you answered</span><span>From your context</span><span>What research links it to</span></div>
         {FACTORS.map((factor) => { const self = glance.self?.[factor]; const context = glance.context?.factors[factor]; return <div key={factor} className="trait-row" role="row">
-          <span><strong>{FACTOR_LABELS[factor]}</strong><Why label="How to read this">{FACTOR_READINGS[factor]}</Why></span>
+          <span><strong><Cue label={factor === "neuroticism" ? "Emotional stability" : FACTOR_LABELS[factor].split(" ")[0].replace("Intellect", "Intellect")}>{FACTOR_LABELS[factor]}</Cue></strong><Why label="How to read this">{FACTOR_READINGS[factor]}</Why></span>
           <span className="trait-score">{self === undefined ? "—" : `${self.toFixed(1)}/5`}</span>
           <span className="trait-score">{context?.score === null || context?.score === undefined ? <small>not enough context</small> : <>{context.score.toFixed(1)}/5<small>{context.confidence} confidence</small></>}{context?.reason && context.score !== null && <Why label="Why"><p>{context.reason}</p>{context.quote && <q>{context.quote}</q>}</Why>}</span>
           <span><small>{FACTOR_RESEARCH[factor].strengths}</small><Why label="Caveat and sources"><p>{FACTOR_RESEARCH[factor].watch}</p><ul className="cite-list">{FACTOR_RESEARCH[factor].studies.map((key) => <li key={key}><Cite id={key} /></li>)}</ul></Why></span>
