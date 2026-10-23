@@ -59,12 +59,19 @@ function patterns(points: Point[]): Pattern[] {
     reading: comparable.length ? comparable.map((tier) => `${STAKES_LABEL[tier.stakes]}: group ${tier.group} (${tier.groupN}) vs individual ${tier.solo} (${tier.soloN})`).join("; ") + "." : `Not comparable yet: no tier has both group and individual work with AI grades (${tierRows.map((tier) => `${STAKES_LABEL[tier.stakes].toLowerCase()} ${tier.groupN} group / ${tier.soloN} individual`).join(", ")}).`,
     detail: comparable.flatMap((tier) => [{ label: `${STAKES_LABEL[tier.stakes]} · group`, value: tier.group!.toString(), n: tier.groupN }, { label: `${STAKES_LABEL[tier.stakes]} · individual`, value: tier.solo!.toString(), n: tier.soloN }]),
     caution: "Compared only within the same tier and grader. Group results reflect the whole team's work, and tiers still differ in task and difficulty." });
-  // Calendar order, not alphabetical ("Aug", "Oct", "Sep" would otherwise sort out of sequence).
-  const months = [...new Set(points.filter((point) => point.month && (point.official ?? point.ai) !== null).map((point) => point.month!))].sort((a, b) => new Date(`1 ${a}`).getTime() - new Date(`1 ${b}`).getTime());
-  const byMonth = months.map((month) => { const values = points.filter((point) => point.month === month && (point.official ?? point.ai) !== null).map((point) => (point.official ?? point.ai)!); return { label: month, value: mean(values)!.toString(), n: values.length }; });
-  out.push({ key: "trend", title: "Your graded work over time", n: byMonth.reduce((sum, row) => sum + row.n, 0),
-    reading: byMonth.length >= 2 ? `From ${byMonth[0].label} (${byMonth[0].value}) to ${byMonth[byMonth.length - 1].label} (${byMonth[byMonth.length - 1].value}).` : "Needs results from at least two months.",
-    detail: byMonth, caution: "Different months contain different courses and task types, so a change mixes difficulty with growth." });
+  // Over time, within each kind of work (so a month of practice is never compared with a month of exams), in
+  // calendar order; only work with a known submission date is placed.
+  const calendar = (a: string, b: string) => new Date(`1 ${a}`).getTime() - new Date(`1 ${b}`).getTime();
+  const dated = points.filter((point) => point.month && (point.official ?? point.ai) !== null);
+  const series = (["exam", "graded", "practice"] as Stakes[]).map((stakes) => {
+    const rows = dated.filter((point) => point.stakes === stakes);
+    const months = [...new Set(rows.map((point) => point.month!))].sort(calendar);
+    return { stakes, months: months.map((month) => { const values = rows.filter((point) => point.month === month).map((point) => (point.official ?? point.ai)!); return { label: month, value: mean(values)!, n: values.length }; }) };
+  }).filter((row) => row.months.length);
+  const trends = series.filter((row) => row.months.length >= 2);
+  out.push({ key: "trend", title: "Your work over time, by kind", n: dated.length,
+    reading: trends.length ? trends.map((row) => `${STAKES_LABEL[row.stakes]}: ${row.months[0].label} ${row.months[0].value} → ${row.months.at(-1)!.label} ${row.months.at(-1)!.value}`).join("; ") + `. Covers ${dated.length} of ${points.length} results with a known submission date.` : `Needs two months of the same kind of work with known submission dates (${dated.length} dated results so far).`,
+    detail: series.flatMap((row) => row.months.map((month) => ({ label: `${STAKES_LABEL[row.stakes]} · ${month.label}`, value: month.value.toString(), n: month.n }))), caution: "Months still differ in course and difficulty, so a change mixes difficulty with growth. Official marks are used where released, otherwise the blind AI grade." });
   return out;
 }
 
