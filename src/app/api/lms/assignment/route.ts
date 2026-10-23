@@ -34,6 +34,11 @@ export async function GET(request: NextRequest) {
       if (!/^[\w-]{1,80}$/.test(content)) return NextResponse.json({ error: "Unknown course id." }, { status: 400 });
       return NextResponse.json({ content: outlineDeep(unwrapToolResult(await mcp.callTool("get_course_content", { courseId: content }))) });
     }
+    const material = request.nextUrl.searchParams.get("material");
+    if (material) {
+      if (!/^[\w-]{1,80}$/.test(material)) return NextResponse.json({ error: "Unknown material id." }, { status: 400 });
+      return NextResponse.json({ material: outline(unwrapToolResult(await mcp.callTool("get_material", { materialId: material }))) });
+    }
     const id = request.nextUrl.searchParams.get("id");
     if (!id) {
       const list = unwrapToolResult(await mcp.callTool("list_assignments", { status: "submitted" }));
