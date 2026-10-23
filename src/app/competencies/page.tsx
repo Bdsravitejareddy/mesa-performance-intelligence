@@ -36,7 +36,7 @@ export default async function CompetenciesPage() {
     {data && data.mappings.some((row) => row.review_status === "suggested") && <p className="net-open"><b>{data.mappings.filter((row) => row.review_status === "suggested").length} suggested links</b> between {new Set(data.mappings.filter((row) => row.review_status === "suggested").map((row) => row.assessment_id)).size} assessments and competencies are waiting for your review below. Suggestions never count as evidence until you accept them.</p>}
     {!data ? <section className="content-panel"><p className="empty-hint">{demoMode ? "Preview mode has no competency evidence. Connect the private workspace to map real assessments." : "Connect Supabase to load competency evidence."}</p></section> : <>
       <section className="competency-summary" aria-label="Summary by classification">
-        {STATE_ORDER.map((state) => <div className={`competency-summary-item state-${state}`} key={state}><strong>{counts.get(state) ?? 0}</strong><span>{STATE_LABELS[state]}</span></div>)}
+        {STATE_ORDER.map((state) => <div className={`competency-summary-item state-${state}`} key={state}><strong>{counts.get(state) ?? 0}</strong><span><Cue label={STATE_LABELS[state]} /></span></div>)}
       </section>
       <p className="scope-note">{mappedTotal} of {all.length} competencies have at least one mapped assessment. Map more assessments below to widen evidence coverage.</p>
       {domains.map((domain) => <section className="content-panel competency-domain" key={domain.key}>
@@ -44,7 +44,7 @@ export default async function CompetenciesPage() {
         <div className="competency-list">{domain.competencies.map((item) => <article className="competency-row" key={item.id}>
           <div className="competency-row-head">
             <div><strong>{item.name}</strong><small>{item.description}</small></div>
-            <div className="competency-verdict"><span className={`competency-state state-${item.assessment.state}`}>{STATE_LABELS[item.assessment.state]}</span><small>{item.assessment.headline} · {item.assessment.confidence === "insufficient" ? "no confidence rating" : `${item.assessment.confidence} confidence`}</small>{(challengesById.get(item.id) ?? []).some((row) => row.status === "open") && <small className="challenge-badge">Challenged · under review</small>}</div>
+            <div className="competency-verdict"><span className={`competency-state state-${item.assessment.state}`}><Cue label={STATE_LABELS[item.assessment.state]} /></span><small>{item.assessment.headline} · {item.assessment.confidence === "insufficient" ? "no confidence rating" : `${item.assessment.confidence} confidence`}</small>{(challengesById.get(item.id) ?? []).some((row) => row.status === "open") && <small className="challenge-badge">Challenged · under review</small>}</div>
           </div>
           <CompetencyWhy assessment={item.assessment} history={historyById.get(item.id) ?? []} claims={claimsById.get(item.id) ?? []}>{(item.assessment.why.evidence.length > 0 || (challengesById.get(item.id) ?? []).length > 0) && <CompetencyChallenge competencyId={item.id} currentState={item.assessment.state} stateLabel={STATE_LABELS[item.assessment.state]} challenges={challengesById.get(item.id) ?? []} />}</CompetencyWhy>
         </article>)}</div>

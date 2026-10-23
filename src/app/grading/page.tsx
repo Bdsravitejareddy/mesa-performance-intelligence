@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { AppShell } from "@/components/app-shell";
 import { RunGrading } from "@/components/run-grading";
 import { DetachFile } from "@/components/detach-file";
+import { Cue } from "@/components/cue";
 import { Why } from "@/components/why";
 import { cachedRead } from "@/lib/data/cached";
 import { inTerm, selectedTerm, type TermChoice } from "@/lib/term";
@@ -59,7 +60,7 @@ export default async function GradingPage() {
     </section>}
 
     {rows.length > 0 && <section className="grade-list" aria-label="Graded submissions">
-      <div className="grade-legend"><span><i className="mark-official" /> Official</span><span><i className="mark-ai" /> AI (blind)</span><span><i className="mark-code" /> Code check (completeness)</span></div>
+      <div className="grade-legend"><span><i className="mark-official" /> <Cue label="Official" /></span><span><i className="mark-ai" /> <Cue label="AI">AI (blind)</Cue></span><span><i className="mark-code" /> <Cue label="Code">Code check (completeness)</Cue></span></div>
       {rows.map((row) => <article key={row.id} className="content-panel grade-row">
         <header className="grade-row-head">
           <div><h2>{row.assessment}</h2><small>{row.course}</small></div>
@@ -127,7 +128,7 @@ function Stat({ value, unit, label }: { value: string; unit: string; label: stri
 }
 
 function Figure({ label, value, note }: { label: string; value: number | null; note?: string }) {
-  return <div className={`grade-figure figure-${label.toLowerCase()}`}><span>{label}</span><strong>{fmt(value)}</strong><small>{note ?? (value === null ? "none" : "/100")}</small></div>;
+  return <div className={`grade-figure figure-${label.toLowerCase()}`}><span><Cue label={label} /></span><strong>{fmt(value)}</strong><small>{note ?? (value === null ? "none" : "/100")}</small></div>;
 }
 
 function ScoreTrack({ official, ai, code }: { official: number | null; ai: number | null; code: number | null }) {

@@ -1,4 +1,4 @@
-// The prompt members give ChatGPT and each Claude account; the reply's JSON block is what the import reads.
+// The prompt members give each AI assistant they use; the reply's JSON block is what the import reads.
 export const PROFILE_PROMPT = `I want an objective, evidence-based profile of how I think, work and communicate, built only from
 my own messages in our conversations from the last 30 days. If you cannot see past conversations,
 say so and stop rather than guessing. Do not flatter me, do not soften findings, and do not invent.

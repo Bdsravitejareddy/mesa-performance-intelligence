@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowDown, ArrowRight, FileText } from "lucide-react";
 import type { DashboardSnapshot } from "@/lib/dashboard-data";
 import { ProfileGlance } from "@/components/profile-glance";
+import { Cue } from "@/components/cue";
 import type { Glance } from "@/lib/profile/glance";
 import { formatOfficialMark } from "@/lib/scoring";
 import { IntelligenceVisual } from "@/components/intelligence-visual";
@@ -58,25 +59,25 @@ export function DashboardView({ data, name = "there", glance = null }: { data: D
       </section> : null}
       {brief && brief.focus.length > 0 && <section className="brief-focus this-week"><span className="eyebrow"><span className="eyebrow-line" /> Focus this week</span><ol>{brief.focus.map((item) => <li key={item}>{item}</li>)}</ol></section>}
 
-      {brief && <section className="brief-insights" aria-label="Insights">{brief.insights.map((item) => <article key={item.title} className={`brief-card kind-${item.kind}`}><span className="brief-kind">{item.kind}</span><h3>{item.title}</h3><p>{item.detail}</p></article>)}</section>}
+      {brief && brief.insights.length > 0 && <Why label={`More insights (${brief.insights.length})`}><section className="brief-insights" aria-label="Insights">{brief.insights.map((item) => <article key={item.title} className={`brief-card kind-${item.kind}`}><span className="brief-kind">{item.kind}</span><h3>{item.title}</h3><p>{item.detail}</p></article>)}</section></Why>}
       {brief && <small className="scope-note brief-source">AI-written from the figures on this page · {data.brief?.model} · {new Date(data.brief!.createdAt).toLocaleString()}</small>}
 
       {glance && <ProfileGlance glance={glance} />}
 
       <section className="highlight-grid" aria-label="Highlights">
-        <Highlight label="Weighted average" tone="mint" ring={average === null ? null : average / 100} value={average === null ? "—" : `${average}`} unit={average === null ? "" : "/100"}
+        <Highlight label="Your average mark" tone="mint" ring={average === null ? null : average / 100} value={average === null ? "—" : `${average}`} unit={average === null ? "" : "/100"}
           insight={average === null ? "Appears with your first released mark." : average >= 85 ? "Excellent across what has been marked." : average >= 65 ? "Solid, with room to push above 80." : "Below where you want it — see what needs attention."}>
-          Every mark is weighted by its assessment&apos;s maximum marks, so a 100-mark end-term counts five times a 20-mark quiz.{data.unweightedAverage !== null && data.unweightedAverage !== average ? ` A simple average would be ${data.unweightedAverage}.` : ""} Based on {data.markCount} released mark{data.markCount === 1 ? "" : "s"}.
+          Official marks only. Each is weighted by its maximum marks and by how much the work counted (term exams more than practice, set on Rubric &amp; weights).{data.unweightedAverage !== null && data.unweightedAverage !== average ? ` A simple average would be ${data.unweightedAverage}.` : ""} Based on {data.markCount} released mark{data.markCount === 1 ? "" : "s"}.
         </Highlight>
-        <Highlight label="Strongest course" tone="blue" ring={best ? best.weighted! / 100 : null} value={best ? `${best.weighted}` : "—"} unit={best ? "/100" : ""}
+        <Highlight label="Best course" tone="blue" ring={best ? best.weighted! / 100 : null} value={best ? `${best.weighted}` : "—"} unit={best ? "/100" : ""}
           insight={best ? shortCourse(best.course) : "Appears once a course has a mark."}>
           {best ? `${best.marked} of ${best.total} assessments in this course have released marks, totalling ${best.maxMarks} marks. ${best.marked < best.total ? "More marks will confirm or adjust this." : ""}` : "No course has a released mark yet."}
         </Highlight>
-        <Highlight label="Needs attention" tone="amber" ring={attention ? attention.weighted! / 100 : null} value={attention ? `${attention.weighted}` : "—"} unit={attention ? "/100" : ""}
+        <Highlight label="Course to watch" tone="amber" ring={attention ? attention.weighted! / 100 : null} value={attention ? `${attention.weighted}` : "—"} unit={attention ? "/100" : ""}
           insight={attention ? shortCourse(attention.course) : marked.length > 1 ? "No course stands out as weak." : "Needs at least two marked courses."}>
           {attention ? `This is your lowest-marked course (${attention.marked} of ${attention.total} assessments marked). One low result is a signal to look at, not a verdict on ability — the roadmap suggests a quick check.` : "A course is flagged when it sits below 65 or at least 10 points under your strongest."}
         </Highlight>
-        <Highlight label="AI vs faculty" tone="violet" ring={grading?.compared ? grading.close / grading.compared : null} value={grading?.compared ? `${grading.close}` : grading?.graded ? `${grading.graded}` : "—"} unit={grading?.compared ? `of ${grading.compared}` : grading?.graded ? "graded" : ""}
+        <Highlight label="AI agrees with faculty" tone="violet" ring={grading?.compared ? grading.close / grading.compared : null} value={grading?.compared ? `${grading.close}` : grading?.graded ? `${grading.graded}` : "—"} unit={grading?.compared ? `of ${grading.compared}` : grading?.graded ? "graded" : ""}
           insight={grading?.compared ? `AI grades land within 7.5 points of your faculty${grading.meanGap !== null ? ` (typical gap ${grading.meanGap})` : ""}.` : grading?.graded ? "Graded; waiting for official marks to compare." : "Not graded yet."} href="/grading">
           Each submission is graded twice against your course material: by code (coverage of the rubric and course concepts) and by an AI that never sees the official mark. The three are shown side by side and never averaged.
         </Highlight>
@@ -123,7 +124,7 @@ function Highlight({ label, value, unit, insight, ring, tone, href, children }: 
   const share = ring === null ? 0 : Math.max(0, Math.min(1, ring));
   return <article className={`metric-card highlight-card ring-${tone}`}>
     <div className="highlight-top">
-      <span className="ring-label">{label}</span>
+      <span className="ring-label"><Cue label={label} /></span>
       <svg viewBox="0 0 80 80" className="ring ring-small" aria-hidden="true"><circle cx="40" cy="40" r="34" className="ring-track" /><circle cx="40" cy="40" r="34" className="ring-value" style={{ strokeDasharray: circumference, ["--ring-offset" as string]: `${circumference * (1 - share)}`, ["--ring-full" as string]: `${circumference}` }} /></svg>
     </div>
     <strong className="highlight-value"><CountUp value={value} /><small>{unit}</small></strong>

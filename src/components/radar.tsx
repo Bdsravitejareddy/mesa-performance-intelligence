@@ -14,7 +14,7 @@ export function Radar({ title, axes, series, max, rings = 5, caption }: { title:
   const drawable = series.filter((item) => item.values.some((value) => value !== null));
   const empty = axes.map((_, index) => drawable.every((item) => item.values[index] === null || item.values[index] === undefined));
   return <figure className="radar">
-    <figcaption><strong>{title}</strong>{drawable.length > 1 && <span className="radar-legend">{drawable.map((item) => <span key={item.label}><i style={{ background: TONES[item.tone] }} />{item.label}</span>)}</span>}</figcaption>
+    <figcaption><strong>{title}</strong>{drawable.length > 1 && <span className="radar-legend">{drawable.map((item) => { const cue = cueFor(item.label); return <span key={item.label} className={cue ? "cue" : undefined} tabIndex={cue ? 0 : undefined}><i style={{ background: TONES[item.tone] }} />{item.label}{cue && <span className="cue-card" role="tooltip">{cue}</span>}</span>; })}</span>}</figcaption>
     <div className="radar-plot">
       <svg viewBox={`0 0 ${SIZE} ${SIZE}`} role="img" aria-label={`${title}: ${axes.map((axis, index) => `${axis.replace(/-?\n/g, "")} ${drawable.map((item) => item.values[index] ?? "no evidence").join(" / ")}`).join("; ")}`}>
         {Array.from({ length: rings }, (_, index) => <polygon key={index} points={ring((index + 1) / rings)} className="radar-ring" />)}
