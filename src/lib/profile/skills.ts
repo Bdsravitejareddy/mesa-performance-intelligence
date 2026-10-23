@@ -59,7 +59,8 @@ export function validateAiView(raw: Record<string, unknown>, domains: string[], 
       .filter((item) => item.quote && text.get(item.sourceId)?.includes(norm(item.quote)));
     // A score needs at least one verified quote from a source other than an assistant's profile.
     const grounded = quotes.some((item) => kind.get(item.sourceId) !== "ai_profile");
-    const value = Number(row.score);
+    // Only a real number counts: a missing or null score stays unscored (Number(null) would be 0).
+    const value = typeof row.score === "number" ? row.score : typeof row.score === "string" && row.score.trim() !== "" ? Number(row.score) : Number.NaN;
     const score = grounded && Number.isFinite(value) && value >= 0 && value <= 100 ? Math.round(value) : null;
     const confidence = ["low", "medium", "high"].includes(String(row.confidence)) ? String(row.confidence) as AiDomain["confidence"] : "low";
     return [domain, { score, confidence: score === null ? "low" : confidence, reason: score === null ? "No quoted evidence speaks to this yet." : String(row.reason ?? "").slice(0, 300), quotes }];

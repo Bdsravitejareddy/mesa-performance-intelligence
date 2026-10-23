@@ -32,3 +32,10 @@ describe("net summary", () => {
     expect(summary.open).toMatch(/agreeableness/);
   });
 });
+
+describe("missing context scores", () => {
+  it("keeps a null trait score unscored even when a quote is attached", () => {
+    const reading = validateReading({ factors: { extraversion: { score: null, confidence: "low", reason: "", quote: "I prefer objective decisions", sourceId: "N1" } } }, [{ id: "N1", label: "", text: "I prefer objective decisions, but I do feel for people in the room." }]);
+    expect(reading.factors.extraversion.score).toBeNull();
+  });
+});

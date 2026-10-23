@@ -19,3 +19,11 @@ describe("skill views", () => {
     expect(holistic({ score: 70, evidence: 1 }, null, 92, "Analytical reasoning")).toBeGreaterThan(70);
   });
 });
+
+describe("missing AI scores", () => {
+  it("keeps a null score unscored even when a quote is attached", () => {
+    const sources = [{ id: "W1", kind: "graded_work" as const, label: "", text: "From the work: \"We split roles across the team\"" }];
+    const view = validateAiView({ domains: { Leadership: { score: null, confidence: "low", reason: "Too little evidence.", quotes: [{ sourceId: "W1", quote: "We split roles across the team" }] } } }, ["Leadership"], sources);
+    expect(view.Leadership.score).toBeNull();
+  });
+});

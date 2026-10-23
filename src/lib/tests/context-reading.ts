@@ -41,7 +41,8 @@ export function validateReading(raw: Record<string, unknown>, sources: Source[])
     const quote = clip(row.quote, 300);
     const sourceId = clip(row.sourceId, 10);
     const verified = Boolean(quote) && Boolean(byId.get(sourceId)?.includes(norm(quote)));
-    const value = Number(row.score);
+    // Only a real number counts: a missing or null score stays unscored (Number(null) would be 0).
+    const value = typeof row.score === "number" ? row.score : typeof row.score === "string" && row.score.trim() !== "" ? Number(row.score) : Number.NaN;
     // A score needs a verified quote; without one the factor is left unscored rather than guessed.
     const score = verified && Number.isFinite(value) && value >= 1 && value <= 5 ? Math.round(value * 10) / 10 : null;
     const confidence = ["low", "medium", "high"].includes(String(row.confidence)) ? String(row.confidence) as ContextFactor["confidence"] : "low";
