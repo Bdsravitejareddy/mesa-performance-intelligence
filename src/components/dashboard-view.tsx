@@ -134,6 +134,6 @@ function StandingRow({ row }: { row: CourseStanding }) {
   return <div className="standing-row">
     <span className="standing-name"><strong>{row.title.replace(/\s+with\s+.*$/i, "")}</strong><small>{row.context?.assessedBy ? `assessed via ${row.context.assessedBy}${row.context.expected ? ` · due ${row.context.expected}` : ""}${row.context.scaleMax ? ` · cohort high ${row.context.scaleMax}` : ""}` : `${row.evidenced} of ${row.assessments} assessed · ${Math.round(row.demonstratedShare * 100)}% shown`}</small></span>
     <span className={`standing-value basis-${row.basis}`}>{row.standing === null ? "—" : row.standing}{row.basis === "ai" && <em>AI</em>}{row.basis === "mixed" && row.projected !== null && row.projected !== row.standing && <small className="standing-projected">with AI estimates {row.projected}</small>}</span>
-    <span className="standing-roles">{row.roles.map((role) => <span key={role.role} className={`role-chip verdict-${role.verdict}`} title={`${role.relevance} for ${role.role}: bar ${role.threshold}`}>{shortRole(role.role)} · {role.relevance} · {VERDICT_LABEL[role.verdict]}</span>)}</span>
+    <span className="standing-roles">{row.roles.map((role) => <span key={role.role} className={`role-chip verdict-${role.verdict}`} title={`${role.why} Dashboard benchmark for a ${role.relevance} course: ${role.threshold}/100 (an internal convention, not an employer requirement).`}>{shortRole(role.role)} · {role.relevance} · {VERDICT_LABEL[role.verdict]}</span>)}</span>
   </div>;
 }

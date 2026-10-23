@@ -21,7 +21,7 @@ describe("net summary", () => {
     const context = validateReading({ factors: { agreeableness: { score: 2.5, confidence: "medium", reason: "You put objectivity first.", quote: "I prefer objective decisions", sourceId: "N1" } } }, sources);
     const summary = netSummary({
       self: { extraversion: 3.2, agreeableness: 4.3, conscientiousness: 4.8, neuroticism: 1.7, intellect: 5 }, selfDate: null, note: "",
-      context: { ...context, date: "2026-10-23" }, skills: [],
+      context: { ...context, date: "2026-10-23" }, skills: [], aiViewDate: null,
       reasoning: [{ level: "standard", date: "", correct: 11, total: 12, scaled: 60, sections: { numerical: 100, logical: 100, verbal: 75 } }],
       behaviour: { observed: 0, total: 0, date: null, dimensions: [] },
     });

@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadCompetencyInputs } from "@/lib/competency/load";
 import { buildCompetencyMap } from "@/lib/competency/map";
-import { STAKES_WEIGHT } from "@/lib/assessments/stakes";
+import { holistic, markedView, type AiDomain, type SkillView } from "./skills";
 import { FACTOR_LABELS, type Factor } from "@/lib/tests/personality";
 import type { ContextFactor } from "@/lib/tests/context-reading";
 import type { Level } from "@/lib/tests/reasoning";
@@ -12,8 +12,9 @@ export type Glance = {
   self: Record<Factor, number> | null; selfDate: string | null; note: string;
   context: { factors: Record<Factor, ContextFactor>; summary: string; date: string; sources: { id: string; label: string }[] } | null;
   reasoning: { level: Level; date: string; sections: Record<"numerical" | "logical" | "verbal", number>; correct: number; total: number; scaled: number | null }[];
-  // score: official marks only; withAi: official marks plus blind AI grades where no official mark exists.
-  skills: { domain: string; score: number | null; withAi: number | null; evidenced: number; total: number }[];
+  // Three views per skill domain (see skills.ts): marked, the AI's reading, and the holistic blend.
+  skills: SkillView[];
+  aiViewDate: string | null;
   behaviour: { observed: number; total: number; date: string | null; dimensions: { dimension: string; status: string; observedBehaviour: string }[] };
 };
 
@@ -42,16 +43,14 @@ export async function loadGlance(supabase: SupabaseClient): Promise<Glance> {
   }
 
   let skills: Glance["skills"] = [];
+  const { data: aiView } = await supabase.from("ai_skill_views").select("domains, created_at").order("created_at", { ascending: false }).limit(1).maybeSingle();
+  const aiDomains = (aiView?.domains ?? {}) as Record<string, AiDomain>;
+  const reasoningRows = [...perLevel.values()];
+  const reasoningScore = reasoningRows.length ? Math.round(reasoningRows.reduce((sum, row) => sum + (row.correct / row.total) * 100, 0) / reasoningRows.length) : null;
   try {
     const domains = buildCompetencyMap(await loadCompetencyInputs(supabase));
-    skills = domains.map((domain) => {
-      const rows = domain.competencies.flatMap((entry) => entry.assessment.why.evidence.filter((row) => row.mark !== null && row.mappingSource !== "practice_test"));
-      // Weighted by stakes: a term exam counts three times a practice task.
-      const weight = (row: (typeof rows)[number]) => STAKES_WEIGHT[row.stakes ?? "graded"];
-      const weighted = (list: typeof rows) => { const total = list.reduce((sum, row) => sum + weight(row), 0); return total ? Math.round(list.reduce((sum, row) => sum + row.mark! * weight(row), 0) / total) : null; };
-      const evidenced = domain.competencies.filter((entry) => entry.assessment.why.evidence.some((row) => row.mark !== null)).length;
-      return { domain: domain.name, score: weighted(rows.filter((row) => row.evidenceKind !== "ai_grade")), withAi: weighted(rows), evidenced, total: domain.competencies.length };
-    });
+    const marked = markedView(domains);
+    skills = domains.map((domain) => { const view = marked.get(domain.name) ?? { score: null, evidence: 0 }; const ai = aiDomains[domain.name] ?? null; return { domain: domain.name, marked: view.score, markedEvidence: view.evidence, ai, holistic: holistic(view, ai, reasoningScore, domain.name) }; });
   } catch { skills = []; }
 
   const dimensions = ((behaviour.data?.dimensions ?? []) as Glance["behaviour"]["dimensions"]);
@@ -60,7 +59,7 @@ export async function loadGlance(supabase: SupabaseClient): Promise<Glance> {
     self, selfDate: latest?.submitted_at ?? null, note: latest?.result.note ?? "",
     context: reading ? { factors: reading.factors, summary: reading.summary, date: reading.created_at, sources: reading.sources } : null,
     reasoning: (["standard", "hard", "extreme"] as Level[]).map((level) => perLevel.get(level)).filter((row): row is Glance["reasoning"][number] => Boolean(row)),
-    skills,
+    skills, aiViewDate: (aiView?.created_at as string | undefined) ?? null,
     behaviour: { observed: dimensions.filter((row) => row.status === "observed").length, total: dimensions.length, date: behaviour.data?.created_at as string ?? null, dimensions },
   };
 }

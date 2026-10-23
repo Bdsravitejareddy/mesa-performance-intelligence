@@ -3,6 +3,7 @@ import { AppShell } from "@/components/app-shell";
 import { Cue } from "@/components/cue";
 import { ContextReadingRefresh } from "@/components/context-reading-refresh";
 import { Radar } from "@/components/radar";
+import { SkillsRadar } from "@/components/skills-radar";
 import { PersonalityQuestionnaire, ReasoningTest } from "@/components/self-tests";
 import { Why } from "@/components/why";
 import { cachedRead } from "@/lib/data/cached";
@@ -46,9 +47,7 @@ export default async function TestsPage() {
       <Radar title="Reasoning by section" axes={["Numerical", "Logical", "Verbal"]} max={100} rings={4}
         series={glance.reasoning.map((row, index) => ({ label: `${row.level[0].toUpperCase()}${row.level.slice(1)} · ${row.correct}/${row.total}`, tone: (["gold", "rose", "moss"] as const)[index % 3], values: [row.sections.numerical, row.sections.logical, row.sections.verbal] }))}
         caption={glance.reasoning.length ? "% correct on your latest attempt at each level." : "Take a reasoning test to draw this."} />
-      {glance.skills.filter((row) => row.withAi !== null).length >= 3 && <Radar title="Skills from coursework" axes={glance.skills.map((row) => row.domain.replace(/ & /, " &\n"))} max={100} rings={4}
-        series={[{ label: "Official marks", tone: "moss", values: glance.skills.map((row) => row.score) }, { label: "Incl. AI grades", tone: "gold", values: glance.skills.map((row) => row.withAi) }]}
-        caption="Average mark on assessments mapped to each domain; the second line adds blind AI grades where no official mark exists." />}
+      <SkillsRadar skills={glance.skills} aiDate={glance.aiViewDate} />
     </section>}
 
     {glance && <section className="content-panel" aria-label="Personality, two readings">

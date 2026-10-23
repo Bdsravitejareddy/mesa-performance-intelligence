@@ -3,7 +3,7 @@ import { AIConsentGate } from "@/components/ai-consent-gate";
 import { ConversationImport, RunBehaviourAnalysis } from "@/components/thinking";
 import { AiProfileImport, type SavedProfile } from "@/components/ai-profile-import";
 import type { AiProfile } from "@/lib/behaviour/ai-profile";
-import type { DimensionAnalysis } from "@/lib/behaviour/analyse";
+import { strengthFor, type DimensionAnalysis } from "@/lib/behaviour/analyse";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cachedRead } from "@/lib/data/cached";
@@ -42,8 +42,10 @@ export default async function ThinkingPage() {
     {dimensions.length > 0 && <>
       <p className="evidence-key"><b>Evidence strength</b> counts the independent sources that show a pattern: <em>limited</em> = one, <em>moderate</em> = two, <em>substantial</em> = three or more. Your assistants&apos; profiles add context but never count towards it.</p>
       <div className="behaviour-grid">{dimensions.filter((item) => item.status === "observed").map((item) => {
-        const sources = new Set(item.observations.map((observation) => observation.sourceId)).size;
-        return <ExpandCard key={item.dimension} title={item.dimension} badge={<span className="competency-state state-emerging">{item.evidenceStrength} evidence</span>} summary={headline(item.hypothesis || item.observedBehaviour)} meta={`${item.observations.length} quote${item.observations.length === 1 ? "" : "s"} from ${sources} source${sources === 1 ? "" : "s"}`}>
+        // Independent sources exclude assistant profiles (ids A1, A2…), which add context but never count.
+        const independent = new Set(item.observations.map((observation) => observation.sourceId).filter((id) => !/^A\d+$/.test(id))).size;
+        const profiles = new Set(item.observations.map((observation) => observation.sourceId).filter((id) => /^A\d+$/.test(id))).size;
+        return <ExpandCard key={item.dimension} title={item.dimension} badge={<span className="competency-state state-emerging">{strengthFor(independent)} evidence</span>} summary={headline(item.hypothesis || item.observedBehaviour)} meta={`${independent} independent source${independent === 1 ? "" : "s"}${profiles ? ` (+${profiles} assistant profile, not counted)` : ""} · ${item.observations.length} quote${item.observations.length === 1 ? "" : "s"}`}>
           <p><b>Observed:</b> {item.observedBehaviour}</p>
           {item.hypothesis && <p className="behaviour-hypothesis"><b>Hypothesis:</b> {item.hypothesis}</p>}
           <h3>Evidence</h3>

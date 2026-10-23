@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { AppShell } from "@/components/app-shell";
 import { RunGrading } from "@/components/run-grading";
+import { DetachFile } from "@/components/detach-file";
 import { Why } from "@/components/why";
 import { cachedRead } from "@/lib/data/cached";
 import { inTerm, selectedTerm, type TermChoice } from "@/lib/term";
@@ -14,7 +15,7 @@ import { reviewCase, REVIEW_GAP, type ReviewCase } from "@/lib/grading/review-ca
 export const dynamic = "force-dynamic";
 
 type Grading = { id: string; submission_id: string; assessment_id: string; standard_source: string; standard_label: string; code_score: number | null; code_report: CodeReport; ai_score: number | null; ai_report: BlindReport | null; ai_status: string; official_mark: number | null; comparison: Comparison; provider_model: string; created_at: string };
-type Row = Grading & { assessment: string; course: string; feedback: string; review: ReviewCase | null };
+type Row = Grading & { assessment: string; course: string; feedback: string; review: ReviewCase | null; files: { id: string; name: string }[] };
 type Waiting = { assessment: string; course: string; reason: string };
 
 const num = (value: unknown) => (value === null || value === undefined ? null : Number(value));
@@ -64,6 +65,7 @@ export default async function GradingPage() {
           <div><h2>{row.assessment}</h2><small>{row.course}</small></div>
           <span className="grade-badges">{row.review && <span className={`agreement review-badge review-${row.review.strength}`}>Case for +{fmt(row.review.gap)}</span>}<span className={`agreement agreement-${row.comparison?.agreement ?? "no_official_mark"}`}>{agreementLabel(row.comparison?.agreement)}</span></span>
         </header>
+        {row.comparison?.mismatch && <div className="mismatch-callout"><p><b>This file may not be the submission for this assessment.</b> {row.comparison.mismatch} It was not scored.</p>{row.files.map((file) => <DetachFile key={file.id} submissionId={row.submission_id} documentId={file.id} name={file.name} />)}</div>}
         <ScoreTrack official={row.official_mark} ai={row.ai_score} code={row.code_score} />
         <div className="grade-figures">
           <Figure label="Official" value={row.official_mark} />
@@ -141,7 +143,7 @@ async function loadGrading(supabase: SupabaseClient, term: TermChoice) {
     supabase.from("submissions").select("id, assessment_id, official_feedback, page_capture"),
     supabase.from("assessments").select("id, course_id, title").order("title"),
     supabase.from("courses").select("id, title, term"),
-    supabase.from("submission_documents").select("submission_id, extraction_status"),
+    supabase.from("submission_documents").select("id, name, submission_id, extraction_status"),
   ]);
   if (gradings.error) return { missing: true as const, rows: [] as Row[], waiting: [] as Waiting[], assessmentCount: 0 };
   const course = new Map((courses.data ?? []).map((row) => [row.id as string, row.title as string]));
@@ -159,7 +161,7 @@ async function loadGrading(supabase: SupabaseClient, term: TermChoice) {
     if (!meta) continue;
     const grading = { ...(raw as unknown as Grading), code_score: num(raw.code_score), ai_score: num(raw.ai_score), official_mark: num(raw.official_mark) };
     const review = grading.ai_status === "complete" ? reviewCase({ official: grading.official_mark, ai: grading.ai_score, code: grading.code_score, report: grading.ai_report, codeReport: grading.code_report, comparison: grading.comparison, standardSource: grading.standard_source, late: lateness.get(grading.submission_id) ?? null, assessment: meta.title }) : null;
-    rows.push({ ...grading, assessment: meta.title, course: meta.course, feedback: feedback.get(raw.submission_id as string) ?? "", review });
+    rows.push({ ...grading, assessment: meta.title, course: meta.course, feedback: feedback.get(raw.submission_id as string) ?? "", review, files: (documents.data ?? []).filter((doc) => doc.submission_id === raw.submission_id).map((doc) => ({ id: doc.id as string, name: doc.name as string })) });
   }
   const gradedAssessments = new Set(rows.map((row) => row.assessment_id));
   const submissionsByAssessment = new Map<string, string[]>();

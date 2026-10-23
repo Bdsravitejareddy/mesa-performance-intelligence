@@ -38,7 +38,7 @@ export default async function AssessmentsPage() {
       <div className="register-table" role="table">
         <div className="register-head" role="row"><span>Assessment</span><span>Status</span><span>Official</span><span>AI</span><span>Code</span></div>
         {rows.filter((row) => row.course === course).map((row) => <Link key={row.id} href={row.ai !== null || row.code !== null ? "/grading" : "/marks"} className={`register-row status-${row.status}`} role="row">
-          <span className="register-title"><strong>{row.title}</strong><small>{[row.submittedAt && `submitted ${row.submittedAt}${row.timing === "late" ? " (late)" : ""}`, row.group && "group", row.files && `${row.files} file${row.files === 1 ? "" : "s"}`, row.links && `${row.links} link${row.links === 1 ? "" : "s"}${row.linksImported < row.links ? ` (${row.links - row.linksImported} importing)` : ""}`, row.feedback && "feedback"].filter(Boolean).join(" · ") || "no submission recorded"}</small></span>
+          <span className="register-title"><strong>{row.title}</strong><small>{[row.submittedAt && `submitted ${row.submittedAt}${row.timing === "late" ? " (late)" : ""}`, row.group && "group", row.files && `${row.files} file${row.files === 1 ? "" : "s"}`, row.links && `${row.links} link${row.links === 1 ? "" : "s"}${row.linksImported < row.links ? ` (${row.links - row.linksImported} importing)` : ""}`, row.feedback && "feedback"].filter(Boolean).join(" · ") || (row.status === "not_submitted" ? "no submission recorded" : row.status === "marked" ? "marked on the LMS" : "submitted on the LMS — no file or link to import")}</small></span>
           <span><em className={`status-chip chip-${row.status}`}>{STATUS[row.status]}</em></span>
           <span className="register-score">{fmt(row.official)}</span>
           <span className="register-score">{fmt(row.ai)}</span>
@@ -79,13 +79,13 @@ async function load(supabase: SupabaseClient, term: TermChoice): Promise<Row[]> 
     supabase.from("submissions").select("id, assessment_id, official_mark, official_feedback, lms_submission_status, page_capture"),
     supabase.from("submission_documents").select("submission_id"),
     supabase.from("submission_links").select("submission_id, drive_file_id"),
-    supabase.from("submission_gradings").select("assessment_id, ai_score, code_score, ai_report, code_report, created_at").order("created_at", { ascending: false }),
+    supabase.from("submission_gradings").select("assessment_id, ai_score, code_score, ai_report, code_report, comparison, created_at").order("created_at", { ascending: false }),
     supabase.from("drive_sources").select("drive_file_id").not("current_material_id", "is", null),
   ]);
   const course = new Map((courses.data ?? []).filter((row) => inTerm(term, row.term as string | null)).map((row) => [row.id as string, row.title as string]));
   const imported = new Set((sources.data ?? []).map((row) => row.drive_file_id as string));
   const latest = new Map<string, { ai: number | null; code: number | null; report: BlindReport | null; codeReport: CodeReport | null }>();
-  for (const row of gradings.data ?? []) if (!latest.has(row.assessment_id as string)) latest.set(row.assessment_id as string, { ai: row.ai_score === null ? null : Number(row.ai_score), code: row.code_score === null ? null : Number(row.code_score), report: (row.ai_report ?? null) as BlindReport | null, codeReport: (row.code_report ?? null) as CodeReport | null });
+  for (const row of gradings.data ?? []) if (!latest.has(row.assessment_id as string)) latest.set(row.assessment_id as string, { ai: row.ai_score === null ? null : Number(row.ai_score), code: row.code_score === null ? null : Number(row.code_score), report: (row.comparison as { mismatch?: string | null } | null)?.mismatch ? null : (row.ai_report ?? null) as BlindReport | null, codeReport: (row.code_report ?? null) as CodeReport | null });
   return (assessments.data ?? []).filter((row) => course.has(row.course_id as string)).map((assessment) => {
     const subs = (submissions.data ?? []).filter((row) => row.assessment_id === assessment.id);
     const ids = new Set(subs.map((row) => row.id as string));

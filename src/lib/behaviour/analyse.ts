@@ -101,6 +101,8 @@ const clip = (value: unknown, max: number) => (typeof value === "string" ? value
 const norm = (value: string) => value.toLowerCase().replace(/[“”"‘’']/g, "'").replace(/\s+/g, " ").trim();
 
 // Keeps only quotes that really appear in the cited source; a dimension left without verified quotes is not observed.
+export const strengthFor = (independentSources: number): DimensionAnalysis["evidenceStrength"] => (independentSources >= 3 ? "substantial" : independentSources === 2 ? "moderate" : independentSources === 1 ? "limited" : "none");
+
 export function validateAnalysis(raw: Record<string, unknown>, sources: Source[]): DimensionAnalysis[] {
   const byId = new Map(sources.map((source) => [source.id, norm(source.text)]));
   const kindById = new Map(sources.map((source) => [source.id, source.kind]));
@@ -118,7 +120,9 @@ export function validateAnalysis(raw: Record<string, unknown>, sources: Source[]
     const observed = row.status === "observed" && independent.length > 0;
     const claimed = ["limited", "moderate", "substantial"].includes(String(row.evidenceStrength)) ? String(row.evidenceStrength) as DimensionAnalysis["evidenceStrength"] : "limited";
     // Strength is capped by how many independent sources actually support it.
-    const evidenceStrength: DimensionAnalysis["evidenceStrength"] = !observed ? "none" : distinctSources <= 1 ? "limited" : distinctSources === 2 && claimed === "substantial" ? "moderate" : claimed;
+    // Strength is the count of independent sources and nothing else, so the label always matches the stated rule.
+    void claimed;
+    const evidenceStrength: DimensionAnalysis["evidenceStrength"] = !observed ? "none" : strengthFor(distinctSources);
     const list = (value: unknown) => (Array.isArray(value) ? value.map((item) => clip(item, 300)).filter(Boolean).slice(0, 4) : []);
     return observed ? {
       dimension, status: "observed", evidenceStrength, observedBehaviour: clip(row.observedBehaviour, 600), observations,

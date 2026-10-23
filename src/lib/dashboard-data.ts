@@ -6,6 +6,7 @@ import { loadCompetencyInputs } from "@/lib/competency/load";
 import { buildCompetencyMap } from "@/lib/competency/map";
 import { buildLibrary } from "@/lib/roles/library";
 import { importanceFromLibrary, roleReadiness } from "@/lib/roles/readiness";
+import { STAKES_WEIGHT, stakesOf } from "@/lib/assessments/stakes";
 import { recommend } from "@/lib/roadmap/prioritise";
 import { toRoadmapInput } from "@/lib/roadmap/load";
 import { courseStanding, type CourseStanding } from "@/lib/insights/course-standing";
@@ -96,7 +97,8 @@ export async function getDashboardSnapshot(client?: SupabaseClient, term: TermCh
       mark: Number(submission.official_mark),
       format: assessment?.assessment_format ?? "Assessment",
       // Original LMS maximum; marks entered on the 0–100 scale weigh as 100.
-      weight: submission.source_original_max_mark === null || submission.source_original_max_mark === undefined ? 100 : Number(submission.source_original_max_mark),
+      // Maximum marks times stakes: a term exam counts three times a practice task of the same size.
+      weight: (submission.source_original_max_mark === null || submission.source_original_max_mark === undefined ? 100 : Number(submission.source_original_max_mark)) * STAKES_WEIGHT[stakesOf(assessment?.title ?? "")],
       courseId: assessment?.course_id ?? "",
     };
   });
@@ -126,7 +128,7 @@ export async function getDashboardSnapshot(client?: SupabaseClient, term: TermCh
     topicCount: competencies.length,
     syncHealth: describeSyncHealth((syncResult.data ?? []) as SyncRun[]),
     term,
-    standings: await loadStandings(supabase, courses as { id: string; title: string; term: string | null }[], assessments as { id: string; course_id: string; official_max_mark: number | null }[]),
+    standings: await loadStandings(supabase, courses as { id: string; title: string; term: string | null }[], assessments as { id: string; course_id: string; official_max_mark: number | null; title: string }[]),
     brief: await latestBrief(supabase, term),
     insights: await buildInsights(supabase, new Set(submissions.map((row) => row.assessment_id as string)).size),
   };
@@ -162,7 +164,10 @@ async function buildInsights(supabase: SupabaseClient, markedAssessments: number
     const entries = buildCompetencyMap(inputs).flatMap((domain) => domain.competencies.map((entry) => ({ ...entry, domain: domain.name })));
     const states = new Map(entries.map((entry) => [entry.id, { state: entry.assessment.state, name: entry.name }]));
     const library = buildLibrary();
-    const readiness = library.filter((role) => role.tier === "primary").map((role) => roleReadiness(role, states, []));
+    // The same inputs as the Career page, including supported and attested resume claims, so both agree.
+    const { data: claimRows } = await supabase.from("professional_claims").select("competency_id, status").not("competency_id", "is", null);
+    const claims = (claimRows ?? []).map((row) => ({ competencyId: row.competency_id as string, status: row.status as string }));
+    const readiness = library.filter((role) => role.tier === "primary").map((role) => roleReadiness(role, states, claims));
     const importance = importanceFromLibrary(library, new Map(entries.map((entry) => [entry.id, entry.mappedAssessments])));
     const focus = recommend(entries.map(toRoadmapInput), importance, new Set(), 3).map((item) => ({ title: item.activity.title, why: item.activity.why, tag: item.competency }));
     return {
@@ -190,7 +195,7 @@ async function gradingSummary(supabase: SupabaseClient): Promise<{ graded: numbe
   return { graded: latest.size, compared: pairs.length, close: pairs.filter((gap) => gap <= 7.5).length, meanGap: pairs.length ? Math.round((pairs.reduce((sum, gap) => sum + gap, 0) / pairs.length) * 10) / 10 : null };
 }
 
-async function loadStandings(supabase: SupabaseClient, courses: { id: string; title: string; term: string | null }[], assessments: { id: string; course_id: string; official_max_mark: number | null }[]): Promise<CourseStanding[]> {
+async function loadStandings(supabase: SupabaseClient, courses: { id: string; title: string; term: string | null }[], assessments: { id: string; course_id: string; official_max_mark: number | null; title: string }[]): Promise<CourseStanding[]> {
   try {
     const ids = assessments.map((row) => row.id);
     const [gradings, mappings, submissions, contexts] = await Promise.all([

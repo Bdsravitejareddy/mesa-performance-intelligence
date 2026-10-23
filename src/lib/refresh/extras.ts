@@ -4,6 +4,7 @@ import { evaluateProjects } from "@/lib/portfolio/evaluate";
 import { runBehaviourAnalysis } from "@/lib/behaviour/run";
 import { runContextReading } from "@/lib/tests/context-reading";
 import { isProviderConfigured } from "@/lib/ai/settings";
+import { runAiSkillView } from "@/lib/profile/skills";
 
 // The last stage of the daily (or manual) refresh, after the LMS sync and grading: re-read GitHub, evaluate
 // changed projects, then re-run the behaviour analysis and the context reading on everything now known.
@@ -19,4 +20,13 @@ export async function refreshExtras(admin: SupabaseClient, budgetMs: number) {
   const behaviour = Date.now() < deadline - 120_000 ? await step(() => runBehaviourAnalysis(admin, userId, last?.included_conversations === true)) : { skipped: "out of time" };
   const context = Date.now() < deadline - 40_000 ? await step(() => runContextReading(admin, userId)) : { skipped: "out of time" };
   return { github, projects, behaviour, context };
+}
+
+// The AI's reading of each skill domain runs as its own stage: it reads every source and needs the time.
+export async function refreshSkillView(admin: SupabaseClient) {
+  const { data: owner } = await admin.from("sync_runs").select("user_id").order("started_at", { ascending: false }).limit(1).maybeSingle();
+  if (!owner || !isProviderConfigured()) return { skipped: true };
+  const { data: rows } = await admin.from("competencies").select("domain_name");
+  const domains = [...new Set((rows ?? []).map((row) => row.domain_name as string))];
+  return runAiSkillView(admin, owner.user_id as string, domains);
 }

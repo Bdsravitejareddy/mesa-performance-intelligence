@@ -1,4 +1,5 @@
 import type { LibraryRole } from "@/lib/roles/library";
+import { STAKES_WEIGHT, stakesOf } from "@/lib/assessments/stakes";
 
 // How far each course has been demonstrated and what the standing means for each target role. Deterministic:
 // the same records always give the same verdicts, and every verdict names the figures it rests on.
@@ -9,14 +10,14 @@ export type CourseContext = { assessedBy: string; expected: string; scaleMax: nu
 
 export type StandingInput = {
   courses: { id: string; title: string; term: string | null; context?: CourseContext | null }[];
-  assessments: { id: string; course_id: string; official_max_mark: number | null }[];
+  assessments: { id: string; course_id: string; official_max_mark: number | null; title?: string }[];
   marks: { assessment_id: string; mark: number; weight: number }[];
   gradings: { assessment_id: string; ai_score: number | null }[];
   mappings: { assessment_id: string; competency_id: string }[];
   roles: LibraryRole[];
 };
 
-export type RoleView = { role: string; relevance: Relevance; overlap: number; threshold: number; verdict: Verdict };
+export type RoleView = { role: string; relevance: Relevance; overlap: number; threshold: number; verdict: Verdict; why: string };
 export type CourseStanding = {
   courseId: string; title: string; term: string | null;
   assessments: number; evidenced: number; demonstratedShare: number;
@@ -54,13 +55,16 @@ export function courseStanding(input: StandingInput): CourseStanding[] {
     const ids = new Set(assessments.map((row) => row.id));
     const marks = input.marks.filter((row) => ids.has(row.assessment_id));
     const gradings = input.gradings.filter((row) => ids.has(row.assessment_id) && row.ai_score !== null);
-    const weightOf = (id: string) => Number(assessments.find((row) => row.id === id)?.official_max_mark ?? 100) || 100;
-    const totalWeight = assessments.reduce((sum, row) => sum + (Number(row.official_max_mark) || 100), 0);
+    // Term exams count three times practice work, on top of their maximum marks (see stakes.ts).
+    const stakesWeight = (id: string) => { const title = assessments.find((row) => row.id === id)?.title; return title ? STAKES_WEIGHT[stakesOf(title)] : STAKES_WEIGHT.graded; };
+    const weightOf = (id: string) => (Number(assessments.find((row) => row.id === id)?.official_max_mark ?? 100) || 100) * stakesWeight(id);
+    const totalWeight = assessments.reduce((sum, row) => sum + weightOf(row.id), 0);
     const evidencedIds = new Set([...marks.map((row) => row.assessment_id), ...gradings.map((row) => row.assessment_id)]);
     const evidencedWeight = [...evidencedIds].reduce((sum, id) => sum + weightOf(id), 0);
-    const markWeight = marks.reduce((sum, row) => sum + row.weight, 0);
-    const official = marks.length && markWeight ? round1(marks.reduce((sum, row) => sum + row.mark * row.weight, 0) / markWeight) : null;
-    const ai = gradings.length ? round1(gradings.reduce((sum, row) => sum + row.ai_score!, 0) / gradings.length) : null;
+    const markWeight = marks.reduce((sum, row) => sum + row.weight * stakesWeight(row.assessment_id), 0);
+    const official = marks.length && markWeight ? round1(marks.reduce((sum, row) => sum + row.mark * row.weight * stakesWeight(row.assessment_id), 0) / markWeight) : null;
+    const aiWeight = gradings.reduce((sum, row) => sum + stakesWeight(row.assessment_id), 0);
+    const ai = gradings.length && aiWeight ? round1(gradings.reduce((sum, row) => sum + row.ai_score! * stakesWeight(row.assessment_id), 0) / aiWeight) : null;
     // Per assessment: the official mark where released, otherwise the blind AI grade; weighted by maximum marks.
     const officialOf = new Map(marks.map((row) => [row.assessment_id, row.mark]));
     const aiOf = new Map(gradings.map((row) => [row.assessment_id, row.ai_score!]));
@@ -77,7 +81,11 @@ export function courseStanding(input: StandingInput): CourseStanding[] {
       const relevance: Relevance = share >= 0.2 || topThree.get(role.name)?.has(course.id) ? "core" : share > 0 ? "supporting" : "peripheral";
       const threshold = ROLE_THRESHOLDS[relevance];
       const verdict: Verdict = relative === null ? (context?.expected ? "awaiting_results" : "not_yet_evidenced") : relative >= threshold ? "sufficient" : "needs_work";
-      return { role: role.name, relevance, overlap: Math.round(share * 100) / 100, threshold, verdict };
+      const assessedSkills = [...role.required].filter((id) => (competenciesOf.get(course.id) ?? new Set()).has(id)).length;
+      const why = relevance === "core"
+        ? share >= 0.2 ? `Core: its assessments cover ${assessedSkills} of the ${role.required.size} skills this role's postings ask for (${Math.round(share * 100)}%).` : `Core: among the three courses whose assessments cover the most of this role's skills (${assessedSkills} of ${role.required.size}).`
+        : relevance === "supporting" ? `Supporting: its assessments cover ${assessedSkills} of the role's ${role.required.size} skills.` : "Peripheral: its assessments cover none of the skills this role's postings ask for.";
+      return { role: role.name, relevance, overlap: Math.round(share * 100) / 100, threshold, verdict, why };
     });
     return {
       courseId: course.id, title: course.title, term: course.term,

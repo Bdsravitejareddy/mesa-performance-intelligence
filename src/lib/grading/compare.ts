@@ -12,6 +12,8 @@ export type Comparison = {
   note: string;
   reasons?: string[];
   documents?: { name: string; code: number | null; ai: number | null }[];
+  // Set when the grader judged the attached work to be a different assignment.
+  mismatch?: string | null;
 };
 
 export function splitPoints(text: string): string[] {

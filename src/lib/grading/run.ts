@@ -131,9 +131,12 @@ export async function gradeSubmissions(client: SupabaseClient, budgetMs: number,
       catch (error) { aiStatus = "failed"; note = error instanceof Error ? error.message.slice(0, 300) : "AI grading failed; it will retry on the next run."; }
     } else if (aiAllowed) { aiStatus = "failed"; note = "Out of time for AI grading in this run; it will continue on the next run."; }
 
-    const aiPoints = aiReport ? [...aiReport.issues, ...aiReport.strengths, ...aiReport.dimensions.flatMap((dimension) => [dimension.issue, dimension.strength])] : [];
+    // The grader judged the attached work to be a different assignment: report it, and score neither view.
+    const mismatch = aiReport?.taskMatch === "no" ? (aiReport.taskMatchReason || aiReport.summary || "The attached work does not appear to be a submission for this assessment.") : null;
+    if (mismatch) code.score = null;
+    const aiPoints = aiReport && !mismatch ? [...aiReport.issues, ...aiReport.strengths, ...aiReport.dimensions.flatMap((dimension) => [dimension.issue, dimension.strength])] : [];
     const comparison = compareWithFeedback({ feedback, aiPoints, official, ai: aiReport?.overall ?? null, code: code.score });
-    const reasons = differenceReasons(code.report, aiReport, { ai: aiReport?.overall ?? null, code: code.score, official }, comparison.facultyOnly.length);
+    const reasons = mismatch ? [`The attached file looks like a different piece of work: ${mismatch} It was not scored; detach it on this page if it is the wrong file.`] : differenceReasons(code.report, aiReport, { ai: aiReport?.overall ?? null, code: code.score, official }, comparison.facultyOnly.length);
     // With several files (e.g. a data sheet and a deck), each is also scored on its own. Data sheets get their
     // own blind AI grade when time allows; every file gets a code score.
     const readableDocs = docs.filter(readable);
@@ -162,7 +165,7 @@ export async function gradeSubmissions(client: SupabaseClient, budgetMs: number,
       ai_report: aiReport,
       ai_status: aiStatus,
       official_mark: official,
-      comparison: { ...comparison, reasons, documents, aiHash, note: note ? `${comparison.note} ${note}` : comparison.note },
+      comparison: { ...comparison, reasons, documents, aiHash, mismatch, note: note ? `${comparison.note} ${note}` : comparison.note },
       provider_model: aiReport ? model : "",
       rules_version: CODE_RULES_VERSION,
     }, { onConflict: "submission_id,input_hash" });

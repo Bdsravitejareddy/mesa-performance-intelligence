@@ -7,7 +7,8 @@ import type { TermChoice } from "@/lib/term";
 
 const SYSTEM = [
   "You write the opening summary of a student's performance dashboard from computed figures only.",
-  "Interpret each course against the student's target roles: a course marked core for a role must reach its threshold; a supporting course only needs its lower threshold. Say plainly when a mark is good enough for a role and when it is not.",
+  "Interpret each course against the student's target roles using the dashboard's internal benchmarks (core 75, supporting 65, peripheral 50 — conventions of this dashboard, not employer requirements): say a mark is above or below the dashboard's benchmark for that role, never that a role 'requires' a mark. Use each role's relevanceReason when explaining why a course is core.",
+  "Only recommend submitting work that appears in notSubmitted; never suggest submitting something already submitted.",
   "Never quote or paraphrase faculty feedback, and never restate a figure without saying what it means.",
   "Standing is the official weighted average; projectedWithAi is only an estimate including AI grades for unmarked work — never present it as the student's mark. Courses assessed via MRS are read against the cohort high (readAgainstCeiling), and courses whose results are expected later are pending, not weak. State evidence limits: a course with little of its weight demonstrated, or a standing that rests partly (basis mixed) or wholly (basis ai) on AI grades rather than official marks, is provisional. Do not speculate about what future marks must be.",
   "Be specific (course names, numbers), calibrated and brief. No flattery, no generic advice.",
@@ -26,11 +27,12 @@ export async function briefInput(client: SupabaseClient, term: TermChoice) {
       standing: course.standing, basis: course.basis, official: course.official, ai: course.ai, projectedWithAi: course.projected, readAgainstCeiling: course.relative,
       assessedVia: course.context?.assessedBy || null, resultsExpected: course.context?.expected || null, cohortHigh: course.context?.scaleMax ?? null,
       demonstratedShare: course.demonstratedShare, evidenced: `${course.evidenced}/${course.assessments}`,
-      roles: course.roles.map((role) => ({ role: role.role, relevance: role.relevance, threshold: role.threshold, verdict: role.verdict })),
+      roles: course.roles.map((role) => ({ role: role.role, relevance: role.relevance, relevanceReason: role.why, benchmark: role.threshold, verdict: role.verdict })),
     })),
     competencies: snapshot.insights ? { assessed: snapshot.insights.competenciesAssessed, total: snapshot.insights.competenciesTotal, strengths: snapshot.insights.strengths, gaps: snapshot.insights.gaps } : null,
     readiness: snapshot.insights?.readiness ?? [],
     grading: snapshot.insights?.grading ?? null,
+    notSubmitted: await notSubmitted(client),
   };
 }
 
@@ -54,4 +56,17 @@ export async function generateOverviewBrief(client: SupabaseClient, userId: stri
   if (!brief) return null;
   await client.from("overview_briefs").insert({ user_id: userId, term, input_hash: inputHash, brief, provider_model: resolveProviderSettings().model.slice(0, 120) });
   return { status: "created", brief };
+}
+
+// Assessments with no sign of a submission anywhere: no LMS submitted status, no captured page, file or link.
+async function notSubmitted(client: SupabaseClient): Promise<string[]> {
+  const [assessments, submissions, documents, links] = await Promise.all([
+    client.from("assessments").select("id, title"),
+    client.from("submissions").select("id, assessment_id, official_mark, lms_submission_status, page_capture"),
+    client.from("submission_documents").select("submission_id"),
+    client.from("submission_links").select("submission_id"),
+  ]);
+  const withEvidence = new Set([...(documents.data ?? []), ...(links.data ?? [])].map((row) => row.submission_id as string));
+  const submitted = new Set((submissions.data ?? []).filter((row) => row.official_mark !== null || /submit|graded/i.test(String(row.lms_submission_status ?? "")) || /submitted|external/i.test(String((row.page_capture as { status?: string } | null)?.status ?? "")) || withEvidence.has(row.id as string)).map((row) => row.assessment_id as string));
+  return (assessments.data ?? []).filter((row) => !submitted.has(row.id as string)).map((row) => row.title as string).slice(0, 30);
 }

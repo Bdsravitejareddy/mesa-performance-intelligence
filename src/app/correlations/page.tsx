@@ -53,7 +53,8 @@ function patterns(points: Point[]): Pattern[] {
   out.push({ key: "group", title: "Group vs individual work", n: grouped.length,
     reading: group.length && solo.length ? `Group work averages ${mean(group)} (${group.length}) and individual work ${mean(solo)} (${solo.length}).` : "Needs both group and individual results to compare.",
     detail: [{ label: "Group", value: mean(group)?.toString() ?? "—", n: group.length }, { label: "Individual", value: mean(solo)?.toString() ?? "—", n: solo.length }], caution: "Group marks reflect the whole team's work." });
-  const months = [...new Set(points.filter((point) => point.month && (point.official ?? point.ai) !== null).map((point) => point.month!))].sort();
+  // Calendar order, not alphabetical ("Aug", "Oct", "Sep" would otherwise sort out of sequence).
+  const months = [...new Set(points.filter((point) => point.month && (point.official ?? point.ai) !== null).map((point) => point.month!))].sort((a, b) => new Date(`1 ${a}`).getTime() - new Date(`1 ${b}`).getTime());
   const byMonth = months.map((month) => { const values = points.filter((point) => point.month === month && (point.official ?? point.ai) !== null).map((point) => (point.official ?? point.ai)!); return { label: month, value: mean(values)!.toString(), n: values.length }; });
   out.push({ key: "trend", title: "Your graded work over time", n: byMonth.reduce((sum, row) => sum + row.n, 0),
     reading: byMonth.length >= 2 ? `From ${byMonth[0].label} (${byMonth[0].value}) to ${byMonth[byMonth.length - 1].label} (${byMonth[byMonth.length - 1].value}).` : "Needs results from at least two months.",
