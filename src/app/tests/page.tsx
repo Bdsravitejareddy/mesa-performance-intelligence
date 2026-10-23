@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { AppShell } from "@/components/app-shell";
 import { Cue } from "@/components/cue";
+import { ExternalAssessmentsForm } from "@/components/external-assessments";
+import { cliftonDomains, sixteenPToBigFive } from "@/lib/tests/external";
 import { ContextReadingRefresh } from "@/components/context-reading-refresh";
 import { Radar } from "@/components/radar";
 import { SkillsRadar } from "@/components/skills-radar";
@@ -30,6 +32,7 @@ export default async function TestsPage() {
   const glance = demoMode || !hasSupabaseConfig() ? null : await cachedRead("tests:glance", (client: SupabaseClient) => loadGlance(client));
   const history = demoMode || !hasSupabaseConfig() ? [] : await cachedRead("tests:history", loadHistory);
   const summary = glance ? netSummary(glance) : null;
+  const sixteen = glance?.external.sixteenP ? sixteenPToBigFive(glance.external.sixteenP) : null;
   return <AppShell demoMode={demoMode}><div className="section-page">
     <div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> Self-assessments</div><h1>Reasoning & personality</h1><p className="page-subtitle">{summary?.headline ?? "Inputs that add evidence where coursework has none."}</p></div></div>
 
@@ -42,7 +45,7 @@ export default async function TestsPage() {
 
     {glance && <section className="radar-grid" aria-label="Profile infographics">
       <Radar title="Personality" axes={FACTORS.map((factor) => SHORT[factor])} max={5} rings={5}
-        series={[{ label: "How you answered", tone: "rose", values: FACTORS.map((factor) => radial(factor, glance.self?.[factor])) }, { label: "From your written context", tone: "dusk", values: FACTORS.map((factor) => radial(factor, glance.context?.factors[factor]?.score)) }]}
+        series={[{ label: "How you answered", tone: "rose", values: FACTORS.map((factor) => radial(factor, glance.self?.[factor])) }, { label: "From your written context", tone: "dusk", values: FACTORS.map((factor) => radial(factor, glance.context?.factors[factor]?.score)) }, ...(sixteen ? [{ label: "16Personalities (approx.)", tone: "gold" as const, values: FACTORS.map((factor) => radial(factor, sixteen[factor])) }] : [])]}
         caption="1–5 on the IPIP response scale; 3 is neutral. Emotional stability is neuroticism reversed." />
       <Radar title="Reasoning by section" axes={["Numerical", "Logical", "Verbal"]} max={100} rings={4}
         series={glance.reasoning.map((row, index) => ({ label: `${row.level[0].toUpperCase()}${row.level.slice(1)} · ${row.correct}/${row.total}`, tone: (["gold", "rose", "moss"] as const)[index % 3], values: [row.sections.numerical, row.sections.logical, row.sections.verbal] }))}
@@ -65,6 +68,16 @@ export default async function TestsPage() {
       {glance.context?.summary && <p className="scope-note"><b>What your context adds:</b> {glance.context.summary}</p>}
       {glance.note && <p className="scope-note"><b>Your own note:</b> {glance.note}</p>}
       <Why label="Why the two readings can differ">{READING_CAVEAT}</Why>
+    </section>}
+
+    {glance && <section className="content-panel" aria-label="Other personality tools">
+      <h2>Other personality tools</h2>
+      <p className="empty-hint">Results you have from 16Personalities or CliftonStrengths. Both are proprietary, self-reported tools, so they are shown as context beside the IPIP questionnaire and feed the context reading and AI view as your own description — never as a measured score.</p>
+      <div className="external-results">
+        <div><h3>16Personalities</h3>{glance.external.sixteenP ? <><p className="external-type">{glance.external.sixteenP.type}</p><small className="empty-hint">Lines up approximately with: {FACTORS.map((factor) => sixteen?.[factor] != null ? `${factor === "neuroticism" ? "emotional stability" : factor} ${(factor === "neuroticism" ? 6 - sixteen[factor]! : sixteen[factor]!).toFixed(1)}` : null).filter(Boolean).join(" · ")} (McCrae &amp; Costa, 1989).</small></> : <p className="empty-hint">Not added.</p>}</div>
+        <div><h3>CliftonStrengths</h3>{glance.external.clifton.length ? <ul className="clifton-list">{cliftonDomains(glance.external.clifton).map((row) => <li key={row.domain}><strong>{row.domain}</strong><small>{row.themes.join(", ")}</small></li>)}</ul> : <p className="empty-hint">Not added.</p>}</div>
+      </div>
+      <Why label="Add or update results"><ExternalAssessmentsForm /></Why>
     </section>}
 
     <div className="section-two-column"><section className="content-panel"><h2>Reasoning test</h2><ReasoningTest />

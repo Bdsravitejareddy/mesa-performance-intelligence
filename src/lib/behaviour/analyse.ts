@@ -78,6 +78,12 @@ export async function gatherSources(supabase: SupabaseClient, options: { include
   const { data: portfolioRows } = await supabase.from("portfolio_items").select("source, account, external_id, name, url, data");
   const portfolio = summarisePortfolio((portfolioRows ?? []) as PortfolioRow[]);
   portfolio.projects.slice(0, 10).forEach((project, index) => sources.push({ id: `G${index + 1}`, kind: "portfolio", label: `Self-directed project · ${project.name} (ungraded; code may be AI-assisted)`, text: [`Project: ${project.name}`, project.description && `Description: ${project.description}`, project.languages.length && `Languages: ${project.languages.join(", ")}`, project.aiPackages.length && `AI libraries: ${project.aiPackages.join(", ")}`, project.readme && `README opening: ${project.readme.slice(0, 900)}`].filter(Boolean).join("\n") }));
+  // Results from other personality tools the member entered: self-reported context, like the questionnaire.
+  const { data: external } = await supabase.from("external_assessments").select("kind, result").order("created_at", { ascending: false }).limit(4);
+  const latestOf = (kind: string) => (external ?? []).find((row) => row.kind === kind)?.result as Record<string, unknown> | undefined;
+  const sixteen = latestOf("16personalities"), clifton = latestOf("cliftonstrengths");
+  if (sixteen) sources.push({ id: "X1", kind: "self_report", label: "16Personalities type (self-reported; proprietary, not a validated measure)", text: `Type: ${String(sixteen.type)}${Object.keys((sixteen.percents ?? {}) as object).length ? `; strengths ${JSON.stringify(sixteen.percents)}` : ""}` });
+  if (clifton) sources.push({ id: "X2", kind: "self_report", label: "CliftonStrengths top themes (self-reported talents, in order)", text: `Top themes: ${((clifton.themes ?? []) as string[]).join(", ")}` });
   // Self-report preferences and practice-test results are context, labelled as such for the model.
   const personality = (tests ?? []).find((row) => row.kind === "personality");
   if (personality?.result && typeof personality.result === "object") {

@@ -57,6 +57,12 @@ export async function gatherContext(supabase: SupabaseClient): Promise<{ sources
   if (result?.note) sources.push({ id: "N1", label: "Your own note on the questionnaire", text: result.note });
   const { data: profiles } = await supabase.from("ai_context_reports").select("source, narrative, created_at").order("created_at", { ascending: false }).limit(4);
   (profiles ?? []).forEach((row, index) => sources.push({ id: `A${index + 1}`, label: `${row.source} assistant's profile of you (${String(row.created_at).slice(0, 10)})`, text: String(row.narrative ?? "").slice(0, 12_000) }));
+  const { data: external } = await supabase.from("external_assessments").select("kind, result").order("created_at", { ascending: false }).limit(4);
+  for (const row of external ?? []) {
+    if (sources.some((source) => source.id === (row.kind === "16personalities" ? "X1" : "X2"))) continue;
+    const result = row.result as Record<string, unknown>;
+    sources.push(row.kind === "16personalities" ? { id: "X1", label: "Your 16Personalities type (self-reported)", text: `Type: ${String(result.type)}${Object.keys((result.percents ?? {}) as object).length ? `; strengths ${JSON.stringify(result.percents)}` : ""}` } : { id: "X2", label: "Your CliftonStrengths top themes (self-reported)", text: `Top themes: ${((result.themes ?? []) as string[]).join(", ")}` });
+  }
   const { data: analysis } = await supabase.from("behaviour_analyses").select("dimensions").order("created_at", { ascending: false }).limit(1).maybeSingle();
   const observed = ((analysis?.dimensions ?? []) as { dimension: string; status: string; observedBehaviour: string }[]).filter((row) => row.status === "observed");
   if (observed.length) sources.push({ id: "B1", label: "Observed behaviour patterns from your coursework", text: observed.map((row) => `${row.dimension}: ${row.observedBehaviour}`).join("\n") });

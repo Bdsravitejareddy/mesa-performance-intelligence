@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadCompetencyInputs } from "@/lib/competency/load";
 import { buildCompetencyMap } from "@/lib/competency/map";
 import { holistic, markedView, type AiDomain, type SkillView } from "./skills";
+import type { SixteenP } from "@/lib/tests/external";
 import { FACTOR_LABELS, type Factor } from "@/lib/tests/personality";
 import type { ContextFactor } from "@/lib/tests/context-reading";
 import type { Level } from "@/lib/tests/reasoning";
@@ -15,6 +16,7 @@ export type Glance = {
   // Three views per skill domain (see skills.ts): marked, the AI's reading, and the holistic blend.
   skills: SkillView[];
   aiViewDate: string | null;
+  external: { sixteenP: SixteenP | null; clifton: string[] };
   behaviour: { observed: number; total: number; date: string | null; dimensions: { dimension: string; status: string; observedBehaviour: string }[] };
 };
 
@@ -61,6 +63,7 @@ export async function loadGlance(supabase: SupabaseClient): Promise<Glance> {
     context: reading ? { factors: reading.factors, summary: reading.summary, date: reading.created_at, sources: reading.sources } : null,
     reasoning: (["standard", "hard", "extreme"] as Level[]).map((level) => perLevel.get(level)).filter((row): row is Glance["reasoning"][number] => Boolean(row)),
     skills, aiViewDate: (aiView?.created_at as string | undefined) ?? null,
+    external: await (async () => { const { data } = await supabase.from("external_assessments").select("kind, result").order("created_at", { ascending: false }).limit(6); const of = (kind: string) => (data ?? []).find((row) => row.kind === kind)?.result as Record<string, unknown> | undefined; return { sixteenP: (of("16personalities") as SixteenP | undefined) ?? null, clifton: ((of("cliftonstrengths")?.themes ?? []) as string[]) }; })(),
     behaviour: { observed: dimensions.filter((row) => row.status === "observed").length, total: dimensions.length, date: behaviour.data?.created_at as string ?? null, dimensions },
   };
 }
