@@ -774,3 +774,8 @@ html[data-story-enter="from-below"] .main-content{animation:storyDrop .28s cubic
 .practice-link{display:grid;grid-template-columns:1fr auto;gap:2px 12px;align-items:center;padding:var(--pad,18px);border-radius:var(--radius,16px);background:rgba(255,255,255,.45);border:1px solid rgba(18,20,18,.08);transition:transform .15s}
 .practice-link:hover{transform:translateY(-1px)}.practice-link>.eyebrow,.practice-link>strong,.practice-link>small{grid-column:1}.practice-link>svg{grid-column:2;grid-row:1/4}.practice-link small{color:var(--ink-2)}
 .practice-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+/* Login: stronger contrast for small text on the green scene, and the example readout. */
+.lx-features small{color:rgba(246,245,241,.86)}.lx-kicker{color:#f7e2ad}
+.lx-example{display:grid;gap:8px;padding:16px 18px;border-radius:18px;background:rgba(10,24,18,.42);border:1px solid rgba(246,245,241,.18);color:#f6f5f1;max-width:420px}
+.lx-example dl{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:0}.lx-example dt{font-size:12px;color:rgba(246,245,241,.82)}.lx-example dd{margin:2px 0 0;font-size:26px;font-weight:700}.lx-example small{color:rgba(246,245,241,.82)}

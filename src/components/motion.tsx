@@ -106,7 +106,9 @@ export function RotatingWord({ words, intervalMs = 2600 }: { words: string[]; in
     const timer = window.setInterval(() => setIndex((current) => (current + 1) % words.length), intervalMs);
     return () => window.clearInterval(timer);
   }, [words.length, intervalMs]);
-  return <span className="rotating-word" aria-live="polite"><span key={index} className="rotating-word-inner">{words[index]}</span></span>;
+  // Decorative: the heading carries the full sentence for screen readers, so this is hidden from them and never
+  // re-announced on every change.
+  return <span className="rotating-word" aria-hidden="true"><span key={index} className="rotating-word-inner">{words[index]}</span></span>;
 }
 
 // Cards light up under the cursor: sets --mx/--my on the hovered card for a radial highlight.
