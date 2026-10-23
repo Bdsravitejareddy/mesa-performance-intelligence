@@ -19,7 +19,7 @@ export function AiProfileImport({ saved }: { saved: SavedProfile[] }) {
     const body = await response.json().catch(() => ({})) as { error?: string; findings?: number; changes?: number };
     setBusy(false);
     if (!response.ok) { setMessage(body.error ?? "Could not save."); return; }
-    setMessage(`Saved: ${body.findings} findings, ${body.changes} changes over time.`); setReply(""); router.refresh();
+    setMessage(`Saved: ${body.findings} findings, ${body.changes} changes over time. The analysis above is being refreshed with it — reload in about a minute.`); setReply(""); router.refresh(); window.setTimeout(() => router.refresh(), 75_000);
   };
   const remove = async (id: string) => { await fetch(`/api/ai-context?id=${id}`, { method: "DELETE" }); router.refresh(); };
   const [copied, setCopied] = useState(false);
