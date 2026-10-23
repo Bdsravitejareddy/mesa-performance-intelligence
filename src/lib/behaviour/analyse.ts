@@ -21,7 +21,7 @@ export const DIMENSION_MEANING: Record<(typeof DIMENSIONS)[number], string> = {
   "Learning from feedback": "Acting on feedback you were given — from faculty or reviewers — in later work. Self-reflection alone does not count.",
 };
 
-export type Source = { id: string; kind: "official_feedback" | "quality_check" | "evaluation_finding" | "own_ai_conversation" | "self_report" | "reasoning_test" | "ai_profile" | "graded_work" | "portfolio"; label: string; text: string };
+export type Source = { id: string; kind: "official_feedback" | "quality_check" | "evaluation_finding" | "own_ai_conversation" | "self_report" | "reasoning_test" | "ai_profile" | "graded_work" | "portfolio" | "practice"; label: string; text: string };
 export type Observation = { sourceId: string; quote: string; verified: boolean };
 export type DimensionAnalysis = {
   dimension: string;
@@ -84,6 +84,13 @@ export async function gatherSources(supabase: SupabaseClient, options: { include
   const sixteen = latestOf("16personalities"), clifton = latestOf("cliftonstrengths");
   if (sixteen) sources.push({ id: "X1", kind: "self_report", label: "16Personalities type (self-reported; proprietary, not a validated measure)", text: `Type: ${String(sixteen.type)}${Object.keys((sixteen.percents ?? {}) as object).length ? `; strengths ${JSON.stringify(sixteen.percents)}` : ""}` });
   if (clifton) sources.push({ id: "X2", kind: "self_report", label: "CliftonStrengths top themes (self-reported talents, in order)", text: `Top themes: ${((clifton.themes ?? []) as string[]).join(", ")}` });
+  // Written weekly-practice answers: the member's own words, ungraded practice.
+  const { data: practice } = await supabase.from("weekly_practice").select("week_start, answers").not("submitted_at", "is", null).order("week_start", { ascending: false }).limit(4);
+  (practice ?? []).forEach((row, index) => {
+    const answers = (row.answers ?? {}) as Record<string, unknown>;
+    const text = ["case", "c1", "c2"].map((key) => String(answers[key] ?? "").trim()).filter((value) => value.length > 40).join("\n---\n");
+    if (text) sources.push({ id: `K${index + 1}`, kind: "practice", label: `Weekly practice, week of ${row.week_start} (your own words; ungraded)`, text: text.slice(0, 4000) });
+  });
   // Self-report preferences and practice-test results are context, labelled as such for the model.
   const personality = (tests ?? []).find((row) => row.kind === "personality");
   if (personality?.result && typeof personality.result === "object") {
@@ -111,6 +118,7 @@ const SYSTEM = [
   "Context matters: brief messages to an AI may reflect efficiency rather than poor communication; iterating may be useful with time and costly under deadlines; exploring many topics may be deliberate.",
   "AI-conversation sources contain only the student's own messages; an assistant's opinion is never evidence.",
   "Sources of kind portfolio are self-chosen, ungraded academic case-study projects; they show initiative, AI integration and what the student builds unprompted. Code may be AI-assisted, so do not read them as evidence of hand-coding skill, and never judge deployment, users or real-world utility, which are not expected.",
+  "Sources of kind practice are the person's own written answers to weekly practice prompts (ungraded, everyday and short case tasks): usable for how they express and reason, weighted below graded work.",
   "Sources of kind graded_work hold verbatim quotes from the student's submitted work (lines starting 'From the work') and a blind grader's judgements (lines starting 'Grader'); prefer quoting the work itself, and treat grader lines as a model's opinion.",
   "Sources of kind ai_profile are an AI assistant's summary of the student. Use them as context and as hypotheses to test against the other sources; cite them only alongside another source; note where they agree or conflict with the coursework evidence, and use their dated 'change' entries when describing change over time.",
   "For each dimension also return overview (two or three plain sentences telling the person what the evidence shows, as a short narrative) and why (one sentence naming the main evidence behind it).",

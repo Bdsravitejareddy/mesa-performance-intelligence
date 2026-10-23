@@ -52,6 +52,7 @@ export const groups: Act[] = [
       section("You", Brain, "How you think and work, in context.", [
         { href: "/thinking", label: "Thinking & behaviour", blurb: "How you approach problems, as observed patterns." },
         { href: "/tests", label: "Reasoning & personality", blurb: "Self-tests that add context, never verdicts." },
+        { href: "/practice", label: "Weekly practice", blurb: "Quizzes, trick questions, a case task and everyday prompts." },
       ]),
       section("Career", BriefcaseBusiness, "Your evidence against target roles, and what to do next.", [
         { href: "/career", label: "Readiness", blurb: "Your evidence against real job postings." },
