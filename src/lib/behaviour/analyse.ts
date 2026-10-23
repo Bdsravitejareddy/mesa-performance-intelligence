@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { summarisePortfolio, type PortfolioRow } from "@/lib/portfolio/summary";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requestJsonFromProvider } from "@/lib/ai/provider";
 import { profileAsSource, type AiProfile } from "./ai-profile";
@@ -9,7 +10,7 @@ export const DIMENSIONS = [
   "Decision-making under uncertainty", "Prioritisation under constraints", "Reflection and feedback adoption",
 ] as const;
 
-export type Source = { id: string; kind: "official_feedback" | "quality_check" | "evaluation_finding" | "own_ai_conversation" | "self_report" | "reasoning_test" | "ai_profile" | "graded_work"; label: string; text: string };
+export type Source = { id: string; kind: "official_feedback" | "quality_check" | "evaluation_finding" | "own_ai_conversation" | "self_report" | "reasoning_test" | "ai_profile" | "graded_work" | "portfolio"; label: string; text: string };
 export type Observation = { sourceId: string; quote: string; verified: boolean };
 export type DimensionAnalysis = {
   dimension: string;
@@ -60,6 +61,10 @@ export async function gatherSources(supabase: SupabaseClient, options: { include
     const text = [...quotes, ...(report.strengths ?? []).slice(0, 3).map((item) => `Grader strength: ${item}`), ...(report.issues ?? []).slice(0, 3).map((item) => `Grader issue: ${item}`)].join("\n");
     if (text) sources.push({ id: `W${seenWork.size}`, kind: "graded_work", label: `Your submitted work · ${titles.get(row.assessment_id as string) ?? "Assessment"} (quotes from the work; judgements by blind AI grading)`, text: text.slice(0, 2500) });
   }
+  // Self-directed projects from GitHub and Vercel: what the student chose to build when nothing was graded.
+  const { data: portfolioRows } = await supabase.from("portfolio_items").select("source, account, external_id, name, url, data");
+  const portfolio = summarisePortfolio((portfolioRows ?? []) as PortfolioRow[]);
+  portfolio.projects.slice(0, 10).forEach((project, index) => sources.push({ id: `G${index + 1}`, kind: "portfolio", label: `Self-directed project · ${project.name} (ungraded; code may be AI-assisted)`, text: [`Project: ${project.name}`, project.description && `Description: ${project.description}`, project.languages.length && `Languages: ${project.languages.join(", ")}`, project.aiPackages.length && `AI libraries: ${project.aiPackages.join(", ")}`, project.deployed && `Deployed on Vercel (${project.deployments} production deployments)`, project.readme && `README opening: ${project.readme.slice(0, 900)}`].filter(Boolean).join("\n") }));
   // Self-report preferences and practice-test results are context, labelled as such for the model.
   const personality = (tests ?? []).find((row) => row.kind === "personality");
   if (personality?.result && typeof personality.result === "object") {
@@ -84,6 +89,7 @@ const SYSTEM = [
   "Never infer personality traits, IQ, intelligence, psychological conditions or fixed abilities. Describe behaviour in specific situations, not who the person is.",
   "Context matters: brief messages to an AI may reflect efficiency rather than poor communication; iterating may be useful with time and costly under deadlines; exploring many topics may be deliberate.",
   "AI-conversation sources contain only the student's own messages; an assistant's opinion is never evidence.",
+  "Sources of kind portfolio are self-chosen, ungraded projects; they show initiative, AI integration and what the student builds unprompted, but code may be AI-assisted, so do not read them as evidence of hand-coding skill.",
   "Sources of kind graded_work hold verbatim quotes from the student's submitted work (lines starting 'From the work') and a blind grader's judgements (lines starting 'Grader'); prefer quoting the work itself, and treat grader lines as a model's opinion.",
   "Sources of kind ai_profile are an AI assistant's summary of the student. Use them as context and as hypotheses to test against the other sources; cite them only alongside another source; note where they agree or conflict with the coursework evidence, and use their dated 'change' entries when describing change over time.",
   "For each dimension return: status (observed | not_observed), evidenceStrength (none|limited|moderate|substantial), observedBehaviour, observations (array of {sourceId, quote} with quotes copied exactly from that source), possibleExplanations (at least two different ones), context, consequences (only those shown in the sources), counterevidence, hypothesis (phrased as a tentative hypothesis), wouldConfirm, wouldChallenge.",

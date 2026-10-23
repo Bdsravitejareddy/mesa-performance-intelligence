@@ -706,3 +706,7 @@ html[data-story-enter="from-below"] .main-content{animation:storyDrop .28s cubic
 .section-stack{display:flex;flex-direction:column;gap:var(--gap-block,16px)}
 .plan-first>.plan-panel{order:-1}
 .loss-grid{display:block!important;columns:2 420px;column-gap:var(--gap-block,16px)}.loss-grid>.loss-card{break-inside:avoid;margin-bottom:var(--gap-block,16px)}
+.portfolio-panel{display:grid;gap:12px}.portfolio-import{display:inline-flex;gap:8px;align-items:center}
+.portfolio-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr));gap:var(--gap-block,16px)}
+.portfolio-card{display:grid;gap:6px;align-content:start;padding:14px 16px;border-radius:14px;background:rgba(255,255,255,.5);border:1px solid rgba(18,20,18,.08)}
+.portfolio-card header{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}.portfolio-card p{margin:0;font-size:var(--fs-note)}.portfolio-card small{color:var(--ink-2)}
