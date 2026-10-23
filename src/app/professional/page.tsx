@@ -33,16 +33,15 @@ export default async function ProfessionalEvidencePage({ searchParams }: { searc
         <div className="stat-strip">
           <div className="stat"><strong>{portfolio.projects.length}</strong><span>Projects (mirrors counted once)</span></div>
           <div className="stat"><strong>{portfolio.aiProjects}</strong><span>Built with AI</span></div>
-          <div className="stat"><strong>{portfolio.deployed}</strong><span>Deployed on Vercel</span></div>
           <div className="stat"><strong>{portfolio.activeMonths}</strong><span>Active months{portfolio.firstActivity ? ` since ${portfolio.firstActivity}` : ""}</span></div>
         </div>
         {portfolio.providers.length > 0 && <p className="scope-note"><b>AI you have built with:</b> {portfolio.providers.join(" · ")}. <b>Languages:</b> {portfolio.languages.map((item) => `${item.name} (${item.projects})`).join(", ")}.</p>}
         <div className="portfolio-grid">{portfolio.projects.map((project) => <article key={project.name} className="portfolio-card">
-          <header><strong>{project.name}</strong>{project.deployed && <span className="competency-state state-emerging">deployed</span>}</header>
+          <header><strong>{project.name}</strong></header>
           {project.description && <p>{project.description}</p>}
           <small>{[project.languages.slice(0, 3).join(", "), project.aiPackages.length ? `AI: ${project.aiPackages.slice(0, 3).join(", ")}` : "", project.commits ? `${project.commits} commits` : "", project.lastActivity ? `last ${project.lastActivity.slice(0, 10)}` : ""].filter(Boolean).join(" · ")}</small>
         </article>)}</div>
-        <Why label="How to read this">Self-chosen, ungraded work, so it shows what you choose to build when nothing is marked. Coding assistants may have written much of the code, so it evidences what you built and shipped — product judgement, AI integration and delivery — rather than hand-coding skill. Commit counts cover only commits made under each account&apos;s login.</Why>
+        <Why label="How to read this">Self-chosen, ungraded work, so it shows what you choose to build when nothing is marked. Coding assistants may have written much of the code, so it evidences the thinking and design you built — product judgement and AI integration — rather than hand-coding skill. These are academic case studies, so deployment and real-world use are not assessed. Commit counts cover only commits made under each account&apos;s login.</Why>
       </> : <p className="empty-hint">Nothing imported yet.</p>}
       <Why label="How connecting works">Connect GitHub installs a read-only GitHub App on the account you are signed in to, for the repositories you choose, and reads their metadata, languages, dependency names, README openings, your commit months and deployment records (Vercel reports its deployments to the linked repository). The access is used once and not stored. Sign in to your other GitHub account and connect again to add it.</Why>
       <Why label="Or update from a file">Run <code>node scripts/collect-portfolio.mjs ~/Downloads/portfolio.json</code> in this project on your Mac. It reads every GitHub account signed in to the GitHub CLI and the signed-in Vercel CLI account — metadata, languages, dependency names, README openings and commit months, never code or tokens — and writes one file. Upload that file here. Sign in to another account first (<code>gh auth login</code>, <code>vercel login</code>) to include it.</Why>

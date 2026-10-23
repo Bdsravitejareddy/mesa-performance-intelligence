@@ -22,6 +22,8 @@ export async function GET(request: NextRequest) {
     const { userId } = await requireWorkspaceMember();
     const token = await exchangeCode(code);
     const { login, rows, installations } = await collectGithub(token, Date.now() + 90_000);
+    // Not installed on this account yet: go on to installation (choosing repositories); GitHub then returns here.
+    if (!installations.length) return NextResponse.redirect(`https://github.com/apps/${encodeURIComponent(config.slug)}/installations/new?state=${state}`);
     // Remember which installations were connected (identifiers only) so the nightly refresh can re-read them.
     if (installations.length) await createAdminClient().from("github_installations").upsert(installations.map((item) => ({ installation_id: item.id, user_id: userId, account: item.account })), { onConflict: "installation_id" });
     const supabase = await createClient();

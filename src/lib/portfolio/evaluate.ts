@@ -9,7 +9,7 @@ import { summarisePortfolio, type PortfolioRow, type Project } from "./summary";
 // The work is the project's facts, its README opening and, separately, anything the member wrote in their own
 // words; communication and first-principles criteria are scored only from their own words.
 export type ProjectContext = { project_key: string; kind: "problem_statement" | "own_words"; title: string; body: string };
-export const PROJECT_RULES_VERSION = "project-eval-v1";
+export const PROJECT_RULES_VERSION = "project-eval-v2-case-study";
 const OWN_WORDS_CRITERIA = new Set(["Communication of reasoning", "First-principles reasoning"]);
 
 export function projectStandard(hasStatement: boolean, hasOwnWords: boolean): Standard {
@@ -17,14 +17,14 @@ export function projectStandard(hasStatement: boolean, hasOwnWords: boolean): St
     { name: "Problem understanding", description: "Is the problem, its user and its constraints clearly understood and framed?", weight: 2 },
     { name: "Solution design", description: "Does the design fit the problem, with sensible scope and trade-offs?", weight: 2 },
     { name: "AI integration", description: "Is AI used where it adds value, with appropriate safeguards, rather than for its own sake?", weight: 1 },
-    { name: "Delivery and shipping", description: "Was it built to a working, deployed state and iterated on?", weight: 1 },
+    { name: "Working implementation", description: "Does the build demonstrate the idea end to end for the case study? Deployment, hosting, users and real-world utility are not expected and are not assessed.", weight: 1 },
     ...(hasStatement ? [{ name: "Fit to the problem statement", description: "Does the project address what the given problem statement asks for?", weight: 2 }] : []),
     ...(hasOwnWords ? [
       { name: "Communication of reasoning", description: "In the member's own words: is the reasoning clear, structured and tied to evidence?", weight: 1 },
       { name: "First-principles reasoning", description: "In the member's own words: does the reasoning break the problem into fundamentals rather than copying patterns?", weight: 1 },
     ] : []),
   ];
-  return { source: "model_general", label: hasStatement ? "Project criteria (dashboard default) judged against the problem statement you were given" : "Project criteria (dashboard default); no problem statement added", criteria };
+  return { source: "model_general", label: `${hasStatement ? "Project criteria (dashboard default) judged against the problem statement you were given" : "Project criteria (dashboard default); no problem statement added"} — academic case study: deployment and real-world utility are not assessed`, criteria };
 }
 
 export function projectWork(project: Project, ownWords: ProjectContext[]): { work: string; ownText: string } {
@@ -33,7 +33,9 @@ export function projectWork(project: Project, ownWords: ProjectContext[]): { wor
     project.description && `Description: ${project.description}`,
     project.languages.length && `Languages: ${project.languages.join(", ")}`,
     project.aiPackages.length && `AI libraries used: ${project.aiPackages.join(", ")}`,
-    project.deployed ? `Deployed: yes, ${project.deployments} production deployments recorded` : "Deployed: no deployment recorded",
+    // Deployment is left out on purpose: these are academic case studies, and hosting limits (not the work)
+    // decide what is deployed.
+    "Context: an academic case-study tool. Real-world users, deployment and commercial utility are not expected.",
     `Activity: ${project.commits} commits by the member across ${project.activeMonths.length} month(s)`,
   ].filter(Boolean).join("\n");
   const ownText = ownWords.map((item) => `${item.title ? `${item.title}\n` : ""}${item.body}`).join("\n\n").slice(0, 20_000);

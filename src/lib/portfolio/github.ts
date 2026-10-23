@@ -96,6 +96,10 @@ export async function collectGithub(token: string, deadline: number, installatio
 export async function refreshGithub(admin: import("@supabase/supabase-js").SupabaseClient, deadline: number): Promise<{ accounts: number; repos: number; errors: number }> {
   const result = { accounts: 0, repos: 0, errors: 0 };
   if (!githubAppCanRefresh()) return result;
+  // Every installation of the app, found with the app's own credentials, so no member needs to reconnect.
+  const { data: owner } = await admin.from("sync_runs").select("user_id").order("started_at", { ascending: false }).limit(1).maybeSingle();
+  const listed = await fetch("https://api.github.com/app/installations?per_page=100", { headers: { authorization: `Bearer ${appJwt()}`, accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28" }, signal: AbortSignal.timeout(15_000) }).then((response) => (response.ok ? response.json() : [])).catch(() => []) as { id: number; account?: { login?: string } }[];
+  if (owner && Array.isArray(listed) && listed.length) await admin.from("github_installations").upsert(listed.map((item) => ({ installation_id: item.id, user_id: owner.user_id, account: item.account?.login ?? "github" })), { onConflict: "installation_id", ignoreDuplicates: true });
   const { data: installs } = await admin.from("github_installations").select("installation_id, user_id, account");
   for (const install of installs ?? []) {
     if (Date.now() > deadline) break;
