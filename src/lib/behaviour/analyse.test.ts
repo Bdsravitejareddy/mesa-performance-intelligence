@@ -24,3 +24,20 @@ describe("behaviour analysis validation", () => {
     expect(result.every((item) => item.status === "not_observed")).toBe(true);
   });
 });
+
+describe("learning from feedback", () => {
+  const sources = [
+    { id: "W1", kind: "graded_work" as const, label: "", text: "From the work: \"Without them (Weeks 4-6), about 213.\"" },
+    { id: "A1", kind: "ai_profile" as const, label: "", text: "Accepted decision-making criticism" },
+    { id: "F1", kind: "official_feedback" as const, label: "", text: "Market sizing is missing." },
+  ];
+  const row = (observations: { sourceId: string; quote: string }[]) => ({ dimensions: [{ dimension: "Learning from feedback", status: "observed", evidenceStrength: "limited", observedBehaviour: "x", observations }] });
+  it("is not observed from self-made work or an assistant's opinion", () => {
+    const result = validateAnalysis(row([{ sourceId: "W1", quote: "Without them (Weeks 4-6), about 213." }, { sourceId: "A1", quote: "Accepted decision-making criticism" }]), sources).find((item) => item.dimension === "Learning from feedback")!;
+    expect(result.status).toBe("not_observed");
+  });
+  it("is observed when faculty feedback is part of the evidence", () => {
+    const result = validateAnalysis(row([{ sourceId: "F1", quote: "Market sizing is missing." }]), sources).find((item) => item.dimension === "Learning from feedback")!;
+    expect(result.status).toBe("observed");
+  });
+});

@@ -745,3 +745,5 @@ html[data-story-enter="from-below"] .main-content{animation:storyDrop .28s cubic
 .cue{position:relative;cursor:help;outline:none;text-decoration:underline dotted rgba(18,20,18,.3);text-underline-offset:3px}
 .mismatch-callout{display:grid;gap:8px;padding:12px 14px;border-radius:12px;background:rgba(199,121,112,.12);border:1px solid rgba(199,121,112,.3)}.mismatch-callout p{margin:0}
 .skills-radar{display:grid;gap:10px;align-content:start}
+.behaviour-lead{font-size:var(--fs-body);line-height:1.6}.behaviour-why{color:var(--ink-2)}
+.competency-evidence.compact q{font-size:var(--fs-note)}

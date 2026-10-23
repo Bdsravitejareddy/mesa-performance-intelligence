@@ -1,9 +1,10 @@
 import { AppShell } from "@/components/app-shell";
+import { Why } from "@/components/why";
 import { AIConsentGate } from "@/components/ai-consent-gate";
 import { ConversationImport, RunBehaviourAnalysis } from "@/components/thinking";
 import { AiProfileImport, type SavedProfile } from "@/components/ai-profile-import";
 import type { AiProfile } from "@/lib/behaviour/ai-profile";
-import { strengthFor, type DimensionAnalysis } from "@/lib/behaviour/analyse";
+import { DIMENSIONS, strengthFor, type DimensionAnalysis } from "@/lib/behaviour/analyse";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cachedRead } from "@/lib/data/cached";
@@ -11,20 +12,15 @@ import { ExpandCard } from "@/components/expand-card";
 
 // The first sentence, kept short: the card is an overview and the full reading opens on click.
 const headline = (text: string) => { const first = text.split(/(?<=[.!?])\s+/)[0] ?? text; return first.length > 200 ? `${first.slice(0, 197).trimEnd()}…` : first; };
-// What kind of evidence would show each pattern, so an empty one says what it is waiting for.
+// What would show each pattern, so an empty one says what it is waiting for.
 const WOULD_SHOW: Record<string, string> = {
-  "First-principles reasoning": "Breaking a problem into its basic drivers (unit economics, causal chain) rather than reasoning by analogy.",
-  "Hypothesis development": "Stating a testable hypothesis before analysing data, then checking it.",
-  "Attention to contradictory evidence": "Noting data that cuts against your conclusion and dealing with it.",
-  "Willingness to revise beliefs": "Changing a recommendation when new evidence arrives, or after feedback.",
-  "Trade-off reasoning": "Weighing options against each other with explicit costs and benefits.",
-  "Decision-making under uncertainty": "Making and justifying a call with incomplete data, with risks named.",
-  "Prioritisation under constraints": "Choosing what to do first given limited time, budget or data, and saying why.",
-  "Reflection and feedback adoption": "A later submission that visibly acts on earlier feedback.",
-  "Problem framing": "Defining the problem, its user and constraints before solving it.",
-  "Assumption identification": "Naming the assumptions an analysis rests on.",
-  "Numerical discipline": "Accurate calculations, consistent units and checked figures.",
-  "Communication of reasoning": "Showing how a conclusion follows from the evidence.",
+  "Framing the problem": "Work that defines the problem, its user and its assumptions before solving it.",
+  "Reasoning from fundamentals": "Breaking a problem into its drivers (unit economics, causal chain) and testing an idea against them.",
+  "Working with numbers": "Calculations and figures that are accurate, consistent and checked.",
+  "Weighing evidence": "Dealing with data that cuts against your conclusion, or changing a view when evidence arrives.",
+  "Making decisions": "A justified choice under incomplete data or limited time, with the trade-offs named.",
+  "Explaining your thinking": "Writing that shows how your conclusion follows from the evidence.",
+  "Learning from feedback": "A later piece of work that visibly acts on feedback a faculty member or reviewer gave on an earlier one.",
 };
 
 export const dynamic = "force-dynamic";
@@ -35,26 +31,32 @@ export default async function ThinkingPage() {
   const data = demoMode || !hasSupabaseConfig() ? null : await load();
   const latest = data?.analyses[0];
   const dimensions = (latest?.dimensions ?? []) as Stored[];
+  const current = dimensions.length > 0 && dimensions.every((item) => (DIMENSIONS as readonly string[]).includes(item.dimension));
   return <AppShell demoMode={demoMode}><div className="section-page">
     <div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> Behavioural & thinking intelligence</div><h1>Thinking & behaviour</h1><p className="page-subtitle">How you approach problems, as tentative hypotheses tied to specific evidence — never personality traits, IQ or diagnoses.</p></div></div>
     {data ? <AIConsentGate purpose="This analysis reads your feedback, evaluations and optional conversation imports with Gemini."><RunBehaviourAnalysis hasConversations={data.imports.length > 0} /></AIConsentGate> : <p className="empty-hint">Connect Supabase first.</p>}
     {latest && <p className="scope-note">Latest analysis {new Date(latest.created_at as string).toLocaleString()} · {latest.provider_model as string} · sources: {Object.entries(latest.source_counts as Record<string, number>).map(([kind, count]) => `${count} ${kind.replaceAll("_", " ")}`).join(", ") || "none"} · {data!.analyses.length} run{data!.analyses.length === 1 ? "" : "s"} kept</p>}
+    {dimensions.length > 0 && !current && <p className="info-callout"><span>The patterns were renamed and simplified; this reading uses the earlier names until the next analysis runs (nightly, or with Run analysis above).</span></p>}
     {dimensions.length > 0 && <>
       <p className="evidence-key"><b>Evidence strength</b> counts the independent sources that show a pattern: <em>limited</em> = one, <em>moderate</em> = two, <em>substantial</em> = three or more. Your assistants&apos; profiles add context but never count towards it.</p>
       <div className="behaviour-grid">{dimensions.filter((item) => item.status === "observed").map((item) => {
         // Independent sources exclude assistant profiles (ids A1, A2…), which add context but never count.
         const independent = new Set(item.observations.map((observation) => observation.sourceId).filter((id) => !/^A\d+$/.test(id))).size;
         const profiles = new Set(item.observations.map((observation) => observation.sourceId).filter((id) => /^A\d+$/.test(id))).size;
-        return <ExpandCard key={item.dimension} title={item.dimension} badge={<span className="competency-state state-emerging">{strengthFor(independent)} evidence</span>} summary={headline(item.hypothesis || item.observedBehaviour)} meta={`${independent} independent source${independent === 1 ? "" : "s"}${profiles ? ` (+${profiles} assistant profile, not counted)` : ""} · ${item.observations.length} quote${item.observations.length === 1 ? "" : "s"}`}>
-          <p><b>Observed:</b> {item.observedBehaviour}</p>
-          {item.hypothesis && <p className="behaviour-hypothesis"><b>Hypothesis:</b> {item.hypothesis}</p>}
-          <h3>Evidence</h3>
-          <ul className="competency-evidence">{item.observations.map((observation) => <li key={`${observation.sourceId}-${observation.quote}`}><q>{observation.quote}</q><small>{observation.label || observation.sourceId}</small></li>)}</ul>
-          {item.possibleExplanations.length > 0 && <><h3>Possible explanations</h3><ul>{item.possibleExplanations.map((explanation) => <li key={explanation}>{explanation}</li>)}</ul></>}
-          {item.context && <p><b>Context:</b> {item.context}</p>}
-          {item.consequences && <p><b>Demonstrated consequence:</b> {item.consequences}</p>}
-          {item.counterevidence && <p><b>Counterevidence:</b> {item.counterevidence}</p>}
-          {(item.wouldConfirm || item.wouldChallenge) && <p className="behaviour-test">{item.wouldConfirm && <><b>Would confirm:</b> {item.wouldConfirm} </>}{item.wouldChallenge && <><b>Would challenge:</b> {item.wouldChallenge}</>}</p>}
+        return <ExpandCard key={item.dimension} title={item.dimension} badge={<span className="competency-state state-emerging">{strengthFor(independent)} evidence</span>} summary={headline(item.overview || item.hypothesis || item.observedBehaviour)} meta={`${independent} independent source${independent === 1 ? "" : "s"}${profiles ? ` (+${profiles} assistant profile, not counted)` : ""}`}>
+          <p className="behaviour-lead">{item.overview || item.observedBehaviour}</p>
+          {item.why && <p className="behaviour-why"><b>Why we think this:</b> {item.why}</p>}
+          <ul className="competency-evidence compact">{item.observations.slice(0, 2).map((observation) => <li key={`${observation.sourceId}-${observation.quote}`}><q>{observation.quote.length > 220 ? `${observation.quote.slice(0, 217)}…` : observation.quote}</q><small>{observation.label || observation.sourceId}</small></li>)}</ul>
+          <Why label="In-depth reasoning">
+            <p><b>What was observed:</b> {item.observedBehaviour}</p>
+            {item.hypothesis && <p className="behaviour-hypothesis"><b>Working hypothesis:</b> {item.hypothesis}</p>}
+            {item.observations.length > 2 && <><h3>All evidence</h3><ul className="competency-evidence">{item.observations.map((observation) => <li key={`all-${observation.sourceId}-${observation.quote}`}><q>{observation.quote}</q><small>{observation.label || observation.sourceId}</small></li>)}</ul></>}
+            {item.possibleExplanations.length > 0 && <><h3>Other possible explanations</h3><ul>{item.possibleExplanations.map((explanation) => <li key={explanation}>{explanation}</li>)}</ul></>}
+            {item.context && <p><b>Context:</b> {item.context}</p>}
+            {item.consequences && <p><b>What it led to:</b> {item.consequences}</p>}
+            {item.counterevidence && <p><b>Evidence the other way:</b> {item.counterevidence}</p>}
+            {(item.wouldConfirm || item.wouldChallenge) && <p className="behaviour-test">{item.wouldConfirm && <><b>Would confirm:</b> {item.wouldConfirm} </>}{item.wouldChallenge && <><b>Would challenge:</b> {item.wouldChallenge}</>}</p>}
+          </Why>
         </ExpandCard>;
       })}</div>
       {dimensions.some((item) => item.status !== "observed") && <section className="content-panel not-observed">

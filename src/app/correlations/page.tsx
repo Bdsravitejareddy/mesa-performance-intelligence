@@ -47,12 +47,18 @@ function patterns(points: Point[]): Pattern[] {
   out.push({ key: "timing", title: "On time vs late", n: timed.length,
     reading: late.length && onTime.length ? `Late work averages ${mean(late)} (${late.length}) against ${mean(onTime)} on time (${onTime.length}).` : late.length ? `Only late submissions have results so far (${late.length}).` : `${onTime.length} on-time submission${onTime.length === 1 ? " has" : "s have"} results; none was late.`,
     detail: [{ label: "On time", value: mean(onTime)?.toString() ?? "—", n: onTime.length }, { label: "Late", value: mean(late)?.toString() ?? "—", n: late.length }], caution: "Uses the official mark where released, otherwise the AI grade. Late penalties, if any, are part of official marks." });
-  const grouped = points.filter((point) => point.group !== null && (point.official ?? point.ai) !== null);
-  const group = grouped.filter((point) => point.group).map((point) => (point.official ?? point.ai)!);
-  const solo = grouped.filter((point) => !point.group).map((point) => (point.official ?? point.ai)!);
-  out.push({ key: "group", title: "Group vs individual work", n: grouped.length,
-    reading: group.length && solo.length ? `Group work averages ${mean(group)} (${group.length}) and individual work ${mean(solo)} (${solo.length}).` : "Needs both group and individual results to compare.",
-    detail: [{ label: "Group", value: mean(group)?.toString() ?? "—", n: group.length }, { label: "Individual", value: mean(solo)?.toString() ?? "—", n: solo.length }], caution: "Group marks reflect the whole team's work." });
+  // Like for like: the same blind grader, compared within each stakes tier, so individual practice tasks are
+  // never set against group term exams.
+  const tierRows = (["exam", "graded", "practice"] as Stakes[]).map((stakes) => {
+    const rows = points.filter((point) => point.stakes === stakes && point.group !== null && point.ai !== null);
+    const group = rows.filter((point) => point.group).map((point) => point.ai!), solo = rows.filter((point) => !point.group).map((point) => point.ai!);
+    return { stakes, group: mean(group), solo: mean(solo), groupN: group.length, soloN: solo.length };
+  });
+  const comparable = tierRows.filter((tier) => tier.groupN && tier.soloN);
+  out.push({ key: "group", title: "Group vs individual work (like for like)", n: tierRows.reduce((sum, tier) => sum + tier.groupN + tier.soloN, 0),
+    reading: comparable.length ? comparable.map((tier) => `${STAKES_LABEL[tier.stakes]}: group ${tier.group} (${tier.groupN}) vs individual ${tier.solo} (${tier.soloN})`).join("; ") + "." : `Not comparable yet: no tier has both group and individual work with AI grades (${tierRows.map((tier) => `${STAKES_LABEL[tier.stakes].toLowerCase()} ${tier.groupN} group / ${tier.soloN} individual`).join(", ")}).`,
+    detail: comparable.flatMap((tier) => [{ label: `${STAKES_LABEL[tier.stakes]} · group`, value: tier.group!.toString(), n: tier.groupN }, { label: `${STAKES_LABEL[tier.stakes]} · individual`, value: tier.solo!.toString(), n: tier.soloN }]),
+    caution: "Compared only within the same tier and grader. Group results reflect the whole team's work, and tiers still differ in task and difficulty." });
   // Calendar order, not alphabetical ("Aug", "Oct", "Sep" would otherwise sort out of sequence).
   const months = [...new Set(points.filter((point) => point.month && (point.official ?? point.ai) !== null).map((point) => point.month!))].sort((a, b) => new Date(`1 ${a}`).getTime() - new Date(`1 ${b}`).getTime());
   const byMonth = months.map((month) => { const values = points.filter((point) => point.month === month && (point.official ?? point.ai) !== null).map((point) => (point.official ?? point.ai)!); return { label: month, value: mean(values)!.toString(), n: values.length }; });

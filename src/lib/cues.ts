@@ -17,6 +17,14 @@ export const CUES: Record<string, string> = {
   "Conscientiousness": "Preference for order, preparation and follow-through.",
   "Emotional stability": "How steady you stay under stress (the opposite pole of neuroticism).",
   "Intellect": "Interest in ideas, abstraction and imagination — interest, not ability.",
+  // Thinking patterns
+  "Framing the problem": "Working out what the real problem is, for whom, and what it assumes, before solving it.",
+  "Reasoning from fundamentals": "Breaking a problem into its basic drivers and forming ideas you can test.",
+  "Working with numbers": "Getting calculations, units and figures right, and checking them.",
+  "Weighing evidence": "Noticing evidence against your view, and changing your mind when it should.",
+  "Making decisions": "Choosing under uncertainty and constraints, with the trade-offs explicit.",
+  "Explaining your thinking": "Making your reasoning easy for someone else to follow.",
+  "Learning from feedback": "Acting on feedback you were given in later work. Self-reflection alone does not count.",
   // Reasoning sections
   "Numerical": "Working accurately with percentages, ratios, growth and probabilities.",
   "Logical": "Following rules, sequences and deductions to what must be true.",
