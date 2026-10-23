@@ -6,13 +6,16 @@ import { loadCompetencyInputs } from "@/lib/competency/load";
 import { buildCompetencyMap } from "@/lib/competency/map";
 import { buildLibrary } from "@/lib/roles/library";
 import { importanceFromLibrary, roleReadiness } from "@/lib/roles/readiness";
-import { STAKES_WEIGHT, stakesOf } from "@/lib/assessments/stakes";
+import { stakesOf } from "@/lib/assessments/stakes";
+import { loadRubric } from "@/lib/settings/rubric";
 import { recommend } from "@/lib/roadmap/prioritise";
 import { toRoadmapInput } from "@/lib/roadmap/load";
 import { courseStanding, type CourseStanding } from "@/lib/insights/course-standing";
 import { inTerm, type TermChoice } from "@/lib/term";
 
-export type OverviewBrief = { headline: string; summary: string; insights: { title: string; detail: string; kind: "strength" | "gap" | "risk" | "opportunity" | "context" }[]; focus: string[] };
+export type OverviewBrief = { headline: string; summary: string; insights: { title: string; detail: string; kind: "strength" | "gap" | "risk" | "opportunity" | "context" }[]; focus: string[];
+  // About you, what changed in the last 30 days, and where you stand on your objectives.
+  about?: string; changes?: { what: string; evidence: string }[]; objectives?: { objective: string; status: "met" | "on_track" | "not_yet"; detail: string }[] };
 
 export type DashboardSnapshot = {
   demoMode: boolean;
@@ -68,6 +71,7 @@ export async function getDashboardSnapshot(client?: SupabaseClient, term: TermCh
   }
 
   const supabase = client ?? await createClient();
+  const rubric = await loadRubric(supabase);
   const [courseResult, assessmentResult, submissionResult, competencyResult, syncResult] = await Promise.all([
     supabase.from("courses").select("id, code, title, term").order("created_at", { ascending: false }),
     supabase.from("assessments").select("id, course_id, title, assessment_format, due_at, official_max_mark"),
@@ -98,7 +102,7 @@ export async function getDashboardSnapshot(client?: SupabaseClient, term: TermCh
       format: assessment?.assessment_format ?? "Assessment",
       // Original LMS maximum; marks entered on the 0–100 scale weigh as 100.
       // Maximum marks times stakes: a term exam counts three times a practice task of the same size.
-      weight: (submission.source_original_max_mark === null || submission.source_original_max_mark === undefined ? 100 : Number(submission.source_original_max_mark)) * STAKES_WEIGHT[stakesOf(assessment?.title ?? "")],
+      weight: (submission.source_original_max_mark === null || submission.source_original_max_mark === undefined ? 100 : Number(submission.source_original_max_mark)) * rubric.stakes[stakesOf(assessment?.title ?? "")],
       courseId: assessment?.course_id ?? "",
     };
   });
@@ -214,6 +218,7 @@ async function loadStandings(supabase: SupabaseClient, courses: { id: string; ti
       gradings: [...latest.entries()].map(([assessment_id, ai_score]) => ({ assessment_id, ai_score })),
       mappings: (mappings.data ?? []) as { assessment_id: string; competency_id: string }[],
       roles: buildLibrary(),
+      rubric: await loadRubric(supabase),
     });
   } catch { return []; }
 }

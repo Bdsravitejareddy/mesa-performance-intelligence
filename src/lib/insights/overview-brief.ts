@@ -12,7 +12,8 @@ const SYSTEM = [
   "Never quote or paraphrase faculty feedback, and never restate a figure without saying what it means.",
   "Standing is the official weighted average; projectedWithAi is only an estimate including AI grades for unmarked work — never present it as the student's mark. Courses assessed via MRS are read against the cohort high (readAgainstCeiling), and courses whose results are expected later are pending, not weak. State evidence limits. A standing is settled only as far as officialShareOfCourseWeight goes: call a gap or strength confirmed only when official marks cover at least half the course weight; otherwise say it rests on the marks released so far. evidenceShareIncludingAiGrades is never a reason to call a result confirmed. A course with little of its weight demonstrated, or a standing that rests partly (basis mixed) or wholly (basis ai) on AI grades rather than official marks, is provisional. Do not speculate about what future marks must be.",
   "Be specific (course names, numbers), calibrated and brief. No flattery, no generic advice.",
-  "Return JSON {\"headline\":string (max 14 words),\"summary\":string (max 2 sentences),\"insights\":[{\"title\":string,\"detail\":string (max 2 sentences),\"kind\":\"strength\"|\"gap\"|\"risk\"|\"opportunity\"|\"context\"}] (3 to 5),\"focus\":[string] (up to 3 concrete next steps)}.",
+  "Also write: about (two sentences on who the person is as a learner and professional, from the personality, AI skill view and thinking patterns given — tentative, no flattery); changes (up to 4 {what, evidence}: what changed in the last 30 days, each naming the figure or record behind it, from last30Days; say plainly if little changed); objectives (up to 4 {objective, status met|on_track|not_yet, detail}: the target roles and course benchmarks, using the figures given). focus is what to work on this week.",
+  "Return JSON {\"headline\":string (max 14 words),\"summary\":string (max 2 sentences),\"insights\":[{\"title\":string,\"detail\":string (max 2 sentences),\"kind\":\"strength\"|\"gap\"|\"risk\"|\"opportunity\"|\"context\"}] (3 to 5),\"focus\":[string] (up to 3 concrete next steps for this week),\"about\":string,\"changes\":[{\"what\":string,\"evidence\":string}],\"objectives\":[{\"objective\":string,\"status\":string,\"detail\":string}]}.",
 ].join(" ");
 
 export async function briefInput(client: SupabaseClient, term: TermChoice) {
@@ -33,6 +34,7 @@ export async function briefInput(client: SupabaseClient, term: TermChoice) {
     readiness: snapshot.insights?.readiness ?? [],
     grading: snapshot.insights?.grading ?? null,
     notSubmitted: await notSubmitted(client),
+    ...(await personContext(client)),
   };
 }
 
@@ -42,7 +44,11 @@ function clean(raw: Record<string, unknown>): OverviewBrief | null {
   const insights = (Array.isArray(raw.insights) ? raw.insights as Record<string, unknown>[] : []).map((item) => ({ title: text(item.title, 120), detail: text(item.detail, 400), kind: (kinds.has(String(item.kind)) ? item.kind : "context") as OverviewBrief["insights"][number]["kind"] })).filter((item) => item.title).slice(0, 5);
   const headline = text(raw.headline, 140);
   if (!headline || !insights.length) return null;
-  return { headline, summary: text(raw.summary, 400), insights, focus: (Array.isArray(raw.focus) ? raw.focus : []).map((item) => text(item, 200)).filter(Boolean).slice(0, 3) };
+  const statuses = new Set(["met", "on_track", "not_yet"]);
+  return { headline, summary: text(raw.summary, 400), insights, focus: (Array.isArray(raw.focus) ? raw.focus : []).map((item) => text(item, 200)).filter(Boolean).slice(0, 3),
+    about: text(raw.about, 400),
+    changes: (Array.isArray(raw.changes) ? raw.changes as Record<string, unknown>[] : []).map((item) => ({ what: text(item.what, 200), evidence: text(item.evidence, 240) })).filter((item) => item.what).slice(0, 4),
+    objectives: (Array.isArray(raw.objectives) ? raw.objectives as Record<string, unknown>[] : []).map((item) => ({ objective: text(item.objective, 120), status: (statuses.has(String(item.status)) ? item.status : "not_yet") as "met" | "on_track" | "not_yet", detail: text(item.detail, 240) })).filter((item) => item.objective).slice(0, 4) };
 }
 
 // Generates (or reuses) the summary for a term; a new one is written only when the figures change.
@@ -69,4 +75,44 @@ async function notSubmitted(client: SupabaseClient): Promise<string[]> {
   const withEvidence = new Set([...(documents.data ?? []), ...(links.data ?? [])].map((row) => row.submission_id as string));
   const submitted = new Set((submissions.data ?? []).filter((row) => row.official_mark !== null || /submit|graded/i.test(String(row.lms_submission_status ?? "")) || /submitted|external/i.test(String((row.page_capture as { status?: string } | null)?.status ?? "")) || withEvidence.has(row.id as string)).map((row) => row.assessment_id as string));
   return (assessments.data ?? []).filter((row) => !submitted.has(row.id as string)).map((row) => row.title as string).slice(0, 30);
+}
+
+// Who the person is and what changed recently, from stored figures only: personality and context readings, the
+// AI skill view, observed thinking patterns, and records dated in the last 30 days against the 30 before.
+async function personContext(client: SupabaseClient) {
+  const day = 86_400_000, now = Date.now();
+  const [personality, skills, behaviour, snapshots, profiles, gradings, submissions, tasks] = await Promise.all([
+    client.from("test_attempts").select("result").eq("kind", "personality").not("submitted_at", "is", null).order("submitted_at", { ascending: false }).limit(1).maybeSingle(),
+    client.from("ai_skill_views").select("domains").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    client.from("behaviour_analyses").select("dimensions").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    client.from("competency_snapshots").select("competency_id, state, recorded_at, reason").gte("recorded_at", new Date(now - 30 * day).toISOString()).order("recorded_at"),
+    client.from("ai_context_reports").select("report").order("created_at", { ascending: false }).limit(3),
+    client.from("submission_gradings").select("submission_id, ai_score, created_at").order("created_at", { ascending: false }),
+    client.from("submissions").select("id, submitted_at, page_capture"),
+    client.from("weekly_tasks").select("week_start, done_at").gte("week_start", new Date(now - 30 * day).toISOString().slice(0, 10)),
+  ]);
+  const factors = (personality.data?.result as { factors?: Record<string, { score: number }> } | null)?.factors ?? null;
+  const skillView = Object.entries((skills.data?.domains ?? {}) as Record<string, { score: number | null; confidence: string }>).filter(([, value]) => value.score !== null).sort((a, b) => b[1].score! - a[1].score!);
+  const observed = ((behaviour.data?.dimensions ?? []) as { dimension: string; status: string; overview?: string }[]).filter((row) => row.status === "observed").map((row) => ({ pattern: row.dimension, overview: (row.overview ?? "").slice(0, 200) }));
+  // Grades of work submitted in each window (latest grading per submission), so a change compares like with like.
+  const submittedAt = new Map((submissions.data ?? []).map((row) => [row.id as string, (row.page_capture as { submittedAt?: string } | null)?.submittedAt ?? (row.submitted_at as string | null)]));
+  const seen = new Set<string>(); const recent: number[] = []; const before: number[] = [];
+  for (const row of gradings.data ?? []) {
+    if (seen.has(row.submission_id as string) || row.ai_score === null) continue;
+    seen.add(row.submission_id as string);
+    const when = Date.parse(String(submittedAt.get(row.submission_id as string) ?? "").replace(/^[A-Za-z]+day,\s*/, "").replace(" ·", ""));
+    if (!Number.isFinite(when)) continue;
+    (now - when <= 30 * day ? recent : now - when <= 60 * day ? before : []).push(Number(row.ai_score));
+  }
+  const mean = (values: number[]) => (values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : null);
+  const changedCompetencies = [...new Set((snapshots.data ?? []).filter((row) => !/rules/i.test(String(row.reason ?? ""))).map((row) => `${row.competency_id}: ${row.state}`))].slice(0, 12);
+  return {
+    person: { personality: factors ? Object.fromEntries(Object.entries(factors).map(([factor, value]) => [factor, value.score])) : null, aiSkillView: { strongest: skillView.slice(0, 3).map(([domain, value]) => `${domain} ${value.score}`), weakest: skillView.slice(-2).map(([domain, value]) => `${domain} ${value.score}`) }, thinkingPatterns: observed.slice(0, 7) },
+    last30Days: {
+      blindGradesOfWorkSubmitted: { last30: { mean: mean(recent), n: recent.length }, previous30: { mean: mean(before), n: before.length } },
+      competencyChanges: changedCompetencies,
+      assistantProfileChanges: (profiles.data ?? []).flatMap((row) => ((row.report as { changes?: { what: string; when: string }[] }).changes ?? []).map((change) => `${change.when}: ${change.what}`)).slice(0, 6),
+      weeklyTasks: { done: (tasks.data ?? []).filter((row) => row.done_at).length, set: (tasks.data ?? []).length },
+    },
+  };
 }

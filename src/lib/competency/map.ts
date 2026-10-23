@@ -13,7 +13,7 @@ export type CompetencyDomain = { key: string; name: string; competencies: Compet
 
 export type TestEvidence = { id: string; submitted_at: string; result: { sections?: Record<string, { correct: number; total: number; percent: number }> } };
 
-export function buildCompetencyMap(input: { competencies: CompetencyRow[]; mappings: MappingRow[]; assessments: AssessmentRow[]; submissions: SubmissionRow[]; courses: CourseRow[]; tests?: TestEvidence[]; gradings?: { assessment_id: string; ai_score: number | string | null; created_at: string }[] }, now: Date = new Date()): CompetencyDomain[] {
+export function buildCompetencyMap(input: { competencies: CompetencyRow[]; mappings: MappingRow[]; assessments: AssessmentRow[]; submissions: SubmissionRow[]; courses: CourseRow[]; tests?: TestEvidence[]; gradings?: { assessment_id: string; ai_score: number | string | null; created_at: string }[]; rubric?: { bands: { high: number; low: number } } }, now: Date = new Date()): CompetencyDomain[] {
   // The latest blind AI grade per assessment (inputs arrive newest first).
   const aiGrade = new Map<string, { score: number; date: string }>();
   for (const row of input.gradings ?? []) if (row.ai_score !== null && !aiGrade.has(row.assessment_id)) aiGrade.set(row.assessment_id, { score: Number(row.ai_score), date: row.created_at });
@@ -68,7 +68,7 @@ export function buildCompetencyMap(input: { competencies: CompetencyRow[]; mappi
   const domains = new Map<string, CompetencyDomain>();
   for (const competency of [...input.competencies].sort((a, b) => a.sort_order - b.sort_order)) {
     const domain = domains.get(competency.domain_key) ?? { key: competency.domain_key, name: competency.domain_name, competencies: [] };
-    domain.competencies.push({ ...competency, assessment: classifyCompetency(evidenceByCompetency.get(competency.id) ?? [], now), mappedAssessments: mappedCount.get(competency.id) ?? 0 });
+    domain.competencies.push({ ...competency, assessment: classifyCompetency(evidenceByCompetency.get(competency.id) ?? [], now, input.rubric?.bands), mappedAssessments: mappedCount.get(competency.id) ?? 0 });
     domains.set(competency.domain_key, domain);
   }
   return [...domains.values()];

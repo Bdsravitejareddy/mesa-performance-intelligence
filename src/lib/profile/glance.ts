@@ -48,9 +48,10 @@ export async function loadGlance(supabase: SupabaseClient): Promise<Glance> {
   const reasoningRows = [...perLevel.values()];
   const reasoningScore = reasoningRows.length ? Math.round(reasoningRows.reduce((sum, row) => sum + (row.correct / row.total) * 100, 0) / reasoningRows.length) : null;
   try {
-    const domains = buildCompetencyMap(await loadCompetencyInputs(supabase));
-    const marked = markedView(domains);
-    skills = domains.map((domain) => { const view = marked.get(domain.name) ?? { score: null, evidence: 0 }; const ai = aiDomains[domain.name] ?? null; return { domain: domain.name, marked: view.score, markedEvidence: view.evidence, ai, holistic: holistic(view, ai, reasoningScore, domain.name) }; });
+    const inputs = await loadCompetencyInputs(supabase);
+    const domains = buildCompetencyMap(inputs);
+    const marked = markedView(domains, inputs.rubric);
+    skills = domains.map((domain) => { const view = marked.get(domain.name) ?? { score: null, evidence: 0 }; const ai = aiDomains[domain.name] ?? null; return { domain: domain.name, marked: view.score, markedEvidence: view.evidence, ai, holistic: holistic(view, ai, reasoningScore, domain.name, inputs.rubric) }; });
   } catch { skills = []; }
 
   const dimensions = ((behaviour.data?.dimensions ?? []) as Glance["behaviour"]["dimensions"]);

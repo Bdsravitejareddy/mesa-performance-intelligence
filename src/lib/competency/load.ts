@@ -1,9 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AssessmentRow, CompetencyRow, CourseRow, MappingRow, SubmissionRow } from "./map";
+import { loadRubric, type Rubric } from "@/lib/settings/rubric";
 
 export type TestRow = { id: string; submitted_at: string; result: { sections?: Record<string, { correct: number; total: number; percent: number }> } };
 export type GradeRow = { assessment_id: string; ai_score: number | string | null; created_at: string };
-export type CompetencyInputs = { competencies: CompetencyRow[]; mappings: MappingRow[]; assessments: AssessmentRow[]; submissions: SubmissionRow[]; courses: CourseRow[]; tests?: TestRow[]; gradings?: GradeRow[] };
+export type CompetencyInputs = { rubric?: Rubric; competencies: CompetencyRow[]; mappings: MappingRow[]; assessments: AssessmentRow[]; submissions: SubmissionRow[]; courses: CourseRow[]; tests?: TestRow[]; gradings?: GradeRow[] };
 
 // Shared by the competency page, mapping updates and the scheduled sync so every caller classifies the same records.
 export async function loadCompetencyInputs(supabase: SupabaseClient): Promise<CompetencyInputs> {
@@ -18,9 +19,11 @@ export async function loadCompetencyInputs(supabase: SupabaseClient): Promise<Co
     // Blind AI grades stand in, labelled, only where an assessment has no official mark.
     supabase.from("submission_gradings").select("assessment_id, ai_score, created_at").eq("ai_status", "complete").not("ai_score", "is", null).order("created_at", { ascending: false }),
   ]);
+  const rubric = await loadRubric(supabase);
   const error = competencies.error ?? mappings.error ?? assessments.error ?? submissions.error ?? courses.error;
   if (error) throw new Error("Could not load competency evidence. Check that the competency framework migration is applied.");
   return {
+    rubric,
     competencies: (competencies.data ?? []) as CompetencyRow[],
     mappings: (mappings.data ?? []) as MappingRow[],
     assessments: (assessments.data ?? []) as AssessmentRow[],

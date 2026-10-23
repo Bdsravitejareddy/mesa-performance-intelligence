@@ -51,8 +51,15 @@ export function DashboardView({ data, name = "there", glance = null }: { data: D
 
       {!data.demoMode && <WeeklyQuest name={name} suggestions={[...(brief?.focus ?? []).map((title) => ({ title: title.slice(0, 200), reason: "From your AI summary" })), ...(data.insights?.focus ?? []).map((item) => ({ title: item.title.slice(0, 200), reason: item.why.slice(0, 300) }))]} />}
 
+      {brief && (brief.about || brief.changes?.length || brief.objectives?.length) ? <section className="you-summary" aria-label="About you">
+        {brief.about && <article className="you-card"><span className="eyebrow"><span className="eyebrow-line" /> About you</span><p>{brief.about}</p></article>}
+        {brief.changes && brief.changes.length > 0 && <article className="you-card"><span className="eyebrow"><span className="eyebrow-line" /> Your last 30 days</span><ul>{brief.changes.map((item) => <li key={item.what}><strong>{item.what}</strong><small>{item.evidence}</small></li>)}</ul></article>}
+        {brief.objectives && brief.objectives.length > 0 && <article className="you-card"><span className="eyebrow"><span className="eyebrow-line" /> Your objectives</span><ul>{brief.objectives.map((item) => <li key={item.objective}><span className={`objective-status status-${item.status}`}>{item.status === "met" ? "met" : item.status === "on_track" ? "on track" : "not yet"}</span><strong>{item.objective}</strong><small>{item.detail}</small></li>)}</ul></article>}
+      </section> : null}
+      {brief && brief.focus.length > 0 && <section className="brief-focus this-week"><span className="eyebrow"><span className="eyebrow-line" /> Focus this week</span><ol>{brief.focus.map((item) => <li key={item}>{item}</li>)}</ol></section>}
+
       {brief && <section className="brief-insights" aria-label="Insights">{brief.insights.map((item) => <article key={item.title} className={`brief-card kind-${item.kind}`}><span className="brief-kind">{item.kind}</span><h3>{item.title}</h3><p>{item.detail}</p></article>)}</section>}
-      {brief && brief.focus.length > 0 && <section className="brief-focus"><span className="eyebrow"><span className="eyebrow-line" /> Focus next</span><ol>{brief.focus.map((item) => <li key={item}>{item}</li>)}</ol><small>AI-written from the figures below · {data.brief?.model} · {new Date(data.brief!.createdAt).toLocaleString()}</small></section>}
+      {brief && <small className="scope-note brief-source">AI-written from the figures on this page · {data.brief?.model} · {new Date(data.brief!.createdAt).toLocaleString()}</small>}
 
       {glance && <ProfileGlance glance={glance} />}
 

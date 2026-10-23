@@ -5,6 +5,7 @@ import {
   FileCheck2,
   LayoutDashboard,
   Network,
+  Scale,
   ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
@@ -64,7 +65,13 @@ export const groups: Act[] = [
     label: "Tools",
     act: "Act III · Sharpen",
     tone: "dusk",
-    links: [section("Quality checker", ShieldCheck, "A blind evaluation of your work before you submit.", [{ href: "/quality-check", label: "Quality checker", blurb: "A blind evaluation of your work before you submit." }])],
+    links: [
+      section("Quality checker", ShieldCheck, "A blind evaluation of your work before you submit.", [{ href: "/quality-check", label: "Quality checker", blurb: "A blind evaluation of your work before you submit." }]),
+      section("How it works", Scale, "How every figure is derived, and the weights behind it.", [
+        { href: "/methodology", label: "Methodology", blurb: "Where every figure comes from and how far to trust it." },
+        { href: "/rubric", label: "Rubric & weights", blurb: "Every weight and benchmark, editable." },
+      ]),
+    ],
   },
 ];
 

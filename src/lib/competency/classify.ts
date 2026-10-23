@@ -64,23 +64,26 @@ export const STATE_LABELS: Record<CompetencyState, string> = {
 
 const BENCHMARK = `Criteria-based bands on the official 0–100 scale: ${HIGH_RESULT} or above is a high result, below ${LOW_RESULT} is a low result. No cohort ranking or percentile is used.`;
 
-export function bandFor(mark: number | null): EvidenceRow["band"] {
+export type Bands = { high: number; low: number };
+export function bandFor(mark: number | null, bands: Bands = { high: HIGH_RESULT, low: LOW_RESULT }): EvidenceRow["band"] {
   if (mark === null || !Number.isFinite(mark)) return "unscored";
-  if (mark >= HIGH_RESULT) return "high";
-  if (mark < LOW_RESULT) return "low";
+  if (mark >= bands.high) return "high";
+  if (mark < bands.low) return "low";
   return "middle";
 }
 
-export function classifyCompetency(input: CompetencyEvidence[], now: Date = new Date()): CompetencyAssessment {
-  const result = classifyRaw(input, now);
+export function classifyCompetency(input: CompetencyEvidence[], now: Date = new Date(), bands?: Bands): CompetencyAssessment {
+  const result = classifyRaw(input, now, bands ?? { high: HIGH_RESULT, low: LOW_RESULT });
   const scored = result.why.evidence.filter((row) => row.band !== "unscored");
   if (scored.length && scored.every((row) => row.evidenceKind === "ai_grade")) return { ...result, headline: `From AI grading only: ${result.headline.charAt(0).toLowerCase()}${result.headline.slice(1)}` };
   return result;
 }
 
-function classifyRaw(input: CompetencyEvidence[], now: Date): CompetencyAssessment {
+function classifyRaw(input: CompetencyEvidence[], now: Date, bands: Bands): CompetencyAssessment {
+  const HIGH_RESULT = bands.high, LOW_RESULT = bands.low;
+  const BENCHMARK = `Criteria-based bands on the official 0–100 scale: ${HIGH_RESULT} or above is a high result, below ${LOW_RESULT} is a low result (set on the Rubric & weights page). No cohort ranking or percentile is used.`;
   // Suggested AI mappings are never evidence; only accepted mappings reach this function, but guard anyway.
-  const evidence: EvidenceRow[] = input.map((item) => ({ ...item, band: bandFor(item.mark) }));
+  const evidence: EvidenceRow[] = input.map((item) => ({ ...item, band: bandFor(item.mark, bands) }));
   // Graded work and exams decide the classification when they exist; practice work is shown but only counts
   // when nothing graded covers this competency, because effort on ungraded practice is usually lower.
   const allScored = latestPerAssessment(evidence.filter((item) => item.band !== "unscored"));

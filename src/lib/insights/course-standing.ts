@@ -15,6 +15,7 @@ export type StandingInput = {
   gradings: { assessment_id: string; ai_score: number | null }[];
   mappings: { assessment_id: string; competency_id: string }[];
   roles: LibraryRole[];
+  rubric?: { stakes: Record<"exam" | "graded" | "practice", number>; roleThresholds: Record<Relevance, number> };
 };
 
 export type RoleView = { role: string; relevance: Relevance; overlap: number; threshold: number; verdict: Verdict; why: string };
@@ -58,7 +59,8 @@ export function courseStanding(input: StandingInput): CourseStanding[] {
     const marks = input.marks.filter((row) => ids.has(row.assessment_id));
     const gradings = input.gradings.filter((row) => ids.has(row.assessment_id) && row.ai_score !== null);
     // Term exams count three times practice work, on top of their maximum marks (see stakes.ts).
-    const stakesWeight = (id: string) => { const title = assessments.find((row) => row.id === id)?.title; return title ? STAKES_WEIGHT[stakesOf(title)] : STAKES_WEIGHT.graded; };
+    const weights = input.rubric?.stakes ?? STAKES_WEIGHT;
+    const stakesWeight = (id: string) => { const title = assessments.find((row) => row.id === id)?.title; return title ? weights[stakesOf(title)] : weights.graded; };
     const weightOf = (id: string) => (Number(assessments.find((row) => row.id === id)?.official_max_mark ?? 100) || 100) * stakesWeight(id);
     const totalWeight = assessments.reduce((sum, row) => sum + weightOf(row.id), 0);
     const evidencedIds = new Set([...marks.map((row) => row.assessment_id), ...gradings.map((row) => row.assessment_id)]);
@@ -81,7 +83,7 @@ export function courseStanding(input: StandingInput): CourseStanding[] {
     const roleViews: RoleView[] = roles.map((role) => {
       const share = overlap(course.id, role.required);
       const relevance: Relevance = share >= 0.2 || topThree.get(role.name)?.has(course.id) ? "core" : share > 0 ? "supporting" : "peripheral";
-      const threshold = ROLE_THRESHOLDS[relevance];
+      const threshold = (input.rubric?.roleThresholds ?? ROLE_THRESHOLDS)[relevance];
       const verdict: Verdict = relative === null ? (context?.expected ? "awaiting_results" : "not_yet_evidenced") : relative >= threshold ? "sufficient" : "needs_work";
       const assessedSkills = [...role.required].filter((id) => (competenciesOf.get(course.id) ?? new Set()).has(id)).length;
       const why = relevance === "core"

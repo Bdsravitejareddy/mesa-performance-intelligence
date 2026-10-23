@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { requestJsonFromProvider } from "@/lib/ai/provider";
 import { getAIProcessingConfig, isAIConsentCurrent } from "@/lib/ai/consent";
 import { gatherSources, type Source } from "@/lib/behaviour/analyse";
-import { STAKES_WEIGHT } from "@/lib/assessments/stakes";
+import { DEFAULT_RUBRIC, type Rubric } from "@/lib/settings/rubric";
 import type { CompetencyDomain } from "@/lib/competency/map";
 
 // Three views of each skill domain, kept separate so they can be compared:
@@ -15,11 +15,11 @@ export type SkillView = { domain: string; marked: number | null; markedEvidence:
 
 const round = (value: number) => Math.round(value);
 
-export function markedView(domains: CompetencyDomain[]): Map<string, { score: number | null; evidence: number }> {
+export function markedView(domains: CompetencyDomain[], rubric: Rubric = DEFAULT_RUBRIC): Map<string, { score: number | null; evidence: number }> {
   return new Map(domains.map((domain) => {
     // One row per assessment and competency; practice reasoning tests are kept for the holistic view.
     const rows = domain.competencies.flatMap((entry) => entry.assessment.why.evidence.filter((row) => row.mark !== null && row.mappingSource !== "practice_test"));
-    const weight = (row: (typeof rows)[number]) => STAKES_WEIGHT[row.stakes ?? "graded"] * (row.evidenceKind === "ai_grade" ? 0.8 : 1);
+    const weight = (row: (typeof rows)[number]) => rubric.stakes[row.stakes ?? "graded"] * (row.evidenceKind === "ai_grade" ? rubric.aiGradeFactor : 1);
     const total = rows.reduce((sum, row) => sum + weight(row), 0);
     return [domain.name, { score: total ? round(rows.reduce((sum, row) => sum + row.mark! * weight(row), 0) / total) : null, evidence: rows.length }];
   }));
@@ -29,11 +29,11 @@ const CONFIDENCE_WEIGHT = { high: 1, medium: 0.75, low: 0.5 } as const;
 
 // Marked evidence carries more weight the more of it there is; the AI view by its confidence; reasoning tests a
 // fixed small share of analytical reasoning only. Missing views drop out rather than counting as zero.
-export function holistic(marked: { score: number | null; evidence: number }, ai: AiDomain | null, reasoning: number | null, domain: string): number | null {
+export function holistic(marked: { score: number | null; evidence: number }, ai: AiDomain | null, reasoning: number | null, domain: string, rubric: Rubric = DEFAULT_RUBRIC): number | null {
   const parts: [number, number][] = [];
-  if (marked.score !== null) parts.push([marked.score, 0.6 * Math.min(1, 0.4 + marked.evidence * 0.15)]);
-  if (ai?.score !== null && ai?.score !== undefined) parts.push([ai.score, 0.4 * CONFIDENCE_WEIGHT[ai.confidence]]);
-  if (reasoning !== null && domain === "Analytical reasoning") parts.push([reasoning, 0.15]);
+  if (marked.score !== null) parts.push([marked.score, rubric.quantShare * Math.min(1, 0.4 + marked.evidence * 0.15)]);
+  if (ai?.score !== null && ai?.score !== undefined) parts.push([ai.score, (1 - rubric.quantShare) * CONFIDENCE_WEIGHT[ai.confidence]]);
+  if (reasoning !== null && domain === "Analytical reasoning") parts.push([reasoning, rubric.reasoningShare]);
   const total = parts.reduce((sum, [, weight]) => sum + weight, 0);
   return total ? round(parts.reduce((sum, [value, weight]) => sum + value * weight, 0) / total) : null;
 }
