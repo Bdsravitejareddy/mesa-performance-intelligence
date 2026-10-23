@@ -68,7 +68,7 @@ export default async function GradingPage() {
         <div className="grade-figures">
           <Figure label="Official" value={row.official_mark} />
           <Figure label="AI" value={row.ai_score} note={row.ai_status === "complete" ? undefined : row.ai_status === "skipped" ? "not run" : "retrying"} />
-          <Figure label="Code" value={row.code_score} note={row.code_report?.completeness !== undefined && row.code_report?.completeness !== null ? `${row.code_report.parts?.filter((part) => part.answered).length}/${row.code_report.parts?.length} parts` : undefined} />
+          <Figure label="Code" value={row.code_score} note={row.code_report?.completeness !== undefined && row.code_report?.completeness !== null ? `${row.code_report.parts?.filter((part) => part.answered).length}/${row.code_report.parts?.length} parts` : row.code_score === null ? "nothing to tick off" : undefined} />
         </div>
         {row.comparison && (row.comparison.agreed.length > 0 || row.comparison.facultyOnly.length > 0) && <p className="grade-insight">{insightLine(row.comparison)}</p>}
         {row.comparison?.documents && row.comparison.documents.length > 1 && <div className="doc-scores">{row.comparison.documents.map((doc) => <span key={doc.name}><strong>{doc.name}</strong> code {fmt(doc.code)}{doc.ai !== null ? ` · AI ${fmt(doc.ai)}` : ""}</span>)}</div>}

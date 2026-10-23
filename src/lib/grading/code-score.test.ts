@@ -61,4 +61,8 @@ describe("completeness against the brief", () => {
     const work = "Sheet: Answers\nBLR | Deluxe\nFormulas used: LEFT, MID, SUBSTITUTE (40 formula cells)\nFormula B2 =LEFT(Q1,3)\nFormula Q9 =MID(A2,4,2)";
     expect(completeness(work, sheetBrief).parts.map((part) => part.how)).toEqual(["formula", "formula", "missing"]);
   });
+  it("reads tasks from a brief written as bullets or instructions, skipping submission logistics", () => {
+    const brief = "Assignment brief\n- Identify three business metrics that matter for the client's growth.\n- Explain which framework fits the problem and justify the choice.\nRecommend one priority action with expected impact.\nSubmit as a PDF before the deadline.";
+    expect(briefParts(brief).map((part) => part.label)).toEqual(["Task 1", "Task 2", "Task 3"]);
+  });
 });

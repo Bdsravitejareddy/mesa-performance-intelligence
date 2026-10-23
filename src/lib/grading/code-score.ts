@@ -3,7 +3,7 @@ import { verifyArithmeticStatements, type ArithmeticCheck } from "@/lib/scoring"
 // A deterministic score: how much of each rubric criterion and of the relevant course material the work
 // addresses. It measures coverage, not quality or correctness of reasoning; the same work always gets the
 // same score, and every point can be traced to a matched term.
-export const CODE_RULES_VERSION = "code-completeness-v3";
+export const CODE_RULES_VERSION = "code-completeness-v4";
 export const FULL_COVERAGE = 0.6; // a criterion counts as fully addressed when 60% of its key terms appear
 const RUBRIC_SHARE = 0.8;
 const COURSE_SHARE = 0.2;
@@ -108,8 +108,23 @@ export function briefParts(brief: string): { label: string; text: string; keywor
     parts.push({ label, text, keywords: keyTerms(text, 6) });
     if (parts.length >= 20) break;
   }
-  return parts;
+  if (parts.length >= 2) return parts;
+  // Briefs written as bullets or instructions ("Identify three metrics…") have no numbers: each task line is a part.
+  const tasks: { label: string; text: string; keywords: string[] }[] = [];
+  for (const line of brief.split(/\n+/)) {
+    const text = line.replace(/^\s*(?:[-•*▪●◦]|\d+[.)])\s*/, "").trim();
+    const bullet = text !== line.trim();
+    if (text.length < 15 || text.length > 300 || LOGISTICS.test(text)) continue;
+    if (!bullet && !TASK_VERB.test(text)) continue;
+    const keywords = keyTerms(text, 6);
+    if (keywords.length < 2) continue;
+    tasks.push({ label: `Task ${tasks.length + 1}`, text, keywords });
+    if (tasks.length >= 12) break;
+  }
+  return tasks.length >= 2 ? tasks : parts;
 }
+const TASK_VERB = /^(identify|explain|analy[sz]e|describe|calculate|compute|compare|recommend|choose|select|list|create|build|prepare|map|apply|evaluate|assess|discuss|justify|propose|define|outline|draw|design|estimate|summari[sz]e|suggest|present|develop|construct|rank|prioriti[sz]e|interpret|reflect|use)\b/i;
+const LOGISTICS = /\b(submit|upload|deadline|due|file ?name|naming|word limit|font|pdf|docx|plagiaris|late submission|turnitin|format of)\b/i;
 
 function labelPattern(label: string): RegExp {
   const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s*");
@@ -154,8 +169,10 @@ export function completeness(work: string, brief: string): { score: number | nul
 export function codeGradeV2(work: string, criteria: CriterionInput[], courseExcerpts: string[], brief: string): { score: number | null; report: CodeReport } {
   const base = codeGrade(work, criteria, courseExcerpts);
   const check = completeness(work, brief);
+  // Without tasks to tick off there is nothing objective to check: word overlap with the criteria says little
+  // about the work, so no code score is given and only the AI's judgement applies.
   if (check.score === null || base.score === null) {
-    return { score: base.score, report: { ...base.report, rulesVersion: CODE_RULES_VERSION, parts: [], completeness: null } };
+    return { score: null, report: { ...base.report, rulesVersion: CODE_RULES_VERSION, parts: [], completeness: null, method: "The brief doesn't list separate questions or tasks, so the code check has nothing to tick off and gives no score. Only the AI's judgement applies here." } };
   }
   let score = 0.75 * check.score + 0.25 * base.score;
   const adjustments = [...base.report.adjustments];
@@ -164,6 +181,6 @@ export function codeGradeV2(work: string, criteria: CriterionInput[], courseExce
   return {
     score: round1(Math.max(0, Math.min(100, score))),
     report: { ...base.report, rulesVersion: CODE_RULES_VERSION, parts: check.parts, completeness: check.score, adjustments,
-      method: `Completeness: ${check.parts.filter((part) => part.answered).length} of ${check.parts.length} parts the brief asks for are answered (by matching label, by using the spreadsheet functions they name, or most of their distinctive words) — 75% of the score; criterion coverage — 25%. It checks that everything asked was attempted, not whether answers are correct; the AI and official marks judge quality.` },
+      method: `The code check ticks off what the brief asks for: ${check.parts.filter((part) => part.answered).length} of ${check.parts.length} questions or tasks were found answered — by their label, by using the spreadsheet functions they name, or by covering most of their key words. That makes up 75% of its score; the other 25% is how much of each criterion's key vocabulary appears. It checks that everything was attempted, not whether the answers are right — that is what the AI and your faculty judge.` },
   };
 }
