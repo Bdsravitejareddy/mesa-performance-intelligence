@@ -12,6 +12,7 @@ import { GuidedTour, tourSeen } from "@/components/guided-tour";
 import { GlassBackdrop } from "@/components/glass-backdrop";
 import { useEdgeReveal } from "@/components/edge-reveal";
 import { TermSwitch } from "@/components/term-switch";
+import { JokeOfTheDay } from "@/components/joke-of-the-day";
 
 
 export function AppShell({ children, demoMode }: { children: React.ReactNode; demoMode: boolean }) {
@@ -79,6 +80,7 @@ export function AppShell({ children, demoMode }: { children: React.ReactNode; de
       <div className="main-column">
         <header className="topbar">
           <div className="breadcrumb"><span>Performance intelligence</span><span className="crumb-divider">/</span><strong>{pageTitle(pathname)}</strong></div>
+          <JokeOfTheDay />
           <div className="topbar-actions">
             <TermSwitch />
             <button className="search-trigger" data-tour="search" type="button" aria-label="Open command palette" onClick={() => setPaletteOpen(true)}><Search size={16} /><span>Search or run…</span><kbd>⌘ K</kbd></button>
