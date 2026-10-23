@@ -20,9 +20,11 @@ export async function GET(request: NextRequest) {
   try {
     const { userId } = await requireWorkspaceMember();
     const token = await exchangeCode(code);
-    const { rows } = await collectGithub(token, Date.now() + 90_000);
+    const { login, rows } = await collectGithub(token, Date.now() + 90_000);
     const supabase = await createClient();
     if (rows.length) {
+      // A fresh import replaces this account's earlier records, so nothing is counted twice.
+      await supabase.from("portfolio_items").delete().eq("source", "github").eq("account", login);
       const { error } = await supabase.from("portfolio_items").upsert(rows.map((row) => ({ ...row, user_id: userId, collected_at: new Date().toISOString() })), { onConflict: "source,external_id" });
       if (error) return back("github=save_failed");
     }
