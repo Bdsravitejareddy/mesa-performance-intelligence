@@ -5,7 +5,7 @@ import { getAIProcessingConfig, isAIConsentCurrent } from "@/lib/ai/consent";
 import { resolveProviderSettings } from "@/lib/ai/settings";
 import { retrieveRelevantReferences } from "@/lib/ai/retrieval";
 import { requestJsonFromProvider } from "@/lib/ai/provider";
-import { blindEvaluate, parseCriteria, PROVENANCE_LABELS, resolveStandard, type Standard, type WorkKind } from "@/lib/quality/engine";
+import { BLIND_PROMPT_VERSION, blindEvaluate, parseCriteria, PROVENANCE_LABELS, resolveStandard, type Standard, type WorkKind } from "@/lib/quality/engine";
 import { CODE_RULES_VERSION, codeGradeV2 } from "./code-score";
 import { compareWithFeedback } from "./compare";
 import { differenceReasons } from "./reasons";
@@ -115,14 +115,14 @@ export async function gradeSubmissions(client: SupabaseClient, budgetMs: number,
     const refs = await retrieveRelevantReferences(client, assessment.course_id, assessment.id, `${assessment.title} ${standard.criteria.map((criterion) => criterion.name).join(" ")} ${text.slice(0, 3000)}`).catch(() => []);
     const official = submission.official_mark === null ? null : Number(submission.official_mark);
     const feedback = submission.official_feedback ?? "";
-    const inputHash = createHash("sha256").update(JSON.stringify({ text, standard, brief: assessment.brief ?? "", refs: refs.map((ref) => ref.key + ref.excerpt.length), official, feedback, rules: CODE_RULES_VERSION })).digest("hex");
+    const inputHash = createHash("sha256").update(JSON.stringify({ text, standard, brief: assessment.brief ?? "", refs: refs.map((ref) => ref.key + ref.excerpt.length), official, feedback, rules: CODE_RULES_VERSION, prompt: BLIND_PROMPT_VERSION })).digest("hex");
     if (done.has(`${submission.id}:${inputHash}`)) { outcomes.push({ submissionId: submission.id, assessment: assessment.title, status: "unchanged", note: "Already graded with these inputs." }); return; }
 
     const code = codeGradeV2(text, standard.criteria, refs.map((ref) => ref.excerpt), assessment.brief ?? "");
     let aiReport: Awaited<ReturnType<typeof blindEvaluate>> | null = null;
     let aiStatus: "complete" | "failed" | "skipped" = "skipped";
     let note = aiAllowed ? "" : "AI grading needs the current AI consent for this account; only the code score was computed.";
-    const aiHash = createHash("sha256").update(JSON.stringify({ text, standard, brief: assessment.brief ?? "" })).digest("hex");
+    const aiHash = createHash("sha256").update(JSON.stringify({ text, standard, brief: assessment.brief ?? "", prompt: BLIND_PROMPT_VERSION })).digest("hex");
     const reusable = previousAi.get(submission.id);
     if (visualsUnread) note = `${note} Images and charts in the submitted file were not read; only its text was graded.`.trim();
     if (reusable && reusable.aiHash === aiHash) { aiReport = reusable.report; aiStatus = "complete"; }
