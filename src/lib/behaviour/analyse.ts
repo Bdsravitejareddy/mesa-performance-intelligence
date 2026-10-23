@@ -9,7 +9,7 @@ export const DIMENSIONS = [
   "Decision-making under uncertainty", "Prioritisation under constraints", "Reflection and feedback adoption",
 ] as const;
 
-export type Source = { id: string; kind: "official_feedback" | "quality_check" | "evaluation_finding" | "own_ai_conversation" | "self_report" | "reasoning_test" | "ai_profile"; label: string; text: string };
+export type Source = { id: string; kind: "official_feedback" | "quality_check" | "evaluation_finding" | "own_ai_conversation" | "self_report" | "reasoning_test" | "ai_profile" | "graded_work"; label: string; text: string };
 export type Observation = { sourceId: string; quote: string; verified: boolean };
 export type DimensionAnalysis = {
   dimension: string;
@@ -48,6 +48,18 @@ export async function gatherSources(supabase: SupabaseClient, options: { include
     const messages = (Array.isArray(row.user_messages) ? row.user_messages as { text: string }[] : []).slice(-150);
     if (messages.length) sources.push({ id: `C${index + 1}`, kind: "own_ai_conversation", label: `Your AI conversations · ${row.title}`, text: messages.map((message) => message.text).join("\n---\n").slice(0, 12000) });
   }
+  // Submitted work, through its blind grading: verbatim quotes from the work (verified when it was graded), with
+  // the grader's strengths and issues labelled as model judgements. The latest grading per submission only.
+  const { data: gradings } = await supabase.from("submission_gradings").select("submission_id, assessment_id, ai_report, created_at").eq("ai_status", "complete").order("created_at", { ascending: false }).limit(120);
+  const seenWork = new Set<string>();
+  for (const row of gradings ?? []) {
+    if (seenWork.has(row.submission_id as string) || seenWork.size >= 15) continue;
+    seenWork.add(row.submission_id as string);
+    const report = (row.ai_report ?? {}) as { strengths?: string[]; issues?: string[]; dimensions?: { name: string; evidence?: string; evidenceVerified?: boolean; issue?: string }[] };
+    const quotes = (report.dimensions ?? []).filter((dimension) => dimension.evidenceVerified && dimension.evidence).map((dimension) => `From the work (${dimension.name}): "${dimension.evidence}"`);
+    const text = [...quotes, ...(report.strengths ?? []).slice(0, 3).map((item) => `Grader strength: ${item}`), ...(report.issues ?? []).slice(0, 3).map((item) => `Grader issue: ${item}`)].join("\n");
+    if (text) sources.push({ id: `W${seenWork.size}`, kind: "graded_work", label: `Your submitted work · ${titles.get(row.assessment_id as string) ?? "Assessment"} (quotes from the work; judgements by blind AI grading)`, text: text.slice(0, 2500) });
+  }
   // Self-report preferences and practice-test results are context, labelled as such for the model.
   const personality = (tests ?? []).find((row) => row.kind === "personality");
   if (personality?.result && typeof personality.result === "object") {
@@ -72,6 +84,7 @@ const SYSTEM = [
   "Never infer personality traits, IQ, intelligence, psychological conditions or fixed abilities. Describe behaviour in specific situations, not who the person is.",
   "Context matters: brief messages to an AI may reflect efficiency rather than poor communication; iterating may be useful with time and costly under deadlines; exploring many topics may be deliberate.",
   "AI-conversation sources contain only the student's own messages; an assistant's opinion is never evidence.",
+  "Sources of kind graded_work hold verbatim quotes from the student's submitted work (lines starting 'From the work') and a blind grader's judgements (lines starting 'Grader'); prefer quoting the work itself, and treat grader lines as a model's opinion.",
   "Sources of kind ai_profile are an AI assistant's summary of the student. Use them as context and as hypotheses to test against the other sources; cite them only alongside another source; note where they agree or conflict with the coursework evidence, and use their dated 'change' entries when describing change over time.",
   "For each dimension return: status (observed | not_observed), evidenceStrength (none|limited|moderate|substantial), observedBehaviour, observations (array of {sourceId, quote} with quotes copied exactly from that source), possibleExplanations (at least two different ones), context, consequences (only those shown in the sources), counterevidence, hypothesis (phrased as a tentative hypothesis), wouldConfirm, wouldChallenge.",
   "If a dimension has no supporting source, return status not_observed with empty fields. One source is at most 'limited' strength.",
@@ -112,9 +125,9 @@ export function validateAnalysis(raw: Record<string, unknown>, sources: Source[]
 export async function analyseBehaviour(sources: Source[]): Promise<{ dimensions: DimensionAnalysis[]; inputHash: string }> {
   const inputHash = createHash("sha256").update(JSON.stringify(sources)).digest("hex");
   if (!sources.length) return { dimensions: validateAnalysis({}, sources), inputHash };
-  // Two parallel requests of six dimensions each keep replies short enough to finish reliably.
+  // Three parallel requests of four dimensions each keep replies short enough to finish reliably.
   const payloadSources = sources.map(({ id, kind, label, text }) => ({ id, kind, label, text }));
-  const halves = [DIMENSIONS.slice(0, 6), DIMENSIONS.slice(6)];
+  const halves = [DIMENSIONS.slice(0, 4), DIMENSIONS.slice(4, 8), DIMENSIONS.slice(8)];
   const replies = await Promise.all(halves.map((dimensions) => requestJsonFromProvider(SYSTEM, JSON.stringify({ dimensions, sources: payloadSources }), { timeoutMs: 170_000 })));
   const merged = { dimensions: replies.flatMap((reply, index) => {
     const rows = Array.isArray(reply.dimensions) ? reply.dimensions as Record<string, unknown>[] : [];

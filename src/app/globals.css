@@ -668,3 +668,17 @@ html[data-story-enter="from-below"] .main-content{animation:storyDrop .28s cubic
 .course-card-body{display:grid;gap:2px}.course-card-body strong{font-size:var(--fs-body)}.course-card-body small{color:var(--ink-2);font-size:var(--fs-meta)}
 .course-card-meta{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:var(--fs-meta);color:var(--ink-2)}.course-card-meta>span{display:inline-flex;align-items:center;gap:4px}.course-card-meta b{color:var(--ink)}
 .course-admin{display:grid;gap:8px}
+
+/* Thinking: overview cards that open a full-page reading */
+.evidence-key{font-size:var(--fs-note);color:var(--ink-2);margin:0 0 12px}.evidence-key em{font-style:normal;font-weight:600;color:var(--ink)}
+.behaviour-grid{align-items:start}
+.expand-card{display:grid;gap:8px;text-align:left;font:inherit;color:inherit;cursor:pointer;align-content:start;transition:transform .15s,box-shadow .15s}
+.expand-card:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(18,20,18,.08)}
+.expand-card header{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.expand-card h2{margin:0}
+.expand-card p{margin:0}.expand-card small{color:var(--ink-2)}.expand-hint{color:var(--ink);font-weight:600}
+.expand-overlay{position:fixed;inset:0;z-index:60;background:rgba(18,20,18,.28);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:grid;place-items:center;padding:24px 16px;animation:enter .18s ease both}
+.expand-sheet{width:min(860px,100%);max-height:calc(100vh - 48px);overflow:auto;background:var(--paper,#fbf8f1);border-radius:20px;box-shadow:0 30px 80px rgba(18,20,18,.25);padding:28px}
+.expand-sheet>header{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px}.expand-sheet>header>div{display:grid;gap:6px}.expand-sheet h2{margin:0;font-size:var(--fs-title)}
+.expand-body{display:grid;gap:10px}.expand-body h3{margin:8px 0 0}.expand-body p{margin:0}
+.not-observed ul{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr));gap:10px 18px}
+.not-observed li{display:grid;gap:2px}.not-observed small{color:var(--ink-2)}
