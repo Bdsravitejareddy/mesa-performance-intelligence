@@ -15,11 +15,11 @@ export function RunGrading({ submissionId, label = "Grade now" }: { submissionId
     setMessage("Grading against your course material — this can take a few minutes…");
     try {
       const response = await fetch("/api/gradings", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(submissionId ? { submissionId } : {}) });
-      const body = (await response.json().catch(() => ({}))) as { outcomes?: Outcome[]; error?: string };
+      const body = (await response.json().catch(() => ({}))) as { outcomes?: Outcome[]; error?: string; continuing?: boolean };
       if (!response.ok) throw new Error(body.error ?? "Grading failed.");
       const outcomes = body.outcomes ?? [];
       const count = (status: string) => outcomes.filter((row) => row.status === status).length;
-      setMessage(outcomes.length ? `${count("graded")} graded by AI and code, ${count("code_only")} by code only, ${count("unchanged")} unchanged, ${count("skipped")} waiting for evidence.` : "Nothing to grade yet: no submitted work has been found.");
+      setMessage(outcomes.length ? `${count("graded")} graded by AI and code, ${count("code_only")} by code only, ${count("unchanged")} unchanged, ${count("skipped")} waiting.${body.continuing ? " The rest continues on the server — you can close this page." : ""}` : "Nothing to grade yet: no submitted work has been found.");
       setState("done");
       router.refresh();
     } catch (error) {

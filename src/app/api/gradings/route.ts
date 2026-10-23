@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { gradeSubmissions } from "@/lib/grading/run";
+import { continueGrading, hasLeftover } from "@/lib/grading/chain";
 
 export const maxDuration = 300;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -16,7 +17,9 @@ export async function POST(request: NextRequest) {
   const submissionId = typeof body?.submissionId === "string" && UUID.test(body.submissionId) ? body.submissionId : undefined;
   try {
     const outcomes = await gradeSubmissions(supabase, 280_000, { actorUserId: data.claims.sub, ...(submissionId ? { submissionIds: [submissionId] } : {}) });
-    return NextResponse.json({ outcomes });
+    // Anything left continues on the server in further passes; the browser does not need to stay open.
+    const continuing = !submissionId && hasLeftover(outcomes) && continueGrading(1);
+    return NextResponse.json({ outcomes, continuing });
   } catch {
     return NextResponse.json({ error: "Grading failed. Try again shortly." }, { status: 500 });
   }
