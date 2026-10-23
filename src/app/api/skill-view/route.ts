@@ -16,7 +16,8 @@ export async function POST() {
   try {
     const result = await runAiSkillView(supabase, userId, [...new Set((rows ?? []).map((row) => row.domain_name as string))]);
     return result.ok ? NextResponse.json({ ok: true }, { status: 201 }) : NextResponse.json({ error: result.error }, { status: 400 });
-  } catch {
-    return NextResponse.json({ error: "The AI view failed; try again." }, { status: 502 });
+  } catch (error) {
+    // Provider messages never contain the key.
+    return NextResponse.json({ error: `The AI view failed: ${error instanceof Error ? error.message.slice(0, 200) : "unknown error"}` }, { status: 502 });
   }
 }
