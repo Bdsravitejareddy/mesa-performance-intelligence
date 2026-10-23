@@ -12,6 +12,7 @@ export async function POST(request: NextRequest) {
   // Two stages on separate runs: GitHub, projects and readings; then the AI skill view.
   const stage = request.nextUrl.searchParams.get("stage");
   if (stage === "skills") after(async () => { await refreshSkillView(createAdminClient()).catch(() => undefined); });
-  else after(async () => { await refreshExtras(createAdminClient(), 285_000).catch(() => undefined); handOff("/api/cron/refresh?stage=skills"); });
+  // The skill view starts on its own run straight away, so a long first stage can never stop it from running.
+  else { handOff("/api/cron/refresh?stage=skills"); after(async () => { await refreshExtras(createAdminClient(), 285_000).catch(() => undefined); }); }
   return NextResponse.json({ accepted: true }, { status: 202 });
 }
