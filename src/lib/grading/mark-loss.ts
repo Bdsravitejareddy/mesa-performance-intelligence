@@ -128,7 +128,7 @@ export function markLoss(input: { official: number | null; feedback: string; rep
     source = "faculty_breakdown";
     const shortfall = breakdown.reduce((sum, item) => sum + (item.max - item.got), 0);
     items = breakdown.filter((item) => item.got < item.max).map((item) => {
-      const related = comments.find((comment) => item.criterion.toLowerCase().split(/[^a-z]+/).filter((word) => word.length > 3).some((word) => comment.toLowerCase().includes(word)));
+      const related = comments.find((comment) => item.criterion.toLowerCase().split(/[^a-z]+/).filter((word) => word.length >= 3).some((word) => comment.toLowerCase().includes(word)));
       return { criterion: item.criterion, got: item.got, max: item.max, lost: shortfall ? round1((lost * (item.max - item.got)) / shortfall) : 0, detail: related ?? "", theme: themeOf(item.criterion, related ?? "") };
     });
   } else if (input.report?.dimensions.length) {

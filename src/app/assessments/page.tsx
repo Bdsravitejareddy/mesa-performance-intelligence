@@ -59,7 +59,7 @@ function LossCard({ row }: { row: Row }) {
     <header><div><h3>{shortCourse(row.course)}</h3><small>{row.title}</small></div><div className="loss-figure"><strong>−{fmt(loss.lost)}</strong><small>{fmt(loss.official)}/100</small></div></header>
     <p className="loss-reading">{loss.interpretation}</p>
     {loss.items.length > 0 && <ul className="loss-bars">{loss.items.map((item) => <li key={item.criterion}>
-      <span className="loss-name">{item.criterion}{item.max !== undefined && <small> {fmt(item.got ?? null)}/{fmt(item.max)}</small>}</span>
+      <span className="loss-name">{item.criterion}{item.max !== undefined && <small> {item.got !== undefined ? `${fmt(item.got)}/${fmt(item.max)}` : `of ${fmt(item.max)} marks`}</small>}</span>
       <i><b style={{ width: `${(item.lost / top) * 100}%` }} /></i><em>−{fmt(item.lost)}</em>
       {item.detail && <small className="loss-detail">{item.detail}</small>}
     </li>)}</ul>}
