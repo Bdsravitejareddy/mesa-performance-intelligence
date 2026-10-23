@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BookOpen, FileText } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { Why } from "@/components/why";
 import { CourseCreateForm } from "@/components/course-forms";
 import { CourseLinkReview } from "@/components/course-link-review";
 import { suggestCourseLinks } from "@/lib/courses/links";
@@ -15,11 +16,25 @@ export default async function CoursesPage() {
   const loaded = demoMode ? null : await loadCourses();
   const courses = demoMode ? demoData.courses.map((course) => ({ ...course, term: "Illustrative term", material_count: course.materials, assessment_count: 0, linked_to: null as string | null })) : loaded!.courses;
   const review = loaded?.review;
+  // One card per course: a Drive folder linked to an LMS course is folded into it rather than listed again.
+  const folded = courses.filter((course) => !course.linked_to);
+  const folders = new Map<string, { title: string; materials: number }[]>();
+  for (const course of courses) if (course.linked_to) folders.set(course.linked_to, [...(folders.get(course.linked_to) ?? []), { title: course.title, materials: course.material_count }]);
+  const termOrder = (term: string | null) => (term === "Pre-Term" ? 0 : term === "Term 1" ? 1 : term === "Term 2" ? 2 : 3);
+  const terms = [...new Set(folded.map((course) => course.term || "Other"))].sort((a, b) => termOrder(a) - termOrder(b));
+  const split = (title: string) => { const match = title.match(/^(.*?)\s+with\s+(.+)$/i); return match ? { name: match[1], by: match[2] } : { name: title, by: "" }; };
   return <AppShell demoMode={demoMode}><div className="section-page">
-    <div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> COURSE KNOWLEDGE BASE</div><h1>Courses & content</h1><p className="page-subtitle">Organise course materials and link them to assessments for evidence-based evaluation.</p></div></div>
-    <div className="section-two-column"><section className="content-panel"><h2>Your courses <span className="panel-count">{courses.length}</span></h2>{courses.length ? <div className="course-list">{courses.map((course) => <Link className="course-list-row" href={`/courses/${course.id}`} key={course.id}><span className="course-list-icon"><BookOpen size={16} /></span><span><strong>{course.title}</strong><small>{course.code || "No course code"}{course.term ? ` · ${course.term}` : ""}</small></span><span className="course-list-meta"><FileText size={13} /> {course.material_count} materials · {course.assessment_count} assessments{course.linked_to ? ` · linked to ${course.linked_to}` : ""}</span></Link>)}</div> : <div className="empty-copy"><p>No courses have been added. Start by creating one and linking its materials.</p></div>}</section>
-      <aside className="content-panel"><h2>Add a course</h2><p>Course records and uploads are private to your signed-in workspace.</p>{demoMode ? <div className="info-callout">Preview mode uses synthetic examples. Connect your own Supabase project to save course data.</div> : hasSupabaseConfig() ? <CourseCreateForm /> : <div className="info-callout">Configure Supabase to create private course records.</div>}</aside></div>
-    {review && <section className="content-panel"><h2>Link course materials to LMS courses</h2><p className="empty-hint">The LMS and Drive create separate course records. Linking a Drive course to its LMS course lets assessments in that course be evaluated against its materials. Records are not moved or merged, and a link can be removed.</p><CourseLinkReview {...review} /></section>}
+    <div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> COURSE KNOWLEDGE BASE</div><h1>Courses & content</h1><p className="page-subtitle">{folded.length} courses, each with its assessments and the course material it is graded against.</p></div></div>
+    {folded.length ? terms.map((term) => { const list = folded.filter((course) => (course.term || "Other") === term); return <section key={term} className="course-term" aria-label={term}>
+      <h2 className="course-term-title">{term} <span className="panel-count">{list.length}</span></h2>
+      <div className="course-grid">{list.map((course) => { const { name, by } = split(course.title); const drive = folders.get(course.title) ?? []; const materials = course.material_count + drive.reduce((sum, folder) => sum + folder.materials, 0); return <Link className="course-card" href={`/courses/${course.id}`} key={course.id}>
+        <span className="course-card-icon"><BookOpen size={16} /></span>
+        <span className="course-card-body"><strong>{name}</strong>{by && <small>{by}</small>}</span>
+        <span className="course-card-meta"><span><b>{course.assessment_count}</b> assessments</span><span><FileText size={12} /> <b>{materials}</b> materials{drive.length ? <small> · incl. Drive</small> : ""}</span></span>
+      </Link>; })}</div>
+    </section>; }) : <div className="content-panel empty-copy"><p>No courses yet. They arrive from the LMS sync, or add one below.</p></div>}
+    {review && <section className="content-panel course-admin"><Why label={`Drive folders linked to courses (${review.links.length}${review.suggestions.length + review.unlinkedMaterial.length ? ` · ${review.unlinkedMaterial.length} not linked yet` : ""})`}><p className="empty-hint">Each Drive course folder is linked to its LMS course, so that course's assessments are graded against the folder's materials. Records are not moved or merged, and a link can be removed.</p><CourseLinkReview {...review} /></Why>
+      <Why label="Add a course manually"><p className="empty-hint">Courses normally arrive from the LMS. Records and uploads are private to your workspace.</p>{hasSupabaseConfig() ? <CourseCreateForm /> : <div className="info-callout">Configure Supabase to create private course records.</div>}</Why></section>}
     {demoMode && <p className="scope-note">All course names, counts, and records in preview mode are synthetic examples.</p>}
   </div></AppShell>;
 }

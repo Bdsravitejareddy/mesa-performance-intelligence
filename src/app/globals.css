@@ -657,3 +657,14 @@ html[data-story-enter="from-below"] .main-content{animation:storyDrop .28s cubic
 .trait-score{display:grid;font-variant-numeric:tabular-nums}.trait-score small{color:var(--ink-2)}
 @media (max-width:720px){.trait-head{display:none}.trait-row{grid-template-columns:1fr 1fr}.trait-row>span:first-child,.trait-row>span:last-child{grid-column:1/-1}}
 .profile-glance{display:grid;gap:12px}
+
+/* Courses: one card per course, grouped by term */
+.course-term{display:grid;gap:10px;margin-bottom:var(--gap-block,18px)}
+.course-term-title{margin:0;font-size:var(--fs-panel)}
+.course-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr));gap:12px}
+.course-card{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;padding:14px 16px;border-radius:var(--radius,14px);background:rgba(255,255,255,.5);border:1px solid rgba(18,20,18,.08);transition:transform .15s,box-shadow .15s}
+.course-card:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(18,20,18,.08)}
+.course-card-icon{grid-row:span 2;color:var(--ink-2);padding-top:2px}
+.course-card-body{display:grid;gap:2px}.course-card-body strong{font-size:var(--fs-body)}.course-card-body small{color:var(--ink-2);font-size:var(--fs-meta)}
+.course-card-meta{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:var(--fs-meta);color:var(--ink-2)}.course-card-meta>span{display:inline-flex;align-items:center;gap:4px}.course-card-meta b{color:var(--ink)}
+.course-admin{display:grid;gap:8px}
