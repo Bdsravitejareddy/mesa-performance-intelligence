@@ -50,7 +50,7 @@ export async function GET() {
   const auth = await member();
   if (!auth) return NextResponse.json({ error: "Sign in first." }, { status: 401 });
   const week = weekStart(new Date());
-  const select = "id, seed, focus, items, course_title, time_limit_seconds, answers, result, created_at, submitted_at";
+  const select = "id, seed, focus, items, course_title, time_limit_seconds, answers, result, created_at, started_at, submitted_at";
   let { data: row } = await auth.supabase.from("weekly_practice").select(select).eq("week_start", week).maybeSingle();
   // An unsubmitted set in the earlier, generator-only format is replaced by a course-based one.
   if (row && !row.items && !row.submitted_at) { await auth.supabase.from("weekly_practice").delete().eq("id", row.id); row = null; }
@@ -84,7 +84,20 @@ export async function GET() {
   }
   if (!row) return NextResponse.json({ error: "This week's practice could not be created." }, { status: 500 });
   const items = (row.items as PracticeItem[] | null) ?? buildWeek(Number(row.seed), row.focus as string).items;
-  return NextResponse.json({ week, focus: row.focus, course: row.course_title, items, answers: row.answers, result: row.result, submitted: Boolean(row.submitted_at), startedAt: row.created_at, timeLimit: row.time_limit_seconds });
+  // Until Start is pressed only the outline is sent, so the questions cannot be read before the clock runs.
+  const started = Boolean(row.started_at);
+  const outline = items.map((item) => ({ id: item.id, kind: item.kind }));
+  return NextResponse.json({ week, focus: row.focus, course: row.course_title, items: started ? items : [], outline, answers: row.answers, result: row.result, submitted: Boolean(row.submitted_at), started, startedAt: row.started_at, timeLimit: row.time_limit_seconds });
+}
+
+// Starts the clock for this week's set.
+export async function POST() {
+  const auth = await member();
+  if (!auth) return NextResponse.json({ error: "Sign in first." }, { status: 401 });
+  const { data: row } = await auth.supabase.from("weekly_practice").select("id, started_at").eq("week_start", weekStart(new Date())).maybeSingle();
+  if (!row) return NextResponse.json({ error: "Open this week's practice first." }, { status: 404 });
+  if (!row.started_at) await auth.supabase.from("weekly_practice").update({ started_at: new Date().toISOString() }).eq("id", row.id);
+  return NextResponse.json({ ok: true });
 }
 
 // Submits the week: questions are marked against the server-held keys, time over the limit is recorded, and
@@ -93,9 +106,10 @@ export async function PUT(request: NextRequest) {
   const auth = await member();
   if (!auth) return NextResponse.json({ error: "Sign in first." }, { status: 401 });
   const week = weekStart(new Date());
-  const { data: row } = await auth.supabase.from("weekly_practice").select("id, seed, focus, items, created_at, time_limit_seconds, submitted_at").eq("week_start", week).maybeSingle();
+  const { data: row } = await auth.supabase.from("weekly_practice").select("id, seed, focus, items, created_at, started_at, time_limit_seconds, submitted_at").eq("week_start", week).maybeSingle();
   if (!row) return NextResponse.json({ error: "Open this week's practice first." }, { status: 404 });
   if (row.submitted_at) return NextResponse.json({ error: "This week's practice is already submitted." }, { status: 409 });
+  if (!row.started_at) return NextResponse.json({ error: "Press Start first." }, { status: 409 });
   const body = await request.json().catch(() => null) as { answers?: Record<string, unknown> } | null;
   const answers = Object.fromEntries(Object.entries(body?.answers ?? {}).map(([name, value]) => [name.slice(0, 10), typeof value === "number" ? value : String(value ?? "").slice(0, 4000)]));
   const legacy = buildWeek(Number(row.seed), row.focus as string);
@@ -103,7 +117,7 @@ export async function PUT(request: NextRequest) {
   const { data: keys } = await createAdminClient().from("weekly_practice_keys").select("key, explanations").eq("practice_id", row.id).maybeSingle();
   const key = (keys?.key as Record<string, number> | undefined) ?? legacy.key;
   const explanations = (keys?.explanations as Record<string, string> | undefined) ?? legacy.explanations;
-  const seconds = Math.round((Date.now() - new Date(row.created_at as string).getTime()) / 1000);
+  const seconds = Math.round((Date.now() - new Date(row.started_at as string).getTime()) / 1000);
   const questions = items.filter((item) => item.kind === "quiz" || item.kind === "trick").map((item) => ({ id: item.id, kind: item.kind, correct: answers[item.id] === key[item.id], key: (item as { options: string[] }).options[key[item.id]], explanation: explanations[item.id] ?? "" }));
   const written = items.filter((item) => item.kind === "case" || item.kind === "conversation").map((item) => ({ id: item.id, kind: item.kind, ...expression(String(answers[item.id] ?? "")) }));
   let feedback: Record<string, string> = {};

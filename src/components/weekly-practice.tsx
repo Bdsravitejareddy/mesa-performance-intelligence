@@ -7,17 +7,24 @@ type Result = { seconds?: number; overtime?: boolean; questions: { id: string; k
 
 // This week's practice: quiz and trick questions, a short case task and two everyday prompts.
 export function WeeklyPractice() {
-  const [data, setData] = useState<{ week: string; focus: string; course?: string; items: PracticeItem[]; answers: Record<string, unknown>; result: Result | null; submitted: boolean; startedAt?: string; timeLimit?: number } | null>(null);
+  const [data, setData] = useState<{ week: string; focus: string; course?: string; items: PracticeItem[]; answers: Record<string, unknown>; result: Result | null; submitted: boolean; started?: boolean; outline?: { id: string; kind: string }[]; startedAt?: string | null; timeLimit?: number } | null>(null);
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
   const [answers, setAnswers] = useState<Record<string, number | string>>({});
   const [state, setState] = useState("");
-  useEffect(() => { void fetch("/api/practice").then((response) => response.json()).then((body) => { if (body.items) { setData(body); setAnswers(body.answers ?? {}); } else setState(body.error ?? "Could not load."); }); }, []);
+  const load = () => fetch("/api/practice").then((response) => response.json()).then((body) => { if (body.items) { setData(body); setAnswers(body.answers ?? {}); } else setState(body.error ?? "Could not load."); });
+  useEffect(() => { void load(); }, []);
+  async function start() { setState("Starting…"); await fetch("/api/practice", { method: "POST" }); setState(""); await load(); }
   const deadline = data?.startedAt && data.timeLimit ? new Date(data.startedAt).getTime() + data.timeLimit * 1000 : null;
   const remaining = deadline ? Math.max(0, Math.round((deadline - now) / 1000)) : null;
   // When time runs out, the answers so far are submitted (time over the limit is recorded on the server too).
   useEffect(() => { if (data && !data.submitted && remaining === 0 && !state) void submit(); });
   if (!data) return <p className="empty-hint">{state || "Preparing this week's practice from your course material — this can take a minute the first time…"}</p>;
+  if (!data.started && !data.submitted) return <div className="content-panel practice-start">
+    <h2>Ready when you are</h2>
+    <p>{data.outline?.filter((item) => item.kind === "quiz" || item.kind === "trick").length ?? 5} extreme questions{data.course ? <> from <b>{data.course.replace(/\s+with\s+.*$/i, "")}</b></> : ""}, a case task and two everyday prompts. You have {Math.round((data.timeLimit ?? 1500) / 60)} minutes once you start; answers so far are submitted when time runs out.</p>
+    <button type="button" className="button button-primary" onClick={() => void start()}>Start the {Math.round((data.timeLimit ?? 1500) / 60)}-minute practice</button>{state && <small role="status">{state}</small>}
+  </div>;
   const result = data.result;
   async function submit() {
     setState("Checking your answers…");
