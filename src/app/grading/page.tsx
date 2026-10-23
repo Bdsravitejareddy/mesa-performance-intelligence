@@ -47,10 +47,10 @@ export default async function GradingPage() {
     {data?.missing && <p className="info-callout">Grading storage is not set up yet. Apply the submission-gradings migration, then grade.</p>}
 
     {data && !data.missing && <section className="stat-strip" aria-label="Grading summary">
-      <Stat value={`${rows.length}`} unit={`of ${data.assessmentCount}`} label="Assessments graded" />
+      <Stat value={`${rows.length}`} unit={`of ${data.assessmentCount}`} label="Assessments with a graded file" />
       <Stat value={meanGap === null ? "—" : fmt(Math.round(meanGap * 10) / 10)} unit="pts" label="Typical AI vs official gap" />
       <Stat value={facultyPoints ? `${Math.round((agreedPoints / facultyPoints) * 100)}` : "—"} unit={facultyPoints ? "%" : ""} label="Faculty points the AI also raised" />
-      <Stat value={`${data.waiting.length}`} unit="" label="Waiting for your work" />
+      <Stat value={`${data.waiting.length}`} unit="" label="Not graded — no file found" />
     </section>}
 
     {reviews.length > 0 && <section className="content-panel review-cases" aria-label="Where a higher mark may be justified">
@@ -96,8 +96,8 @@ export default async function GradingPage() {
     </section>}
 
     {data && !data.missing && data.waiting.length > 0 && <section className="content-panel">
-      <h2>Waiting for your work <span className="panel-count">{data.waiting.length}</span></h2>
-      <p className="empty-hint">These can be graded once a submitted file is found in the course's Drive folder. Matching runs every night, or from <Link href="/materials/review">Material review</Link>.</p>
+      <h2>Not graded — no file found <span className="panel-count">{data.waiting.length}</span></h2>
+      <p className="empty-hint">No submitted file has been found for these, so there is nothing to grade — this includes exams marked on the platform only, and work submitted through a form. They can be graded once a file is found in the course's Drive folder. Matching runs every night, or from <Link href="/materials/review">Material review</Link>.</p>
       <Why label={`Show all ${data.waiting.length}`}><ul className="waiting-list">{data.waiting.map((item) => <li key={`${item.course}-${item.assessment}`}><strong>{item.assessment}</strong><small>{item.course} · {item.reason}</small></li>)}</ul></Why>
     </section>}
   </div></AppShell>;

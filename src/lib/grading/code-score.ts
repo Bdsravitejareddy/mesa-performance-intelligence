@@ -3,7 +3,7 @@ import { verifyArithmeticStatements, type ArithmeticCheck } from "@/lib/scoring"
 // A deterministic score: how much of each rubric criterion and of the relevant course material the work
 // addresses. It measures coverage, not quality or correctness of reasoning; the same work always gets the
 // same score, and every point can be traced to a matched term.
-export const CODE_RULES_VERSION = "code-completeness-v4";
+export const CODE_RULES_VERSION = "code-completeness-v5";
 export const FULL_COVERAGE = 0.6; // a criterion counts as fully addressed when 60% of its key terms appear
 const RUBRIC_SHARE = 0.8;
 const COURSE_SHARE = 0.2;

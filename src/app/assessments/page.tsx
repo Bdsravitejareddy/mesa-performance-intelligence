@@ -28,7 +28,7 @@ export default async function AssessmentsPage() {
   const count = (status: Status) => rows.filter((row) => row.status === status).length;
   const byCourse = [...new Set(rows.map((row) => row.course))];
   return <AppShell demoMode={demoMode}><div className="section-page">
-    <div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> Every assessment</div><h1>Assessments</h1><p className="page-subtitle">{rows.length ? `${count("marked")} marked · ${count("graded")} graded by AI only · ${count("submitted") + count("external")} submitted, awaiting a grade · ${count("not_submitted")} not submitted` : "No assessments in this term yet."}</p></div></div>
+    <div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> Every assessment</div><h1>Assessments</h1><p className="page-subtitle">{rows.length ? `${count("marked")} marked · ${count("graded")} graded by AI only · ${count("submitted") + count("external")} submitted with no mark or AI grade yet · ${count("not_submitted")} not submitted` : "No assessments in this term yet."}</p></div></div>
     {losses.length > 0 && <section className="content-panel loss-panel" aria-label="Where the marks went">
       <h2>Where the marks went <span className="panel-count">{losses.length}</span></h2>
       <p className="empty-hint">For each marked assessment: how many of the 100 marks were lost, which criteria they went on, and what that means. Faculty breakdowns are used where the feedback gives one; otherwise the split is estimated from the blind AI grade and labelled so.</p>
@@ -64,7 +64,7 @@ function LossCard({ row }: { row: Row }) {
       <i><b style={{ width: `${(item.lost / top) * 100}%` }} /></i><em>−{fmt(item.lost)}</em>
       {item.detail && <small className="loss-detail">{item.detail}</small>}
     </li>)}</ul>}
-    <small className="scope-note">{loss.items.length ? SOURCE_NOTE[loss.source] : "No criterion-level evidence yet"}.{row.ai === null && loss.source === "ai_estimate" ? " Grading this submission will add the estimate." : ""}</small>
+    <small className="scope-note">{loss.items.length ? `${SOURCE_NOTE[loss.source]}.` : row.files ? "No faculty breakdown yet; the blind grade of your submitted file will add an estimate once it is graded." : "No faculty breakdown, and no submitted file to estimate from — this exam was marked on the platform only."}</small>
     {(loss.facultyComments.length > 0 || loss.missingParts.length > 0 || loss.aiView) && <Why label="Faculty comments and other evidence">
       {loss.aiView && <p>{loss.aiView}</p>}
       {loss.facultyComments.length > 0 && <><h4>Faculty said</h4><ul className="reason-list">{loss.facultyComments.map((comment) => <li key={comment}>{comment}</li>)}</ul></>}

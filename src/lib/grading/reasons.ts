@@ -15,7 +15,7 @@ export function differenceReasons(code: CodeReport, ai: BlindReport | null, scor
     if (scores.ai !== null && Math.abs(scores.ai - code.completeness) >= 15) {
       reasons.push(scores.ai > code.completeness
         ? "The AI rated the answers it read higher than the share of questions the check could find. That usually means some answers are there but not labelled or worded the way the brief numbers them — so the code score is likely too low, not the AI's too high."
-        : `You attempted nearly everything, but the AI found problems in how it was answered${ai?.issues[0] ? ` — chiefly: ${ai.issues[0].replace(/\.$/, "")}.` : "."} That is the gap: attempting a question earns the code check's credit, answering it well earns the AI's.`);
+        : `The code check found most of the questions present in the file, but the AI judged the answers weak or missing${ai?.issues[0] ? ` — chiefly: ${ai.issues[0].replace(/\.$/, "")}.` : "."} Finding a question earns the code check's credit; answering it well earns the AI's.`);
     }
   } else if (scores.code === null && scores.ai !== null) {
     reasons.push("This brief doesn't list separate questions or tasks, so the code check has nothing to tick off and gives no score. Only the AI's judgement applies.");

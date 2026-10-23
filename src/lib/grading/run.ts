@@ -132,11 +132,17 @@ export async function gradeSubmissions(client: SupabaseClient, budgetMs: number,
     } else if (aiAllowed) { aiStatus = "failed"; note = "Out of time for AI grading in this run; it will continue on the next run."; }
 
     // The grader judged the attached work to be a different assignment: report it, and score neither view.
-    const mismatch = aiReport?.taskMatch === "no" ? (aiReport.taskMatchReason || aiReport.summary || "The attached work does not appear to be a submission for this assessment.") : null;
+    // A spreadsheet with no formulas anywhere that the grader finds unanswered is most likely the blank template,
+    // not the completed copy: reported like a wrong file rather than scored.
+    const blankTemplate = Boolean(aiReport && aiReport.overall !== null && aiReport.overall <= 15 && /Formulas used: none/.test(text) && !/Formulas used: (?!none)/.test(text));
+    const mismatch = aiReport?.taskMatch === "no" ? (aiReport.taskMatchReason || aiReport.summary || "The attached work does not appear to be a submission for this assessment.")
+      : blankTemplate ? "It looks like an unanswered template: its sheets contain no formulas, and the grader found no answers. If you submitted a completed copy, detach this file so the right one can be found." : null;
     if (mismatch) code.score = null;
+    // The report is stored as it is (so the flag survives reuse); only the score shown is withheld.
+    const aiScore = mismatch ? null : aiReport?.overall ?? null;
     const aiPoints = aiReport && !mismatch ? [...aiReport.issues, ...aiReport.strengths, ...aiReport.dimensions.flatMap((dimension) => [dimension.issue, dimension.strength])] : [];
-    const comparison = compareWithFeedback({ feedback, aiPoints, official, ai: aiReport?.overall ?? null, code: code.score });
-    const reasons = mismatch ? [`The attached file looks like a different piece of work: ${mismatch} It was not scored; detach it on this page if it is the wrong file.`] : differenceReasons(code.report, aiReport, { ai: aiReport?.overall ?? null, code: code.score, official }, comparison.facultyOnly.length);
+    const comparison = compareWithFeedback({ feedback, aiPoints, official, ai: aiScore, code: code.score });
+    const reasons = mismatch ? [`The attached file looks like a different piece of work: ${mismatch} It was not scored; detach it on this page if it is the wrong file.`] : differenceReasons(code.report, aiReport, { ai: aiScore, code: code.score, official }, comparison.facultyOnly.length);
     // With several files (e.g. a data sheet and a deck), each is also scored on its own. Data sheets get their
     // own blind AI grade when time allows; every file gets a code score.
     const readableDocs = docs.filter(readable);
@@ -161,7 +167,7 @@ export async function gradeSubmissions(client: SupabaseClient, budgetMs: number,
       standard,
       code_score: code.score,
       code_report: code.report,
-      ai_score: aiReport?.overall ?? null,
+      ai_score: aiScore,
       ai_report: aiReport,
       ai_status: aiStatus,
       official_mark: official,
