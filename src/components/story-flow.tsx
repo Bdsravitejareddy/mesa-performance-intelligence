@@ -3,20 +3,22 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { chapterIndex, chapters, sectionOf, sections } from "@/components/navigation";
+import { chapterIndex, sectionOf, sections } from "@/components/navigation";
 
 const PULL = 200; // scroll distance past either end of a page that opens the neighbouring chapter
 const SETTLE_MS = 160; // ignore the tail of scroll momentum that carried the reader to the edge
 export const ARRIVE_KEY = "mesa.story.arrive";
 
-// Seamless chapter-to-chapter scrolling. The end of each page is the beginning of the next one: its heading
+// Seamless section-to-section scrolling. The end of each page is the beginning of the next one: its heading
 // sits there, faint, and firms up as you keep scrolling until the next page takes its place. At the top of a
 // page, scrolling up returns to the previous chapter, arriving at its end.
 export function StorySeams({ pathname }: { pathname: string }) {
   const router = useRouter();
-  const index = chapterIndex(pathname);
-  const next = index >= 0 ? chapters[index + 1] : undefined;
-  const previous = index > 0 ? chapters[index - 1] : undefined;
+  // Scrolling moves between sections, not between the tabs inside one: from any tab of Assessments, down goes
+  // to Insights and up to Courses. Tabs are reached from the tab bar.
+  const index = chapterIndex(pathname) >= 0 ? sectionOf(pathname) : -1;
+  const next = index >= 0 ? sections[index + 1] : undefined;
+  const previous = index > 0 ? sections[index - 1] : undefined;
   const [down, setDown] = useState(0);
   const [up, setUp] = useState(0);
   const leaving = useRef(false);
