@@ -3,12 +3,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { requestJsonFromProvider } from "@/lib/ai/provider";
 import { resolveProviderSettings } from "@/lib/ai/settings";
 import { getDashboardSnapshot, type OverviewBrief } from "@/lib/dashboard-data";
+import { stakesOf } from "@/lib/assessments/stakes";
 import type { TermChoice } from "@/lib/term";
 
 const SYSTEM = [
   "You write the opening summary of a person's performance dashboard from computed figures only. Write to them in the second person (\"you\"), in plain everyday language, with no jargon.",
   "Interpret each course against the person's target roles using the dashboard's internal benchmarks (core 75, supporting 65, peripheral 50 — conventions of this dashboard, not employer requirements): say a mark is above or below the dashboard's benchmark for that role, never that a role 'requires' a mark. Use each role's relevanceReason when explaining why a course is core.",
   "Only recommend submitting work that appears in notSubmitted; never suggest submitting something already submitted.",
+  "Never mention field names, ids or codes (such as competencyChanges or analytical.numerical_analysis); use the plain names given. Compare grades over time only within the same kind of work (byStakes), and say when the recent window is mostly practice.",
   "Never quote or paraphrase faculty feedback, and never restate a figure without saying what it means.",
   "Standing is the official weighted average; projectedWithAi is only an estimate including AI grades for unmarked work — never present it as the person's mark. Courses assessed via MRS are read against the cohort high (readAgainstCeiling), and courses whose results are expected later are pending, not weak. State evidence limits. A standing is settled only as far as officialShareOfCourseWeight goes: call a gap or strength confirmed only when official marks cover at least half the course weight; otherwise say it rests on the marks released so far. evidenceShareIncludingAiGrades is never a reason to call a result confirmed. A course with little of its weight demonstrated, or a standing that rests partly (basis mixed) or wholly (basis ai) on AI grades rather than official marks, is provisional. Do not speculate about what future marks must be.",
   "Be specific (course names, numbers), calibrated and brief. No flattery, no generic advice.",
@@ -85,10 +87,10 @@ async function personContext(client: SupabaseClient) {
     client.from("test_attempts").select("result").eq("kind", "personality").not("submitted_at", "is", null).order("submitted_at", { ascending: false }).limit(1).maybeSingle(),
     client.from("ai_skill_views").select("domains").order("created_at", { ascending: false }).limit(1).maybeSingle(),
     client.from("behaviour_analyses").select("dimensions").order("created_at", { ascending: false }).limit(1).maybeSingle(),
-    client.from("competency_snapshots").select("competency_id, state, recorded_at, reason").gte("recorded_at", new Date(now - 30 * day).toISOString()).order("recorded_at"),
+    client.from("competency_snapshots").select("competency_id, state, recorded_at, reason, competencies(name)").gte("recorded_at", new Date(now - 30 * day).toISOString()).order("recorded_at"),
     client.from("ai_context_reports").select("report").order("created_at", { ascending: false }).limit(3),
     client.from("submission_gradings").select("submission_id, ai_score, created_at").order("created_at", { ascending: false }),
-    client.from("submissions").select("id, submitted_at, page_capture"),
+    client.from("submissions").select("id, submitted_at, page_capture, assessments(title)"),
     client.from("weekly_tasks").select("week_start, done_at").gte("week_start", new Date(now - 30 * day).toISOString().slice(0, 10)),
   ]);
   const factors = (personality.data?.result as { factors?: Record<string, { score: number }> } | null)?.factors ?? null;
@@ -96,6 +98,8 @@ async function personContext(client: SupabaseClient) {
   const observed = ((behaviour.data?.dimensions ?? []) as { dimension: string; status: string; overview?: string }[]).filter((row) => row.status === "observed").map((row) => ({ pattern: row.dimension, overview: (row.overview ?? "").slice(0, 200) }));
   // Grades of work submitted in each window (latest grading per submission), so a change compares like with like.
   const submittedAt = new Map((submissions.data ?? []).map((row) => [row.id as string, (row.page_capture as { submittedAt?: string } | null)?.submittedAt ?? (row.submitted_at as string | null)]));
+  const stakesOfSubmission = new Map((submissions.data ?? []).map((row) => [row.id as string, stakesOf(String((row.assessments as unknown as { title?: string } | null)?.title ?? ""))]));
+  const byStakes: Record<string, { last30: number[]; previous30: number[] }> = {};
   const seen = new Set<string>(); const recent: number[] = []; const before: number[] = [];
   for (const row of gradings.data ?? []) {
     if (seen.has(row.submission_id as string) || row.ai_score === null) continue;
@@ -103,15 +107,18 @@ async function personContext(client: SupabaseClient) {
     const when = Date.parse(String(submittedAt.get(row.submission_id as string) ?? "").replace(/^[A-Za-z]+day,\s*/, "").replace(" ·", ""));
     if (!Number.isFinite(when)) continue;
     (now - when <= 30 * day ? recent : now - when <= 60 * day ? before : []).push(Number(row.ai_score));
+    const tier = byStakes[stakesOfSubmission.get(row.submission_id as string) ?? "graded"] ??= { last30: [], previous30: [] };
+    (now - when <= 30 * day ? tier.last30 : now - when <= 60 * day ? tier.previous30 : []).push(Number(row.ai_score));
   }
   const mean = (values: number[]) => (values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : null);
-  const changedCompetencies = [...new Set((snapshots.data ?? []).filter((row) => !/rules/i.test(String(row.reason ?? ""))).map((row) => `${row.competency_id}: ${row.state}`))].slice(0, 12);
+  const stateWords: Record<string, string> = { demonstrated_strength: "a demonstrated strength", emerging: "emerging", meets_expectations: "meeting expectations", development_area: "a development area", conflicting: "conflicting", insufficient_evidence: "not enough evidence yet" };
+  const changedCompetencies = [...new Set((snapshots.data ?? []).filter((row) => !/rules/i.test(String(row.reason ?? ""))).map((row) => `${(row.competencies as unknown as { name?: string } | null)?.name ?? "A skill"} became ${stateWords[row.state as string] ?? row.state}`))].slice(0, 12);
   return {
     person: { personality: factors ? Object.fromEntries(Object.entries(factors).map(([factor, value]) => [factor, value.score])) : null, aiSkillView: { strongest: skillView.slice(0, 3).map(([domain, value]) => `${domain} ${value.score}`), weakest: skillView.slice(-2).map(([domain, value]) => `${domain} ${value.score}`) }, thinkingPatterns: observed.slice(0, 7) },
     last30Days: {
-      blindGradesOfWorkSubmitted: { last30: { mean: mean(recent), n: recent.length }, previous30: { mean: mean(before), n: before.length } },
-      competencyChanges: changedCompetencies,
-      assistantProfileChanges: (profiles.data ?? []).flatMap((row) => ((row.report as { changes?: { what: string; when: string }[] }).changes ?? []).map((change) => `${change.when}: ${change.what}`)).slice(0, 6),
+      blindGradesOfWorkSubmitted: { last30: { mean: mean(recent), n: recent.length }, previous30: { mean: mean(before), n: before.length }, byStakes: Object.fromEntries(Object.entries(byStakes).map(([tier, value]) => [tier, { last30: { mean: mean(value.last30), n: value.last30.length }, previous30: { mean: mean(value.previous30), n: value.previous30.length } }])) },
+      skillChanges: changedCompetencies,
+      changesYourAssistantsNoticed: (profiles.data ?? []).flatMap((row) => ((row.report as { changes?: { what: string; when: string }[] }).changes ?? []).map((change) => `${change.when}: ${change.what}`)).slice(0, 6),
       weeklyTasks: { done: (tasks.data ?? []).filter((row) => row.done_at).length, set: (tasks.data ?? []).length },
     },
   };
