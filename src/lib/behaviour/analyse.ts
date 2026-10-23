@@ -115,7 +115,7 @@ export async function analyseBehaviour(sources: Source[]): Promise<{ dimensions:
   // Two parallel requests of six dimensions each keep replies short enough to finish reliably.
   const payloadSources = sources.map(({ id, kind, label, text }) => ({ id, kind, label, text }));
   const halves = [DIMENSIONS.slice(0, 6), DIMENSIONS.slice(6)];
-  const replies = await Promise.all(halves.map((dimensions) => requestJsonFromProvider(SYSTEM, JSON.stringify({ dimensions, sources: payloadSources }), { timeoutMs: 110_000 })));
+  const replies = await Promise.all(halves.map((dimensions) => requestJsonFromProvider(SYSTEM, JSON.stringify({ dimensions, sources: payloadSources }), { timeoutMs: 170_000 })));
   const merged = { dimensions: replies.flatMap((reply, index) => {
     const rows = Array.isArray(reply.dimensions) ? reply.dimensions as Record<string, unknown>[] : [];
     // Fall back to position within the half when the model omits the dimension name.
