@@ -73,7 +73,9 @@ export async function runAiSkillView(client: SupabaseClient, userId: string, dom
   const { data: last } = await client.from("behaviour_analyses").select("included_conversations").order("created_at", { ascending: false }).limit(1).maybeSingle();
   const sources = await gatherSources(client, { includeConversations: last?.included_conversations === true });
   if (!sources.length) return { ok: false, error: "No evidence to assess yet." };
-  const raw = await requestJsonFromProvider(SYSTEM, JSON.stringify({ domains, sources: sources.map(({ id, kind, label, text }) => ({ id, kind, label, text })) }), { timeoutMs: 150_000 });
+  // The provider occasionally returns malformed JSON for this long request; one retry covers it.
+  const request = () => requestJsonFromProvider(SYSTEM, JSON.stringify({ domains, sources: sources.map(({ id, kind, label, text }) => ({ id, kind, label, text })) }), { timeoutMs: 120_000 });
+  const raw = await request().catch(() => request());
   const view = validateAiView(raw, domains, sources);
   const counts = sources.reduce<Record<string, number>>((all, source) => ({ ...all, [source.kind]: (all[source.kind] ?? 0) + 1 }), {});
   const { error } = await client.from("ai_skill_views").insert({ user_id: userId, domains: view, sources: counts, provider_model: config.model });
