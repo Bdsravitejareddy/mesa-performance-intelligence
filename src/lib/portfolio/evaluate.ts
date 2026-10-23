@@ -9,14 +9,15 @@ import { summarisePortfolio, type PortfolioRow, type Project } from "./summary";
 // The work is the project's facts, its README opening and, separately, anything the member wrote in their own
 // words; communication and first-principles criteria are scored only from their own words.
 export type ProjectContext = { project_key: string; kind: "problem_statement" | "own_words"; title: string; body: string };
-export const PROJECT_RULES_VERSION = "project-eval-v3-evidence";
+export const PROJECT_RULES_VERSION = "project-eval-v4-documented";
 const OWN_WORDS_CRITERIA = new Set(["Communication of reasoning", "First-principles reasoning"]);
 
-export function projectStandard(hasStatement: boolean, hasOwnWords: boolean): Standard {
+export function projectStandard(hasStatement: boolean, hasOwnWords: boolean, usesAi = true): Standard {
   const criteria = [
     { name: "Problem understanding", description: "Is the problem, its user and its constraints clearly understood and framed?", weight: 2 },
     { name: "Solution design", description: "Does the design fit the problem, with sensible scope and trade-offs?", weight: 2 },
-    { name: "AI integration", description: "Is AI used where it adds value, with appropriate safeguards, rather than for its own sake?", weight: 1 },
+    // Judged only where AI is used or asked for: a deterministic design is a valid choice, never a gap.
+    ...(usesAi ? [{ name: "AI integration", description: "Where the project uses AI, is it used where it adds value, with appropriate safeguards? Choosing deterministic methods for parts of the problem is a sound design decision and is never penalised.", weight: 1 }] : []),
     { name: "Implementation evidence", description: "From the repository structure and documentation shown (the code was not run): does the build appear to implement the idea end to end for the case study? Deployment, hosting, users and real-world utility are not expected and are not assessed.", weight: 1 },
     ...(hasStatement ? [{ name: "Fit to the problem statement", description: "Does the project address what the given problem statement asks for?", weight: 2 }] : []),
     ...(hasOwnWords ? [
@@ -36,6 +37,7 @@ export function projectWork(project: Project, ownWords: ProjectContext[]): { wor
     // Deployment is left out on purpose: these are academic case studies, and hosting limits (not the work)
     // decide what is deployed.
     "Context: an academic case-study tool. Real-world users, deployment and commercial utility are not expected.",
+    "Evidence note: only the description, README and file structure below were read — nothing was run, tested or inspected beyond them. Describe features as documented or apparent (\"the README describes…\", \"the structure suggests…\"), never as verified, rigorous, complete or working.",
     // Commit counts are left out: they cover only commits matched to one login and say nothing about quality.
     project.structure && `Repository structure (code was not run): ${project.structure.files} files; most common types ${Object.entries(project.structure.extensions).map(([ext, count]) => `${ext} ${count}`).join(", ")}; top folders ${project.structure.topFolders.join(", ") || "none"}; tests ${project.structure.hasTests ? "present" : "not found"}; CI ${project.structure.hasCi ? "present" : "not found"}${project.structure.partial ? " (listing partial)" : ""}`,
   ].filter(Boolean).join("\n");
@@ -73,7 +75,7 @@ export async function evaluateProjects(client: SupabaseClient, userId: string, b
     const mine = ((contexts.data ?? []) as ProjectContext[]).filter((item) => item.project_key === project.key);
     const statement = mine.filter((item) => item.kind === "problem_statement").map((item) => item.body).join("\n\n").slice(0, 6000);
     const ownWords = mine.filter((item) => item.kind === "own_words");
-    const standard = projectStandard(Boolean(statement), ownWords.length > 0);
+    const standard = projectStandard(Boolean(statement), ownWords.length > 0, project.aiPackages.length > 0 || /\b(ai|llm|gpt|machine learning|model)\b/i.test(statement));
     const { work, ownText } = projectWork(project, ownWords);
     const inputHash = createHash("sha256").update(JSON.stringify({ work, statement, standard, rules: PROJECT_RULES_VERSION, prompt: BLIND_PROMPT_VERSION })).digest("hex");
     if (done.has(`${project.key}:${inputHash}`)) { result.unchanged += 1; continue; }

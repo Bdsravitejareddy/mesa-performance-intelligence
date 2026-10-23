@@ -7,7 +7,7 @@ import { hasSupabaseConfig } from "@/lib/supabase/config";
 
 export const dynamic = "force-dynamic";
 
-type Point = { title: string; course: string; official: number | null; ai: number | null; code: number | null; late: boolean | null; group: boolean | null; month: string | null; stakes: Stakes };
+type Point = { title: string; course: string; official: number | null; ai: number | null; code: number | null; late: boolean | null; group: boolean | null; month: string | null; stakes: Stakes; term: string | null; week: string | null };
 type Pattern = { key: string; title: string; reading: string; n: number; detail: { label: string; value: string; n: number }[]; caution: string };
 
 const mean = (values: number[]) => (values.length ? Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10 : null);
@@ -59,19 +59,24 @@ function patterns(points: Point[]): Pattern[] {
     reading: comparable.length ? comparable.map((tier) => `${STAKES_LABEL[tier.stakes]}: group ${tier.group} (${tier.groupN}) vs individual ${tier.solo} (${tier.soloN})`).join("; ") + "." : `Not comparable yet: no tier has both group and individual work with AI grades (${tierRows.map((tier) => `${STAKES_LABEL[tier.stakes].toLowerCase()} ${tier.groupN} group / ${tier.soloN} individual`).join(", ")}).`,
     detail: comparable.flatMap((tier) => [{ label: `${STAKES_LABEL[tier.stakes]} · group`, value: tier.group!.toString(), n: tier.groupN }, { label: `${STAKES_LABEL[tier.stakes]} · individual`, value: tier.solo!.toString(), n: tier.soloN }]),
     caution: "Compared only within the same tier and grader. Group results reflect the whole team's work, and tiers still differ in task and difficulty." });
-  // Over time, within each kind of work (so a month of practice is never compared with a month of exams), in
-  // calendar order; only work with a known submission date is placed.
-  const calendar = (a: string, b: string) => new Date(`1 ${a}`).getTime() - new Date(`1 ${b}`).getTime();
-  const dated = points.filter((point) => point.month && (point.official ?? point.ai) !== null);
-  const series = (["exam", "graded", "practice"] as Stakes[]).map((stakes) => {
-    const rows = dated.filter((point) => point.stakes === stakes);
-    const months = [...new Set(rows.map((point) => point.month!))].sort(calendar);
-    return { stakes, months: months.map((month) => { const values = rows.filter((point) => point.month === month).map((point) => (point.official ?? point.ai)!); return { label: month, value: mean(values)!, n: values.length }; }) };
-  }).filter((row) => row.months.length);
-  const trends = series.filter((row) => row.months.length >= 2);
-  out.push({ key: "trend", title: "Your work over time, by kind", n: dated.length,
-    reading: trends.length ? trends.map((row) => `${STAKES_LABEL[row.stakes]}: ${row.months[0].label} ${row.months[0].value} → ${row.months.at(-1)!.label} ${row.months.at(-1)!.value}`).join("; ") + `. Covers ${dated.length} of ${points.length} results with a known submission date.` : `Needs two months of the same kind of work with known submission dates (${dated.length} dated results so far).`,
-    detail: series.flatMap((row) => row.months.map((month) => ({ label: `${STAKES_LABEL[row.stakes]} · ${month.label}`, value: month.value.toString(), n: month.n }))), caution: "Months still differ in course and difficulty, so a change mixes difficulty with growth. Official marks are used where released, otherwise the blind AI grade." });
+  // Over time, at the right grain: course work (term exams and graded work) by term, practice and quizzes by
+  // week. Kinds are never mixed. Official marks where released, otherwise the blind AI grade.
+  const termOrder = (term: string) => (term === "Pre-Term" ? 0 : term === "Term 1" ? 1 : term === "Term 2" ? 2 : 3);
+  const byTerm = (["exam", "graded"] as Stakes[]).map((stakes) => {
+    const rows = points.filter((point) => point.stakes === stakes && point.term && (point.official ?? point.ai) !== null);
+    const terms = [...new Set(rows.map((point) => point.term!))].sort((a, b) => termOrder(a) - termOrder(b));
+    return { stakes, periods: terms.map((term) => { const values = rows.filter((point) => point.term === term).map((point) => (point.official ?? point.ai)!); return { label: term, value: mean(values)!, n: values.length }; }) };
+  }).filter((row) => row.periods.length);
+  const practiceRows = points.filter((point) => (point.stakes === "practice" || /quiz/i.test(point.title)) && point.week && (point.official ?? point.ai) !== null);
+  const weeks = [...new Set(practiceRows.map((point) => point.week!))].sort();
+  const byWeek = weeks.map((week) => { const values = practiceRows.filter((point) => point.week === week).map((point) => (point.official ?? point.ai)!); return { label: `w/c ${new Date(week).toLocaleDateString("en", { day: "numeric", month: "short" })}`, value: mean(values)!, n: values.length }; });
+  const termReading = byTerm.map((row) => row.periods.length >= 2 ? `${STAKES_LABEL[row.stakes]}: ${row.periods.map((period) => `${period.label} ${period.value} (${period.n})`).join(" → ")}` : `${STAKES_LABEL[row.stakes]}: ${row.periods[0].label} only, ${row.periods[0].value} (${row.periods[0].n})`).join("; ");
+  out.push({ key: "trend-term", title: "Course work by term", n: byTerm.reduce((sum, row) => sum + row.periods.reduce((total, period) => total + period.n, 0), 0),
+    reading: byTerm.length ? `${termReading}. A comparison needs results from at least two terms.` : "No term exams or graded work with results yet.",
+    detail: byTerm.flatMap((row) => row.periods.map((period) => ({ label: `${STAKES_LABEL[row.stakes]} · ${period.label}`, value: period.value.toString(), n: period.n }))), caution: "Terms contain different courses, so a change between terms mixes subject and difficulty with growth; read it as a change in average evaluated results." });
+  out.push({ key: "trend-week", title: "Practice and quizzes by week", n: byWeek.reduce((sum, row) => sum + row.n, 0),
+    reading: byWeek.length >= 2 ? `From ${byWeek[0].label} (${byWeek[0].value}, ${byWeek[0].n}) to ${byWeek.at(-1)!.label} (${byWeek.at(-1)!.value}, ${byWeek.at(-1)!.n}) across ${byWeek.length} weeks.` : "Needs practice or quiz results from at least two weeks with known dates.",
+    detail: byWeek.map((row) => ({ ...row, value: row.value.toString() })), caution: "Each week's tasks differ; practice is ungraded and usually gets less effort than exams." });
   return out;
 }
 
@@ -93,11 +98,12 @@ export default async function PatternsPage() {
 async function load(supabase: SupabaseClient): Promise<Point[]> {
   const [assessments, courses, submissions, gradings] = await Promise.all([
     supabase.from("assessments").select("id, course_id, title"),
-    supabase.from("courses").select("id, title"),
+    supabase.from("courses").select("id, title, term"),
     supabase.from("submissions").select("assessment_id, official_mark, page_capture, submitted_at"),
     supabase.from("submission_gradings").select("assessment_id, ai_score, code_score, created_at").order("created_at", { ascending: false }),
   ]);
   const course = new Map((courses.data ?? []).map((row) => [row.id as string, (row.title as string).replace(/\s+with\s+.*$/i, "")]));
+  const courseTerm = new Map((courses.data ?? []).map((row) => [row.id as string, (row.term as string | null) ?? null]));
   const latest = new Map<string, { ai: number | null; code: number | null }>();
   for (const row of gradings.data ?? []) if (!latest.has(row.assessment_id as string)) latest.set(row.assessment_id as string, { ai: row.ai_score === null ? null : Number(row.ai_score), code: row.code_score === null ? null : Number(row.code_score) });
   return (assessments.data ?? []).map((assessment) => {
@@ -110,6 +116,8 @@ async function load(supabase: SupabaseClient): Promise<Point[]> {
       official: sub?.official_mark === null || sub?.official_mark === undefined ? null : Number(sub.official_mark),
       ai: grade?.ai ?? null, code: grade?.code ?? null,
       late: capture?.timing ? capture.timing === "late" : null, group: capture ? capture.isGroup === true : null, stakes: stakesOf(assessment.title as string),
+      term: courseTerm.get(assessment.course_id as string) ?? null,
+      week: when && !Number.isNaN(when.getTime()) ? new Date(Date.UTC(when.getUTCFullYear(), when.getUTCMonth(), when.getUTCDate() - ((when.getUTCDay() + 6) % 7))).toISOString().slice(0, 10) : null,
       month: when && !Number.isNaN(when.getTime()) ? when.toLocaleDateString("en", { month: "short", year: "numeric" }) : null,
     };
   }).filter((point) => point.official !== null || point.ai !== null || point.code !== null);

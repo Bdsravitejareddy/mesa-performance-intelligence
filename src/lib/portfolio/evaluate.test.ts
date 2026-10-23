@@ -30,3 +30,10 @@ describe("project evaluation", () => {
     expect(weighted.overall).toBe(76.7);
   });
 });
+
+describe("AI integration is optional", () => {
+  it("is judged only when the project uses AI or its brief asks for it", () => {
+    expect(projectStandard(false, false, false).criteria.map((item) => item.name)).not.toContain("AI integration");
+    expect(projectStandard(false, false, true).criteria.find((item) => item.name === "AI integration")?.description).toMatch(/deterministic methods .* never penalised/);
+  });
+});
