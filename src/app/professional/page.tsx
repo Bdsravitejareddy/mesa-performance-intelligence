@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/app-shell";
+import { Why } from "@/components/why";
 import { AIConsentGate } from "@/components/ai-consent-gate";
 import { ProfessionalEvidenceForm, ProfessionalEvidenceList } from "@/components/professional-evidence";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
@@ -14,8 +15,8 @@ export default async function ProfessionalEvidencePage() {
   return <AppShell demoMode={demoMode}><div className="section-page">
     <div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> Professional evidence</div><h1>Resume & portfolio</h1><p className="page-subtitle">A resume line is evidence of a claim, not proof of proficiency. Claims become supported only when another item backs them.</p></div></div>
     {items && <section className="competency-summary" aria-label="Claims"><div className="competency-summary-item"><strong>{items.length}</strong><span>Evidence items</span></div><div className="competency-summary-item"><strong>{claims.filter((claim) => claim.status === "claimed").length}</strong><span>Claims not yet supported</span></div><div className="competency-summary-item"><strong>{claims.filter((claim) => claim.status === "supported" || claim.status === "attested").length}</strong><span>Supported claims{claims.some((claim) => claim.status === "attested") ? ` (${claims.filter((claim) => claim.status === "attested").length} confirmed by you)` : ""}</span></div><div className="competency-summary-item"><strong>{claims.filter((claim) => claim.quantified).length}</strong><span>Quantified claims</span></div></section>}
-    <div className="section-two-column"><section className="content-panel"><h2>Your evidence</h2>{items ? <ProfessionalEvidenceList items={items} /> : <p className="empty-hint">Connect Supabase to add evidence.</p>}</section>
-      <aside className="content-panel"><h2>Add evidence</h2>{items ? <AIConsentGate purpose="Claims are extracted from what you add using Gemini."><ProfessionalEvidenceForm /></AIConsentGate> : null}</aside></div>
+    <div className="section-stack"><section className="content-panel"><h2>Your evidence</h2>{items ? <ProfessionalEvidenceList items={items} /> : <p className="empty-hint">Connect Supabase to add evidence.</p>}</section>
+      <section className="content-panel">{items ? <Why label="Add evidence (CV, portfolio, certificate or link)"><AIConsentGate purpose="Claims are extracted from what you add using Gemini."><ProfessionalEvidenceForm /></AIConsentGate></Why> : null}</section></div>
   </div></AppShell>;
 }
 

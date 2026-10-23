@@ -74,7 +74,7 @@ export default async function TestsPage() {
     <section className="content-panel" aria-label="What this page rests on">
       <h2>What this page rests on</h2>
       <div className="research-basis">
-        <div><h3>Backed by published research</h3><ul>{BASIS.filter((item) => item.basis === "research").map((item) => <li key={item.claim}><strong>{item.claim}</strong><small>{item.detail}</small><ul className="cite-list">{item.studies.map((key) => <li key={key}><small><Cite id={key} /></small></li>)}</ul></li>)}</ul></div>
+        <div><h3>Backed by published research</h3><ul>{BASIS.filter((item) => item.basis === "research").map((item) => <li key={item.claim}><strong>{item.claim}</strong><small>{item.detail}</small><Why label={`Sources (${item.studies.length})`}><ul className="cite-list">{item.studies.map((key) => <li key={key}><small><Cite id={key} /></small></li>)}</ul></Why></li>)}</ul></div>
         <div><h3>This dashboard&apos;s own rules</h3><ul>{BASIS.filter((item) => item.basis === "own_rule").map((item) => <li key={item.claim}><strong>{item.claim}</strong><small>{item.detail}</small></li>)}</ul></div>
       </div>
     </section>

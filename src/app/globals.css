@@ -702,3 +702,7 @@ html[data-story-enter="from-below"] .main-content{animation:storyDrop .28s cubic
 .research-basis h3{margin:0 0 8px}.research-basis ul{list-style:none;margin:0;padding:0;display:grid;gap:10px}
 .research-basis li{display:grid;gap:3px}.research-basis li small{color:var(--ink-2)}.research-basis a{color:inherit;text-decoration:underline;text-underline-offset:2px}
 .cite-list{list-style:none;padding:0;margin:0;display:grid;gap:6px}.cite-list a{color:inherit;text-decoration:underline;text-underline-offset:2px}
+.research-basis li>strong{font-size:var(--fs-body);font-weight:600}
+.section-stack{display:flex;flex-direction:column;gap:var(--gap-block,16px)}
+.plan-first>.plan-panel{order:-1}
+.loss-grid{display:block!important;columns:2 420px;column-gap:var(--gap-block,16px)}.loss-grid>.loss-card{break-inside:avoid;margin-bottom:var(--gap-block,16px)}
