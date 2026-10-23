@@ -9,7 +9,13 @@ import { FACTORS, loadGlance } from "@/lib/profile/glance";
 import { netSummary } from "@/lib/profile/net-summary";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { FACTOR_LABELS, FACTOR_READINGS } from "@/lib/tests/personality";
-import { FACTOR_RESEARCH, READING_CAVEAT, STUDIES, citationOf } from "@/lib/tests/research";
+import { BASIS, FACTOR_RESEARCH, READING_CAVEAT, STUDIES } from "@/lib/tests/research";
+
+// A citation that links to the paper (DOI) or source.
+function Cite({ id }: { id: string }) {
+  const study = STUDIES.find((item) => item.key === id);
+  return study ? <a href={study.url} target="_blank" rel="noreferrer">{study.citation}</a> : null;
+}
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +33,7 @@ export default async function TestsPage() {
 
     {glance && summary && <section className="content-panel net-summary" aria-label="What it adds up to">
       <h2>What it adds up to</h2>
-      <div className="net-points">{summary.points.map((point) => <div key={point.title} className="net-point"><h3>{point.title}</h3><p>{point.text}</p>{point.cite && <Why label="Sources">{<ul className="reason-list">{point.cite.map((citation) => <li key={citation}>{citation}</li>)}</ul>}</Why>}</div>)}</div>
+      <div className="net-points">{summary.points.map((point) => <div key={point.title} className="net-point"><h3>{point.title}</h3><p>{point.text}</p>{point.cite && <Why label="Sources"><ul className="cite-list">{point.cite.map((key) => <li key={key}><Cite id={key} /></li>)}</ul></Why>}</div>)}</div>
       {summary.open && <p className="net-open"><b>Open question:</b> {summary.open}</p>}
       <p className="scope-note">Self-administered and unproctored; research findings are averages across many people, not predictions about you. Kept separate from official marks.</p>
     </section>}
@@ -53,7 +59,7 @@ export default async function TestsPage() {
           <span><strong>{FACTOR_LABELS[factor]}</strong><Why label="How to read this">{FACTOR_READINGS[factor]}</Why></span>
           <span className="trait-score">{self === undefined ? "—" : `${self.toFixed(1)}/5`}</span>
           <span className="trait-score">{context?.score === null || context?.score === undefined ? <small>not enough context</small> : <>{context.score.toFixed(1)}/5<small>{context.confidence} confidence</small></>}{context?.reason && context.score !== null && <Why label="Why"><p>{context.reason}</p>{context.quote && <q>{context.quote}</q>}</Why>}</span>
-          <span><small>{FACTOR_RESEARCH[factor].strengths}</small><Why label="Caveat and sources"><p>{FACTOR_RESEARCH[factor].watch}</p><ul className="reason-list">{FACTOR_RESEARCH[factor].studies.map((key) => <li key={key}>{citationOf(key)}</li>)}</ul></Why></span>
+          <span><small>{FACTOR_RESEARCH[factor].strengths}</small><Why label="Caveat and sources"><p>{FACTOR_RESEARCH[factor].watch}</p><ul className="cite-list">{FACTOR_RESEARCH[factor].studies.map((key) => <li key={key}><Cite id={key} /></li>)}</ul></Why></span>
         </div>; })}
       </div>
       {glance.context?.summary && <p className="scope-note"><b>What your context adds:</b> {glance.context.summary}</p>}
@@ -65,7 +71,13 @@ export default async function TestsPage() {
       {history.length > 0 && <><h3 className="role-stage">Your attempts</h3><ul className="test-history">{history.map((row) => <li key={row.id}><strong>{row.result.correct}/{row.result.total}</strong> <small>{row.result.level ?? "standard"}{row.result.ability ? ` · adjusted ${row.result.ability.scaled}` : ""} · {new Date(row.submitted_at).toLocaleString()} · {Object.entries(row.result.sections).map(([section, value]) => `${section} ${value.correct}/${value.total}`).join(" · ")}{row.result.overtime ? " · over time" : ""}</small></li>)}</ul></>}</section>
       <aside className="content-panel"><h2>Personality questionnaire</h2><p className="scope-note">Statements are drawn at random from the 50 public-domain IPIP Big-Five Factor Markers (Goldberg, 1992) each time. It records how you describe yourself today, not how others see you. Saving it, with your note, refreshes the context reading and the behaviour analysis within about a minute.</p><PersonalityQuestionnaire /></aside></div>
 
-    <section className="content-panel"><Why label={`Research this page rests on (${STUDIES.length})`}><ul className="reason-list">{STUDIES.map((study) => <li key={study.key}>{study.citation}</li>)}</ul></Why></section>
+    <section className="content-panel" aria-label="What this page rests on">
+      <h2>What this page rests on</h2>
+      <div className="research-basis">
+        <div><h3>Backed by published research</h3><ul>{BASIS.filter((item) => item.basis === "research").map((item) => <li key={item.claim}><strong>{item.claim}</strong><small>{item.detail}</small><ul className="cite-list">{item.studies.map((key) => <li key={key}><small><Cite id={key} /></small></li>)}</ul></li>)}</ul></div>
+        <div><h3>This dashboard&apos;s own rules</h3><ul>{BASIS.filter((item) => item.basis === "own_rule").map((item) => <li key={item.claim}><strong>{item.claim}</strong><small>{item.detail}</small></li>)}</ul></div>
+      </div>
+    </section>
   </div></AppShell>;
 }
 

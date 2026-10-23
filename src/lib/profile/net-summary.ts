@@ -1,5 +1,5 @@
 import { FACTOR_LABELS, type Factor } from "@/lib/tests/personality";
-import { FACTOR_RESEARCH, citationOf } from "@/lib/tests/research";
+import { FACTOR_RESEARCH } from "@/lib/tests/research";
 import type { Glance } from "./glance";
 
 // What the personality, context, reasoning and behaviour results add up to, in plain words. Deterministic:
@@ -26,7 +26,7 @@ export function netSummary(glance: Glance): NetSummary {
     if (notable.length) points.push({
       title: "What research links this to",
       text: notable.map(([factor]) => `${FACTOR_LABELS[factor].split(" (")[0]}: ${FACTOR_RESEARCH[factor].strengths}`).join(" "),
-      cite: [...new Set(notable.flatMap(([factor]) => FACTOR_RESEARCH[factor].studies))].map(citationOf),
+      cite: [...new Set(notable.flatMap(([factor]) => FACTOR_RESEARCH[factor].studies))],
     });
     if (glance.context) {
       const compared = (Object.keys(glance.self) as Factor[]).filter((factor) => glance.context!.factors[factor]?.score !== null && glance.context!.factors[factor]?.score !== undefined);

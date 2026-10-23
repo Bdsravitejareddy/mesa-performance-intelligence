@@ -683,3 +683,22 @@ html[data-story-enter="from-below"] .main-content{animation:storyDrop .28s cubic
 .not-observed ul{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr));gap:10px 18px}
 .not-observed li{display:grid;gap:2px}.not-observed small{color:var(--ink-2)}
 .expand-body .competency-evidence q{font-size:var(--fs-body)}.expand-body .competency-evidence small{font-size:var(--fs-meta)}
+
+/* ── Layout system: one rhythm for every page ─────────────────────────────────────────────────────────────
+   Pages are centred with equal side margins; sections stack with one gap; two-column rows split evenly and
+   stretch to equal height; every grid of cards uses the same gap and equal-height cards. */
+.section-page{width:100%;max-width:1280px;margin-inline:auto;display:flex;flex-direction:column;gap:var(--gap-block,16px)}
+.section-page>*{margin-top:0!important;margin-bottom:0!important}
+.section-page>.section-heading{padding-bottom:4px}
+.section-page .content-panel{padding:var(--pad,20px 22px)}
+.section-page .content-panel>h2:first-child,.section-page .content-panel>.panel-head:first-child{margin-bottom:12px}
+.section-page .section-two-column{gap:var(--gap-block,16px);align-items:stretch}
+@media (min-width:960px){.section-page .section-two-column{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.radar-grid,.net-points,.course-grid,.loss-grid,.behaviour-grid,.pattern-grid,.highlight-grid,.brief-insights{gap:var(--gap-block,16px)!important;align-items:stretch!important}
+.behaviour-grid{margin:0!important}
+.radar{height:100%;align-content:start}
+.research-basis{display:grid;gap:var(--gap-block,16px)}
+@media (min-width:960px){.research-basis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.research-basis h3{margin:0 0 8px}.research-basis ul{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.research-basis li{display:grid;gap:3px}.research-basis li small{color:var(--ink-2)}.research-basis a{color:inherit;text-decoration:underline;text-underline-offset:2px}
+.cite-list{list-style:none;padding:0;margin:0;display:grid;gap:6px}.cite-list a{color:inherit;text-decoration:underline;text-underline-offset:2px}
