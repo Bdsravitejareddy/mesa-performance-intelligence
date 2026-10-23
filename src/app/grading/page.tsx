@@ -9,11 +9,12 @@ import { hasSupabaseConfig } from "@/lib/supabase/config";
 import type { CodeReport } from "@/lib/grading/code-score";
 import type { Comparison } from "@/lib/grading/compare";
 import type { BlindReport } from "@/lib/quality/engine";
+import { reviewCase, REVIEW_GAP, type ReviewCase } from "@/lib/grading/review-case";
 
 export const dynamic = "force-dynamic";
 
 type Grading = { id: string; submission_id: string; assessment_id: string; standard_source: string; standard_label: string; code_score: number | null; code_report: CodeReport; ai_score: number | null; ai_report: BlindReport | null; ai_status: string; official_mark: number | null; comparison: Comparison; provider_model: string; created_at: string };
-type Row = Grading & { assessment: string; course: string; feedback: string };
+type Row = Grading & { assessment: string; course: string; feedback: string; review: ReviewCase | null };
 type Waiting = { assessment: string; course: string; reason: string };
 
 const num = (value: unknown) => (value === null || value === undefined ? null : Number(value));
@@ -30,6 +31,7 @@ export default async function GradingPage() {
   const close = withOfficial.filter((row) => Math.abs(row.ai_score! - row.official_mark!) <= 7.5).length;
   const facultyPoints = rows.reduce((sum, row) => sum + (row.comparison?.agreed?.length ?? 0) + (row.comparison?.facultyOnly?.length ?? 0), 0);
   const agreedPoints = rows.reduce((sum, row) => sum + (row.comparison?.agreed?.length ?? 0), 0);
+  const reviews = rows.filter((row) => row.review).sort((a, b) => (a.review!.strength === b.review!.strength ? b.review!.gap - a.review!.gap : a.review!.strength === "strong" ? -1 : 1));
 
   const headline = !rows.length
     ? "Nothing has been graded yet."
@@ -49,12 +51,18 @@ export default async function GradingPage() {
       <Stat value={`${data.waiting.length}`} unit="" label="Waiting for your work" />
     </section>}
 
+    {reviews.length > 0 && <section className="content-panel review-cases" aria-label="Where a higher mark may be justified">
+      <h2>Where a higher mark may be justified <span className="panel-count">{reviews.length}</span></h2>
+      <p className="empty-hint">The blind AI grade is at least {REVIEW_GAP} points above the official mark and rests on quotes verified in your own work. This is a case to discuss, not proof the mark is wrong — the counterpoints are listed with it.</p>
+      {reviews.map((row) => <ReviewCard key={row.id} row={row} />)}
+    </section>}
+
     {rows.length > 0 && <section className="grade-list" aria-label="Graded submissions">
       <div className="grade-legend"><span><i className="mark-official" /> Official</span><span><i className="mark-ai" /> AI (blind)</span><span><i className="mark-code" /> Code check (completeness)</span></div>
       {rows.map((row) => <article key={row.id} className="content-panel grade-row">
         <header className="grade-row-head">
           <div><h2>{row.assessment}</h2><small>{row.course}</small></div>
-          <span className={`agreement agreement-${row.comparison?.agreement ?? "no_official_mark"}`}>{agreementLabel(row.comparison?.agreement)}</span>
+          <span className="grade-badges">{row.review && <span className={`agreement review-badge review-${row.review.strength}`}>Case for +{fmt(row.review.gap)}</span>}<span className={`agreement agreement-${row.comparison?.agreement ?? "no_official_mark"}`}>{agreementLabel(row.comparison?.agreement)}</span></span>
         </header>
         <ScoreTrack official={row.official_mark} ai={row.ai_score} code={row.code_score} />
         <div className="grade-figures">
@@ -92,6 +100,17 @@ export default async function GradingPage() {
   </div></AppShell>;
 }
 
+function ReviewCard({ row }: { row: Row }) {
+  const review = row.review!;
+  return <article className={`review-card review-${review.strength}`}>
+    <header><div><h3>{row.assessment}</h3><small>{row.course}</small></div><div className="review-figures"><span>Official <b>{fmt(row.official_mark)}</b></span><span>AI <b>{fmt(row.ai_score)}</b></span><em>{review.strength === "strong" ? "Strong case" : "Worth asking"} · +{fmt(review.gap)}</em></div></header>
+    <ul className="review-points">{review.points.slice(0, 4).map((point) => <li key={point.criterion}><strong>{point.criterion} <span>{fmt(point.score)}/10</span></strong><q>{point.quote}</q>{point.strength && <small>{point.strength}</small>}</li>)}</ul>
+    {review.corroboration.length > 0 && <p className="scope-note">{review.corroboration.join(" ")}</p>}
+    <Why label={`What could explain the official mark (${review.counterpoints.length})`}><ul className="reason-list">{review.counterpoints.map((point) => <li key={point}>{point}</li>)}</ul></Why>
+    <Why label="A question you could ask"><p className="review-question">{review.question}</p></Why>
+  </article>;
+}
+
 function agreementLabel(value: Comparison["agreement"] | undefined) {
   return value === "close" ? "AI close to official" : value === "moderate" ? "Moderate gap" : value === "far" ? "Large gap" : "No official mark";
 }
@@ -119,7 +138,7 @@ function ScoreTrack({ official, ai, code }: { official: number | null; ai: numbe
 async function loadGrading(supabase: SupabaseClient, term: TermChoice) {
   const [gradings, submissions, assessments, courses, documents] = await Promise.all([
     supabase.from("submission_gradings").select("id, submission_id, assessment_id, standard_source, standard_label, code_score, code_report, ai_score, ai_report, ai_status, official_mark, comparison, provider_model, created_at").order("created_at", { ascending: false }),
-    supabase.from("submissions").select("id, assessment_id, official_feedback"),
+    supabase.from("submissions").select("id, assessment_id, official_feedback, page_capture"),
     supabase.from("assessments").select("id, course_id, title").order("title"),
     supabase.from("courses").select("id, title, term"),
     supabase.from("submission_documents").select("submission_id, extraction_status"),
@@ -130,6 +149,7 @@ async function loadGrading(supabase: SupabaseClient, term: TermChoice) {
   assessments.data = (assessments.data ?? []).filter((row) => termCourses.has(row.course_id as string));
   const assessment = new Map((assessments.data ?? []).map((row) => [row.id as string, { title: row.title as string, course: course.get(row.course_id as string) ?? "" }]));
   const feedback = new Map((submissions.data ?? []).map((row) => [row.id as string, (row.official_feedback as string) ?? ""]));
+  const lateness = new Map((submissions.data ?? []).map((row) => { const timing = (row.page_capture as { timing?: string | null } | null)?.timing; return [row.id as string, timing ? timing === "late" : null]; }));
   const seen = new Set<string>();
   const rows: Row[] = [];
   for (const raw of gradings.data ?? []) {
@@ -137,7 +157,9 @@ async function loadGrading(supabase: SupabaseClient, term: TermChoice) {
     seen.add(raw.submission_id as string);
     const meta = assessment.get(raw.assessment_id as string);
     if (!meta) continue;
-    rows.push({ ...(raw as unknown as Grading), code_score: num(raw.code_score), ai_score: num(raw.ai_score), official_mark: num(raw.official_mark), assessment: meta?.title ?? "Assessment", course: meta?.course ?? "", feedback: feedback.get(raw.submission_id as string) ?? "" });
+    const grading = { ...(raw as unknown as Grading), code_score: num(raw.code_score), ai_score: num(raw.ai_score), official_mark: num(raw.official_mark) };
+    const review = grading.ai_status === "complete" ? reviewCase({ official: grading.official_mark, ai: grading.ai_score, code: grading.code_score, report: grading.ai_report, codeReport: grading.code_report, comparison: grading.comparison, standardSource: grading.standard_source, late: lateness.get(grading.submission_id) ?? null, assessment: meta.title }) : null;
+    rows.push({ ...grading, assessment: meta.title, course: meta.course, feedback: feedback.get(raw.submission_id as string) ?? "", review });
   }
   const gradedAssessments = new Set(rows.map((row) => row.assessment_id));
   const submissionsByAssessment = new Map<string, string[]>();
