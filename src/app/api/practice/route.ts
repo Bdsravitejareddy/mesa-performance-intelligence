@@ -32,15 +32,17 @@ async function chooseCourse(auth: Auth, focus: string): Promise<{ id: string; ti
     auth.supabase.from("competencies").select("id, domain_name"),
     auth.supabase.from("assessment_competencies").select("assessment_id, competency_id").eq("review_status", "accepted"),
     auth.supabase.from("assessments").select("id, course_id"),
-    auth.supabase.from("courses").select("id, title, lms_course_id"),
+    auth.supabase.from("courses").select("id, title"),
   ]);
   const inDomain = new Set((competencies ?? []).filter((row) => row.domain_name === focus).map((row) => row.id as string));
   const courseOf = new Map((assessments ?? []).map((row) => [row.id as string, row.course_id as string]));
   const counts = new Map<string, number>();
   for (const row of mappings ?? []) if (inDomain.has(row.competency_id as string)) { const course = courseOf.get(row.assessment_id as string); if (course) counts.set(course, (counts.get(course) ?? 0) + 1); }
   const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id);
-  const lms = (courses ?? []).filter((row) => row.lms_course_id);
-  const pick = lms.find((row) => row.id === ranked[0]) ?? lms[Math.floor(Math.random() * Math.max(1, lms.length))];
+  // Courses that hold assessments (the platform's courses); linked Drive folders supply their material.
+  const assessed = new Set((assessments ?? []).map((row) => row.course_id as string));
+  const candidates = (courses ?? []).filter((row) => assessed.has(row.id as string));
+  const pick = candidates.find((row) => row.id === ranked[0]) ?? candidates[Math.floor(Math.random() * Math.max(1, candidates.length))];
   return pick ? { id: pick.id as string, title: pick.title as string } : null;
 }
 
