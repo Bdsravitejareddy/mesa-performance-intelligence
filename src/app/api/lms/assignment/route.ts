@@ -25,6 +25,12 @@ export async function GET(request: NextRequest) {
     // Other read-only list tools, by allowlist only (no arguments).
     const list = request.nextUrl.searchParams.get("list");
     if (list === "courses" || list === "grades") return NextResponse.json({ [list]: outline(unwrapToolResult(await mcp.callTool(list === "courses" ? "list_courses" : "get_grades", {}))) });
+    // A course's content (modules, outline) by its LMS course id, read-only.
+    const content = request.nextUrl.searchParams.get("content");
+    if (content) {
+      if (!/^[\w-]{1,80}$/.test(content)) return NextResponse.json({ error: "Unknown course id." }, { status: 400 });
+      return NextResponse.json({ content: outline(unwrapToolResult(await mcp.callTool("get_course_content", { courseId: content }))) });
+    }
     const id = request.nextUrl.searchParams.get("id");
     if (!id) {
       const list = unwrapToolResult(await mcp.callTool("list_assignments", { status: "submitted" }));
