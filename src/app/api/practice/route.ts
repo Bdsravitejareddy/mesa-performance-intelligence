@@ -52,9 +52,9 @@ export async function GET() {
   const week = weekStart(new Date());
   const select = "id, seed, focus, items, course_title, time_limit_seconds, answers, result, created_at, started_at, submitted_at, note";
   let { data: row } = await auth.supabase.from("weekly_practice").select(select).eq("week_start", week).maybeSingle();
-  // An unstarted set without course questions (older format, or a fallback) is replaced on the next visit.
-  if (row && !row.submitted_at && !row.started_at && (!row.items || !row.course_title)) { await auth.supabase.from("weekly_practice").delete().eq("id", row.id); row = null; }
-  if (!row) {
+  // An unstarted set without course questions (older format, or a fallback) is regenerated in place on the next visit.
+  const regenerate = Boolean(row && !row.submitted_at && !row.started_at && (!row.items || !row.course_title));
+  if (!row || regenerate) {
     const { data: view } = await auth.supabase.from("ai_skill_views").select("domains").order("created_at", { ascending: false }).limit(1).maybeSingle();
     const focus = Object.entries((view?.domains ?? {}) as Record<string, { score: number | null }>).filter(([, value]) => value.score !== null).sort((a, b) => a[1].score! - b[1].score!)[0]?.[0] ?? "Analytical reasoning";
     const seed = randomInt(1, 2_147_483_647);
@@ -82,9 +82,10 @@ export async function GET() {
         }
       } catch (error) { note = `Course questions could not be written (${error instanceof Error ? error.message.slice(0, 120) : "error"}).`; }
     }
-    const created = await auth.supabase.from("weekly_practice").insert({ week_start: week, seed, focus, items, course_title: courseTitle, time_limit_seconds: TIME_LIMIT, note }).select(select).single();
-    row = created.data;
-    if (row) await createAdminClient().from("weekly_practice_keys").insert({ practice_id: row.id, key, explanations });
+    const values = { week_start: week, seed, focus, items, course_title: courseTitle, time_limit_seconds: TIME_LIMIT, note };
+    const saved = row ? await auth.supabase.from("weekly_practice").update(values).eq("id", row.id).select(select).single() : await auth.supabase.from("weekly_practice").insert(values).select(select).single();
+    row = saved.data;
+    if (row) await createAdminClient().from("weekly_practice_keys").upsert({ practice_id: row.id, key, explanations }, { onConflict: "practice_id" });
   }
   if (!row) return NextResponse.json({ error: "This week's practice could not be created." }, { status: 500 });
   const items = (row.items as PracticeItem[] | null) ?? buildWeek(Number(row.seed), row.focus as string).items;
