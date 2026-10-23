@@ -18,6 +18,8 @@ describe("where the marks went", () => {
     expect(result.items.reduce((sum, item) => sum + item.lost, 0)).toBeCloseTo(49, 0);
     expect(result.items[0].criterion).toBe("Customer, market & competition");
     expect(result.interpretation).toMatch(/market and customer analysis/);
+    expect(result.facultyComments.join(" ")).not.toMatch(/3\/5/);
+    expect(result.items.find((item) => /market/i.test(item.criterion))?.detail).toMatch(/no market size/);
   });
   it("falls back to an AI estimate, labelled as such, and notes lateness", () => {
     const result = markLoss({ official: 60, feedback: "", report: report([dim("Interpretation of results", 4, "Conclusions not tied to the numbers"), dim("Formula accuracy", 8), dim("Presentation", 9)]), codeReport: null, late: true })!;
@@ -28,5 +30,24 @@ describe("where the marks went", () => {
   });
   it("says nothing for full marks", () => {
     expect(markLoss({ official: 100, feedback: "", report: null, codeReport: null, late: null })).toBeNull();
+  });
+});
+
+describe("question-by-question feedback", () => {
+  const feedback = [
+    "FEEDBACK (A-D): A (10 marks, formula required): Q1 — total units: Correct. Q2 — stores open: Correct.",
+    "B (20 marks, formula optional): Q1 — average price: Correct answer, but cell not formatted. Small deduction. Q2 — returns in Pune: You got 9 — not quite right. Double-check your filter or formula for this one.",
+    "C (30 marks — summary table): north: wrong values for: Units, Returns. south: wrong values for: Units, Returns. east: wrong values for: Units, Returns. Reminder: Units should include returned orders.",
+    "---------- FEEDBACK (CASE QUESTION): 30/40. Good reasoning. What is missing or weak: no regional breakdown.",
+  ].join(" ");
+  it("splits the loss by section, keeping an explicitly scored section exact", () => {
+    const result = markLoss({ official: 50, feedback, report: null, codeReport: null, late: false })!;
+    expect(result.source).toBe("faculty_questions");
+    expect(result.items.reduce((sum, item) => sum + item.lost, 0)).toBeCloseTo(50, 0);
+    expect(result.items.find((item) => /CASE/.test(item.criterion))).toMatchObject({ lost: 10, detail: "Missing: no regional breakdown." });
+    const table = result.items.find((item) => item.criterion.startsWith("C"))!;
+    expect(table.detail).toMatch(/same error in 3 places[\s\S]*Reminder|reminder/);
+    expect(result.items.find((item) => item.criterion.startsWith("B"))!.detail).toMatch(/returns in Pune/);
+    expect(result.items.some((item) => item.criterion.startsWith("A"))).toBe(false);
   });
 });

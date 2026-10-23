@@ -50,7 +50,7 @@ export default async function AssessmentsPage() {
   </div></AppShell>;
 }
 
-const SOURCE_NOTE = { faculty_breakdown: "Split by the faculty's own criterion scores", ai_estimate: "Split estimated from the blind AI grade — no faculty breakdown was given" } as const;
+const SOURCE_NOTE = { faculty_breakdown: "Split by the faculty's own criterion scores", faculty_questions: "Split from the faculty's question-by-question feedback: each section's share of wrong answers, scaled to the marks actually lost", ai_estimate: "Split estimated from the blind AI grade — no faculty breakdown was given" } as const;
 
 function LossCard({ row }: { row: Row }) {
   const loss = row.loss!;
