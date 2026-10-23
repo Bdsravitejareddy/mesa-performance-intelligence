@@ -109,3 +109,18 @@ describe("criterion-level evidence", () => {
     expect(result.why.interpretation).not.toMatch(/whole-assessment/);
   });
 });
+
+describe("blind AI grades as stand-in evidence", () => {
+  const row = (id: string, mark: number, kind?: "ai_grade") => ({ submissionId: id, assessmentId: id, assessmentTitle: id, course: "C", mark, feedback: "", date: "2026-10-01", source: "s", mappingSource: "ai_suggested" as const, granularity: "whole_assessment" as const, evidenceKind: kind });
+  it("classifies from AI grades alone, but at low confidence and labelled", () => {
+    const result = classifyCompetency([row("a", 90, "ai_grade"), row("b", 92, "ai_grade")]);
+    expect(result.state).toBe("demonstrated_strength");
+    expect(result.confidence).toBe("low");
+    expect(result.headline).toMatch(/^From AI grading only/);
+    expect(result.why.limitations.join(" ")).toMatch(/blind AI grade/);
+  });
+  it("does not relabel evidence that includes an official mark", () => {
+    const result = classifyCompetency([row("a", 90), row("b", 92, "ai_grade")]);
+    expect(result.headline).not.toMatch(/AI grading only/);
+  });
+});

@@ -1,7 +1,7 @@
 // Deterministic, criteria-based competency classification. No AI and no cohort comparison.
 
 // Bump when bands or rules change so history can distinguish a rule change from new evidence.
-export const RULES_VERSION = "competency-rules-2026-10-22.2";
+export const RULES_VERSION = "competency-rules-2026-10-23.1";
 
 export const HIGH_RESULT = 85;
 export const LOW_RESULT = 65;
@@ -32,6 +32,8 @@ export type CompetencyEvidence = {
   granularity: "whole_assessment" | "criterion";
   // Set for criterion-level evidence, e.g. "Customer, market & competition".
   criterionLabel?: string | null;
+  // A blind AI grade used where no official mark exists; never mixed up with an official mark.
+  evidenceKind?: "official" | "ai_grade";
 };
 
 export type EvidenceRow = CompetencyEvidence & { band: "high" | "middle" | "low" | "unscored" };
@@ -68,6 +70,13 @@ export function bandFor(mark: number | null): EvidenceRow["band"] {
 }
 
 export function classifyCompetency(input: CompetencyEvidence[], now: Date = new Date()): CompetencyAssessment {
+  const result = classifyRaw(input, now);
+  const scored = result.why.evidence.filter((row) => row.band !== "unscored");
+  if (scored.length && scored.every((row) => row.evidenceKind === "ai_grade")) return { ...result, headline: `From AI grading only: ${result.headline.charAt(0).toLowerCase()}${result.headline.slice(1)}` };
+  return result;
+}
+
+function classifyRaw(input: CompetencyEvidence[], now: Date): CompetencyAssessment {
   // Suggested AI mappings are never evidence; only accepted mappings reach this function, but guard anyway.
   const evidence: EvidenceRow[] = input.map((item) => ({ ...item, band: bandFor(item.mark) }));
   const scored = latestPerAssessment(evidence.filter((item) => item.band !== "unscored"));
@@ -94,7 +103,9 @@ export function classifyCompetency(input: CompetencyEvidence[], now: Date = new 
     };
   }
 
-  const confidence = confidenceFor(scored);
+  // Evidence resting only on AI grades is capped at low confidence and says so in its headline.
+  const aiOnly = scored.every((row) => row.evidenceKind === "ai_grade");
+  const confidence: Confidence = aiOnly ? "low" : confidenceFor(scored);
   // Strengths and development areas need separate assessments; several criteria of one piece of work are one context.
   const distinct = (rows: EvidenceRow[]) => new Set(rows.map((row) => row.assessmentId)).size;
   const highAssessments = distinct(high);
@@ -160,6 +171,8 @@ function buildLimitations(evidence: EvidenceRow[], scored: EvidenceRow[], now: D
   if (evidence.some((item) => item.mappingSource === "ai_suggested")) limitations.push("Some assessments were mapped to this competency automatically by AI from their titles and feedback, not from an official rubric. Remove a mapping on the Competency map if it is wrong.");
   if (scored.length && new Set(scored.map((item) => item.course)).size === 1) limitations.push("All scored evidence comes from one course, so it may not transfer to other contexts.");
   if (evidence.some((item) => item.feedback.trim())) limitations.push("Evaluator feedback is shown for context but is not scored automatically.");
+  const aiRows = scored.filter((item) => item.evidenceKind === "ai_grade").length;
+  if (aiRows) limitations.push(`${aiRows} result${aiRows > 1 ? "s are" : " is a"} blind AI grade${aiRows > 1 ? "s" : ""} against the assignment brief, used because no official mark exists yet. ${aiRows === scored.length ? "With AI grades alone, confidence stays low." : "Official marks take priority wherever they exist."}`);
   const unscored = evidence.filter((item) => item.band === "unscored").length;
   if (unscored) limitations.push(`${unscored} mapped assessment${unscored > 1 ? "s have" : " has"} no released mark and ${unscored > 1 ? "were" : "was"} not counted.`);
   const newest = scored.map((item) => item.date).filter((date): date is string => Boolean(date)).sort().at(-1);

@@ -11,7 +11,8 @@ export type Glance = {
   self: Record<Factor, number> | null; selfDate: string | null; note: string;
   context: { factors: Record<Factor, ContextFactor>; summary: string; date: string; sources: { id: string; label: string }[] } | null;
   reasoning: { level: Level; date: string; sections: Record<"numerical" | "logical" | "verbal", number>; correct: number; total: number; scaled: number | null }[];
-  skills: { domain: string; score: number | null; evidenced: number; total: number }[];
+  // score: official marks only; withAi: official marks plus blind AI grades where no official mark exists.
+  skills: { domain: string; score: number | null; withAi: number | null; evidenced: number; total: number }[];
   behaviour: { observed: number; total: number; date: string | null; dimensions: { dimension: string; status: string; observedBehaviour: string }[] };
 };
 
@@ -43,9 +44,10 @@ export async function loadGlance(supabase: SupabaseClient): Promise<Glance> {
   try {
     const domains = buildCompetencyMap(await loadCompetencyInputs(supabase));
     skills = domains.map((domain) => {
-      const marks = domain.competencies.flatMap((entry) => entry.assessment.why.evidence.map((row) => row.mark).filter((mark): mark is number => mark !== null));
+      const rows = domain.competencies.flatMap((entry) => entry.assessment.why.evidence.filter((row) => row.mark !== null && row.mappingSource !== "practice_test"));
+      const mean = (values: number[]) => (values.length ? Math.round(values.reduce((sum, mark) => sum + mark, 0) / values.length) : null);
       const evidenced = domain.competencies.filter((entry) => entry.assessment.why.evidence.some((row) => row.mark !== null)).length;
-      return { domain: domain.name, score: marks.length ? Math.round(marks.reduce((sum, mark) => sum + mark, 0) / marks.length) : null, evidenced, total: domain.competencies.length };
+      return { domain: domain.name, score: mean(rows.filter((row) => row.evidenceKind !== "ai_grade").map((row) => row.mark!)), withAi: mean(rows.map((row) => row.mark!)), evidenced, total: domain.competencies.length };
     });
   } catch { skills = []; }
 

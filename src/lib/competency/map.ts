@@ -12,7 +12,10 @@ export type CompetencyDomain = { key: string; name: string; competencies: Compet
 
 export type TestEvidence = { id: string; submitted_at: string; result: { sections?: Record<string, { correct: number; total: number; percent: number }> } };
 
-export function buildCompetencyMap(input: { competencies: CompetencyRow[]; mappings: MappingRow[]; assessments: AssessmentRow[]; submissions: SubmissionRow[]; courses: CourseRow[]; tests?: TestEvidence[] }, now: Date = new Date()): CompetencyDomain[] {
+export function buildCompetencyMap(input: { competencies: CompetencyRow[]; mappings: MappingRow[]; assessments: AssessmentRow[]; submissions: SubmissionRow[]; courses: CourseRow[]; tests?: TestEvidence[]; gradings?: { assessment_id: string; ai_score: number | string | null; created_at: string }[] }, now: Date = new Date()): CompetencyDomain[] {
+  // The latest blind AI grade per assessment (inputs arrive newest first).
+  const aiGrade = new Map<string, { score: number; date: string }>();
+  for (const row of input.gradings ?? []) if (row.ai_score !== null && !aiGrade.has(row.assessment_id)) aiGrade.set(row.assessment_id, { score: Number(row.ai_score), date: row.created_at });
   const assessmentById = new Map(input.assessments.map((row) => [row.id, row]));
   const courseById = new Map(input.courses.map((row) => [row.id, row.title]));
   const submissionsByAssessment = new Map<string, SubmissionRow[]>();
@@ -37,7 +40,13 @@ export function buildCompetencyMap(input: { competencies: CompetencyRow[]; mappi
         const criterion = parseCriterionScores(row.official_feedback ?? "").find((item) => item.label.toLowerCase() === mapping.criterion_label!.toLowerCase());
         return { ...common, granularity: "criterion" as const, criterionLabel: mapping.criterion_label, assessmentTitle: `${assessment.title} · ${mapping.criterion_label}`, mark: criterion ? criterion.percent : null, source: criterion ? `${common.source} · criterion ${criterion.score}/${criterion.max} in official feedback` : `${common.source} · criterion not found in feedback` };
       });
-    evidenceByCompetency.set(mapping.competency_id, [...(evidenceByCompetency.get(mapping.competency_id) ?? []), ...items]);
+    // No official mark on this assessment: its blind AI grade counts instead, labelled and at lower confidence.
+    const grade = aiGrade.get(assessment.id);
+    const officiallyMarked = items.some((item) => item.mark !== null);
+    const withAi: CompetencyEvidence[] = !officiallyMarked && grade && !mapping.criterion_label
+      ? [{ ...base, submissionId: submissions[0]?.id ?? null, mark: Math.round(grade.score * 10) / 10, feedback: submissions[0]?.official_feedback ?? "", date: grade.date, source: "Blind AI grade against the brief — not an official mark", evidenceKind: "ai_grade" }]
+      : items;
+    evidenceByCompetency.set(mapping.competency_id, [...(evidenceByCompetency.get(mapping.competency_id) ?? []), ...withAi]);
   }
 
   // Reasoning practice tests: numerical section → numerical analysis; logical and verbal → logical reasoning.
