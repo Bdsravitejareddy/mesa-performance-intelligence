@@ -1,4 +1,5 @@
 import { parseCriterionScores } from "@/lib/feedback/criteria";
+import { stakesOf } from "@/lib/assessments/stakes";
 import { classifyCompetency, type CompetencyAssessment, type CompetencyEvidence } from "./classify";
 
 export type CompetencyRow = { id: string; domain_key: string; domain_name: string; name: string; description: string; sort_order: number };
@@ -29,7 +30,7 @@ export function buildCompetencyMap(input: { competencies: CompetencyRow[]; mappi
     const assessment = assessmentById.get(mapping.assessment_id);
     if (!assessment) continue;
     mappedCount.set(mapping.competency_id, (mappedCount.get(mapping.competency_id) ?? 0) + 1);
-    const base = { assessmentId: assessment.id, assessmentTitle: assessment.title, course: courseById.get(assessment.course_id) ?? "Course", mappingSource: mapping.mapping_source, granularity: "whole_assessment" as const };
+    const base = { assessmentId: assessment.id, assessmentTitle: assessment.title, course: courseById.get(assessment.course_id) ?? "Course", mappingSource: mapping.mapping_source, granularity: "whole_assessment" as const, stakes: stakesOf(assessment.title) };
     const submissions = submissionsByAssessment.get(assessment.id) ?? [];
     const items: CompetencyEvidence[] = !submissions.length
       ? [{ ...base, submissionId: null, mark: null, feedback: "", date: null, source: "No submission recorded", ...(mapping.criterion_label ? { granularity: "criterion" as const, criterionLabel: mapping.criterion_label, assessmentTitle: `${assessment.title} · ${mapping.criterion_label}` } : {}) }]
@@ -56,7 +57,7 @@ export function buildCompetencyMap(input: { competencies: CompetencyRow[]; mappi
       const correct = parts.reduce((sum, part) => sum + (sections[part]?.correct ?? 0), 0);
       const total = parts.reduce((sum, part) => sum + (sections[part]?.total ?? 0), 0);
       if (!total) return;
-      const row: CompetencyEvidence = { submissionId: test.id, assessmentId: `test:${test.id}:${competencyId}`, assessmentTitle: `Reasoning test · ${label}`, course: "Practice tests", mark: Math.round((correct / total) * 100), feedback: "", date: test.submitted_at, source: `Practice reasoning test (${correct}/${total})`, mappingSource: "practice_test", granularity: "whole_assessment" };
+      const row: CompetencyEvidence = { submissionId: test.id, assessmentId: `test:${test.id}:${competencyId}`, assessmentTitle: `Reasoning test · ${label}`, course: "Practice tests", mark: Math.round((correct / total) * 100), feedback: "", date: test.submitted_at, source: `Practice reasoning test (${correct}/${total})`, mappingSource: "practice_test", granularity: "whole_assessment", stakes: "practice" };
       evidenceByCompetency.set(competencyId, [...(evidenceByCompetency.get(competencyId) ?? []), row]);
       mappedCount.set(competencyId, (mappedCount.get(competencyId) ?? 0) + 1);
     };

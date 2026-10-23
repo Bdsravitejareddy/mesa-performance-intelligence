@@ -1,7 +1,7 @@
 // Deterministic, criteria-based competency classification. No AI and no cohort comparison.
 
 // Bump when bands or rules change so history can distinguish a rule change from new evidence.
-export const RULES_VERSION = "competency-rules-2026-10-23.1";
+export const RULES_VERSION = "competency-rules-2026-10-23.2";
 
 export const HIGH_RESULT = 85;
 export const LOW_RESULT = 65;
@@ -34,6 +34,8 @@ export type CompetencyEvidence = {
   criterionLabel?: string | null;
   // A blind AI grade used where no official mark exists; never mixed up with an official mark.
   evidenceKind?: "official" | "ai_grade";
+  // How much the assessment counted; practice work is weighted lightly (see stakes.ts).
+  stakes?: "exam" | "graded" | "practice";
 };
 
 export type EvidenceRow = CompetencyEvidence & { band: "high" | "middle" | "low" | "unscored" };
@@ -79,11 +81,18 @@ export function classifyCompetency(input: CompetencyEvidence[], now: Date = new 
 function classifyRaw(input: CompetencyEvidence[], now: Date): CompetencyAssessment {
   // Suggested AI mappings are never evidence; only accepted mappings reach this function, but guard anyway.
   const evidence: EvidenceRow[] = input.map((item) => ({ ...item, band: bandFor(item.mark) }));
-  const scored = latestPerAssessment(evidence.filter((item) => item.band !== "unscored"));
+  // Graded work and exams decide the classification when they exist; practice work is shown but only counts
+  // when nothing graded covers this competency, because effort on ungraded practice is usually lower.
+  const allScored = latestPerAssessment(evidence.filter((item) => item.band !== "unscored"));
+  const graded = allScored.filter((item) => item.stakes !== "practice");
+  const scored = graded.length ? graded : allScored;
   const high = scored.filter((item) => item.band === "high");
   const low = scored.filter((item) => item.band === "low");
   const middle = scored.filter((item) => item.band === "middle");
   const limitations = buildLimitations(evidence, scored, now);
+  const setAside = allScored.length - scored.length;
+  if (setAside) limitations.push(`${setAside} practice result${setAside > 1 ? "s are" : " is"} shown but not counted, because graded work on this competency exists and ungraded practice usually gets less effort.`);
+  else if (scored.length && scored.every((item) => item.stakes === "practice")) limitations.push("Rests on ungraded practice work only, which usually gets less effort than graded work; read it as a lower bound.");
   const base = { evidence, benchmark: BENCHMARK, limitations };
 
   if (!evidence.length) {

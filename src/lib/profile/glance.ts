@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadCompetencyInputs } from "@/lib/competency/load";
 import { buildCompetencyMap } from "@/lib/competency/map";
+import { STAKES_WEIGHT } from "@/lib/assessments/stakes";
 import { FACTOR_LABELS, type Factor } from "@/lib/tests/personality";
 import type { ContextFactor } from "@/lib/tests/context-reading";
 import type { Level } from "@/lib/tests/reasoning";
@@ -45,9 +46,11 @@ export async function loadGlance(supabase: SupabaseClient): Promise<Glance> {
     const domains = buildCompetencyMap(await loadCompetencyInputs(supabase));
     skills = domains.map((domain) => {
       const rows = domain.competencies.flatMap((entry) => entry.assessment.why.evidence.filter((row) => row.mark !== null && row.mappingSource !== "practice_test"));
-      const mean = (values: number[]) => (values.length ? Math.round(values.reduce((sum, mark) => sum + mark, 0) / values.length) : null);
+      // Weighted by stakes: a term exam counts three times a practice task.
+      const weight = (row: (typeof rows)[number]) => STAKES_WEIGHT[row.stakes ?? "graded"];
+      const weighted = (list: typeof rows) => { const total = list.reduce((sum, row) => sum + weight(row), 0); return total ? Math.round(list.reduce((sum, row) => sum + row.mark! * weight(row), 0) / total) : null; };
       const evidenced = domain.competencies.filter((entry) => entry.assessment.why.evidence.some((row) => row.mark !== null)).length;
-      return { domain: domain.name, score: mean(rows.filter((row) => row.evidenceKind !== "ai_grade").map((row) => row.mark!)), withAi: mean(rows.map((row) => row.mark!)), evidenced, total: domain.competencies.length };
+      return { domain: domain.name, score: weighted(rows.filter((row) => row.evidenceKind !== "ai_grade")), withAi: weighted(rows), evidenced, total: domain.competencies.length };
     });
   } catch { skills = []; }
 

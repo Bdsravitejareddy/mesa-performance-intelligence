@@ -2,11 +2,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { AppShell } from "@/components/app-shell";
 import { Why } from "@/components/why";
 import { cachedRead } from "@/lib/data/cached";
+import { STAKES_LABEL, stakesOf, type Stakes } from "@/lib/assessments/stakes";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 
 export const dynamic = "force-dynamic";
 
-type Point = { title: string; course: string; official: number | null; ai: number | null; code: number | null; late: boolean | null; group: boolean | null; month: string | null };
+type Point = { title: string; course: string; official: number | null; ai: number | null; code: number | null; late: boolean | null; group: boolean | null; month: string | null; stakes: Stakes };
 type Pattern = { key: string; title: string; reading: string; n: number; detail: { label: string; value: string; n: number }[]; caution: string };
 
 const mean = (values: number[]) => (values.length ? Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10 : null);
@@ -24,6 +25,12 @@ const strength = (r: number) => (Math.abs(r) >= 0.7 ? "strong" : Math.abs(r) >= 
 // Descriptive patterns only: each states its sample size, and none implies a cause.
 function patterns(points: Point[]): Pattern[] {
   const out: Pattern[] = [];
+  // Quality by how much the work counted: blind AI grades (same grader for all), and how complete the work was.
+  const tiers = (["exam", "graded", "practice"] as Stakes[]).map((stakes) => { const rows = points.filter((point) => point.stakes === stakes); return { stakes, ai: mean(rows.filter((point) => point.ai !== null).map((point) => point.ai!)), code: mean(rows.filter((point) => point.code !== null).map((point) => point.code!)), n: rows.filter((point) => point.ai !== null).length }; }).filter((tier) => tier.n > 0);
+  const exam = tiers.find((tier) => tier.stakes === "exam"), practice = tiers.find((tier) => tier.stakes === "practice");
+  out.push({ key: "stakes", title: "Term exams vs practice work", n: tiers.reduce((sum, tier) => sum + tier.n, 0),
+    reading: exam?.ai != null && practice?.ai != null ? `The blind grader scores your term exams ${exam.ai} on average (${exam.n}) and your practice work ${practice.ai} (${practice.n}) — ${Math.abs(Math.round((exam.ai - practice.ai) * 10) / 10)} points ${exam.ai >= practice.ai ? "higher on exams" : "higher on practice"}.${exam.code != null && practice.code != null ? ` Completeness: ${exam.code} vs ${practice.code}.` : ""} Practice work is weighted lightly elsewhere for this reason.` : "Needs AI grades on both term exams and practice work to compare.",
+    detail: tiers.map((tier) => ({ label: `${STAKES_LABEL[tier.stakes]} · AI`, value: tier.ai?.toString() ?? "—", n: tier.n })), caution: "Exams and practice tasks differ in difficulty and format as well as effort, so the gap mixes all three. One grader is used for both, which keeps the comparison like for like." });
   const both = points.filter((point) => point.official !== null && point.ai !== null);
   const gaps = both.map((point) => point.ai! - point.official!);
   out.push({ key: "ai-official", title: "AI grade vs official mark", n: both.length,
@@ -88,7 +95,7 @@ async function load(supabase: SupabaseClient): Promise<Point[]> {
       title: assessment.title as string, course: course.get(assessment.course_id as string) ?? "",
       official: sub?.official_mark === null || sub?.official_mark === undefined ? null : Number(sub.official_mark),
       ai: grade?.ai ?? null, code: grade?.code ?? null,
-      late: capture?.timing ? capture.timing === "late" : null, group: capture ? capture.isGroup === true : null,
+      late: capture?.timing ? capture.timing === "late" : null, group: capture ? capture.isGroup === true : null, stakes: stakesOf(assessment.title as string),
       month: when && !Number.isNaN(when.getTime()) ? when.toLocaleDateString("en", { month: "short", year: "numeric" }) : null,
     };
   }).filter((point) => point.official !== null || point.ai !== null || point.code !== null);

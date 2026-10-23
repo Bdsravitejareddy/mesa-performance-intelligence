@@ -124,3 +124,17 @@ describe("blind AI grades as stand-in evidence", () => {
     expect(result.headline).not.toMatch(/AI grading only/);
   });
 });
+
+describe("practice work weighting", () => {
+  const row = (id: string, mark: number, stakes: "exam" | "graded" | "practice") => ({ submissionId: id, assessmentId: id, assessmentTitle: id, course: "C", mark, feedback: "", date: "2026-10-01", source: "s", mappingSource: "ai_suggested" as const, granularity: "whole_assessment" as const, stakes });
+  it("lets graded work decide and sets low practice results aside", () => {
+    const result = classifyCompetency([row("exam", 90, "exam"), row("graded", 88, "graded"), row("p1", 20, "practice"), row("p2", 30, "practice")]);
+    expect(result.state).toBe("demonstrated_strength");
+    expect(result.why.limitations.join(" ")).toMatch(/2 practice results are shown but not counted/);
+  });
+  it("uses practice work when nothing graded exists, and says so", () => {
+    const result = classifyCompetency([row("p1", 40, "practice"), row("p2", 30, "practice")]);
+    expect(result.state).toBe("development_area");
+    expect(result.why.limitations.join(" ")).toMatch(/ungraded practice work only/);
+  });
+});
