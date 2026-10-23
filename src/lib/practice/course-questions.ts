@@ -34,18 +34,18 @@ export function validateQuestions(raw: Record<string, unknown>, refs: RetrievedR
   });
 }
 
-export async function courseQuestions(client: SupabaseClient, course: { id: string; title: string }, focus: string): Promise<{ questions: CourseQuestion[]; caseTask: string | null }> {
+export async function courseQuestions(client: SupabaseClient, course: { id: string; title: string }, focus: string): Promise<{ questions: CourseQuestion[]; caseTask: string | null; note: string }> {
   // Any assessment of the course will do as the retrieval scope; course-wide materials are always included.
   const { data: assessment } = await client.from("assessments").select("id").eq("course_id", course.id).limit(1).maybeSingle();
-  if (!assessment) return { questions: [], caseTask: null };
+  if (!assessment) return { questions: [], caseTask: null, note: "the course has no assessments to scope its material" };
   const refs = (await retrieveRelevantReferences(client, course.id, assessment.id as string, `${course.title} ${focus} concepts framework analysis method calculation`)).slice(0, 10);
-  if (refs.length < 2) return { questions: [], caseTask: null };
+  if (refs.length < 2) return { questions: [], caseTask: null, note: `only ${refs.length} matching course excerpt${refs.length === 1 ? "" : "s"} found` };
   const excerpts = refs.map((ref) => ({ key: ref.key, source: ref.label, excerpt: ref.excerpt.slice(0, 1800) }));
   const raw = await requestJsonFromProvider(WRITE, JSON.stringify({ course: course.title, focus, excerpts }), { timeoutMs: 90_000 });
   const drafted = validateQuestions(raw, refs);
-  if (!drafted.length) return { questions: [], caseTask: typeof raw.case === "string" ? raw.case.slice(0, 900) : null };
+  if (!drafted.length) return { questions: [], caseTask: typeof raw.case === "string" ? raw.case.slice(0, 900) : null, note: "no drafted question had a supporting quote found in the excerpts" };
   const check = await requestJsonFromProvider(CHECK, JSON.stringify({ excerpts, questions: drafted.map(({ prompt, options }) => ({ prompt, options })) }), { timeoutMs: 60_000 }).catch(() => ({ answers: [] }));
   const answers = Array.isArray(check.answers) ? check.answers.map(Number) : [];
   const agreed: CourseQuestion[] = drafted.filter((question, index) => answers[index] === question.answer).map((question) => ({ id: question.id, kind: question.kind, prompt: question.prompt, options: question.options, answer: question.answer, explanation: question.explanation, source: question.source }));
-  return { questions: agreed.slice(0, 5), caseTask: typeof raw.case === "string" && raw.case.trim().length > 40 ? raw.case.trim().slice(0, 900) : null };
+  return { note: agreed.length < 3 ? `only ${agreed.length} of ${drafted.length} questions passed the blind cross-check` : "", questions: agreed.slice(0, 5), caseTask: typeof raw.case === "string" && raw.case.trim().length > 40 ? raw.case.trim().slice(0, 900) : null };
 }

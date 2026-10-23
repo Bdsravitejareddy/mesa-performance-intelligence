@@ -50,10 +50,10 @@ export async function GET() {
   const auth = await member();
   if (!auth) return NextResponse.json({ error: "Sign in first." }, { status: 401 });
   const week = weekStart(new Date());
-  const select = "id, seed, focus, items, course_title, time_limit_seconds, answers, result, created_at, started_at, submitted_at";
+  const select = "id, seed, focus, items, course_title, time_limit_seconds, answers, result, created_at, started_at, submitted_at, note";
   let { data: row } = await auth.supabase.from("weekly_practice").select(select).eq("week_start", week).maybeSingle();
-  // An unsubmitted set in the earlier, generator-only format is replaced by a course-based one.
-  if (row && !row.items && !row.submitted_at) { await auth.supabase.from("weekly_practice").delete().eq("id", row.id); row = null; }
+  // An unstarted set without course questions (older format, or a fallback) is replaced on the next visit.
+  if (row && !row.submitted_at && !row.started_at && (!row.items || !row.course_title)) { await auth.supabase.from("weekly_practice").delete().eq("id", row.id); row = null; }
   if (!row) {
     const { data: view } = await auth.supabase.from("ai_skill_views").select("domains").order("created_at", { ascending: false }).limit(1).maybeSingle();
     const focus = Object.entries((view?.domains ?? {}) as Record<string, { score: number | null }>).filter(([, value]) => value.score !== null).sort((a, b) => a[1].score! - b[1].score!)[0]?.[0] ?? "Analytical reasoning";
@@ -62,10 +62,14 @@ export async function GET() {
     let items: PracticeItem[] = fallback.items;
     let key: Record<string, number> = fallback.key, explanations: Record<string, string> = fallback.explanations;
     let courseTitle = "";
+    let note = "";
     const course = await chooseCourse(auth, focus);
-    if (course && await aiAllowed(auth)) {
+    if (!course) note = "No course to draw questions from.";
+    else if (!await aiAllowed(auth)) note = "Course questions need the current AI consent.";
+    else {
       try {
         const generated = await courseQuestions(auth.supabase, course, focus);
+        if (generated.questions.length < 3) note = `${course.title}: ${generated.note}`;
         if (generated.questions.length >= 3) {
           courseTitle = course.title;
           // Top up to five with verified extreme reasoning items if fewer course questions passed both checks.
@@ -76,9 +80,9 @@ export async function GET() {
           const caseItem: PracticeItem = { id: "case", kind: "case", prompt: generated.caseTask ?? (fallback.items.find((item) => item.kind === "case") as { prompt: string }).prompt, focus: generated.caseTask ? course.title.replace(/\s+with\s+.*$/i, "") : focus, minWords: 120 };
           items = [...questionItems, caseItem, ...fallback.items.filter((item) => item.kind === "conversation")];
         }
-      } catch { /* the verified reasoning set stands in */ }
+      } catch (error) { note = `Course questions could not be written (${error instanceof Error ? error.message.slice(0, 120) : "error"}).`; }
     }
-    const created = await auth.supabase.from("weekly_practice").insert({ week_start: week, seed, focus, items, course_title: courseTitle, time_limit_seconds: TIME_LIMIT }).select(select).single();
+    const created = await auth.supabase.from("weekly_practice").insert({ week_start: week, seed, focus, items, course_title: courseTitle, time_limit_seconds: TIME_LIMIT, note }).select(select).single();
     row = created.data;
     if (row) await createAdminClient().from("weekly_practice_keys").insert({ practice_id: row.id, key, explanations });
   }
@@ -87,7 +91,7 @@ export async function GET() {
   // Until Start is pressed only the outline is sent, so the questions cannot be read before the clock runs.
   const started = Boolean(row.started_at);
   const outline = items.map((item) => ({ id: item.id, kind: item.kind }));
-  return NextResponse.json({ week, focus: row.focus, course: row.course_title, items: started ? items : [], outline, answers: row.answers, result: row.result, submitted: Boolean(row.submitted_at), started, startedAt: row.started_at, timeLimit: row.time_limit_seconds });
+  return NextResponse.json({ week, focus: row.focus, course: row.course_title, items: started ? items : [], outline, note: row.note, answers: row.answers, result: row.result, submitted: Boolean(row.submitted_at), started, startedAt: row.started_at, timeLimit: row.time_limit_seconds });
 }
 
 // Starts the clock for this week's set.
