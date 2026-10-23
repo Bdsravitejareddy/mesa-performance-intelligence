@@ -10,7 +10,15 @@ import { summarisePortfolio, type PortfolioRow } from "@/lib/portfolio/summary";
 
 export const dynamic = "force-dynamic";
 
-export default async function ProfessionalEvidencePage() {
+const GITHUB_MESSAGE: Record<string, string> = {
+  imported: "GitHub connected and imported.", not_configured: "GitHub is not set up yet — add the GitHub App settings in Vercel first.",
+  invalid: "That GitHub sign-in could not be verified; start again with Connect GitHub.", save_failed: "GitHub was read, but the summary could not be saved.", failed: "GitHub could not be read; try Connect GitHub again.",
+};
+
+export default async function ProfessionalEvidencePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const query = await searchParams;
+  const github = typeof query.github === "string" ? query.github : null;
+  const githubNote = github ? `${GITHUB_MESSAGE[github] ?? ""}${github === "imported" && typeof query.repos === "string" ? ` ${query.repos} repositories read.` : ""}` : "";
   const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
   const items = demoMode || !hasSupabaseConfig() ? null : await load();
   const claims = items?.flatMap((item) => item.claims) ?? [];
@@ -19,7 +27,8 @@ export default async function ProfessionalEvidencePage() {
     <div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> Professional evidence</div><h1>Resume & portfolio</h1><p className="page-subtitle">A resume line is evidence of a claim, not proof of proficiency. Claims become supported only when another item backs them.</p></div></div>
     {items && <section className="competency-summary" aria-label="Claims"><div className="competency-summary-item"><strong>{items.length}</strong><span>Evidence items</span></div><div className="competency-summary-item"><strong>{claims.filter((claim) => claim.status === "claimed").length}</strong><span>Claims not yet supported</span></div><div className="competency-summary-item"><strong>{claims.filter((claim) => claim.status === "supported" || claim.status === "attested").length}</strong><span>Supported claims{claims.some((claim) => claim.status === "attested") ? ` (${claims.filter((claim) => claim.status === "attested").length} confirmed by you)` : ""}</span></div><div className="competency-summary-item"><strong>{claims.filter((claim) => claim.quantified).length}</strong><span>Quantified claims</span></div></section>}
     {portfolio && <section className="content-panel portfolio-panel" aria-label="Self-directed work">
-      <div className="panel-head"><h2>Self-directed work · GitHub & Vercel <span className="panel-count">{portfolio.projects.length}</span></h2><PortfolioImport /></div>
+      <div className="panel-head"><h2>Self-directed work · GitHub & Vercel <span className="panel-count">{portfolio.projects.length}</span></h2><span className="inline-action"><a className="button button-primary" href="/api/github/connect">Connect GitHub</a><PortfolioImport /></span></div>
+      {githubNote && <p className="info-callout" role="status">{githubNote}</p>}
       {portfolio.projects.length ? <>
         <div className="stat-strip">
           <div className="stat"><strong>{portfolio.projects.length}</strong><span>Projects (mirrors counted once)</span></div>
@@ -35,7 +44,8 @@ export default async function ProfessionalEvidencePage() {
         </article>)}</div>
         <Why label="How to read this">Self-chosen, ungraded work, so it shows what you choose to build when nothing is marked. Coding assistants may have written much of the code, so it evidences what you built and shipped — product judgement, AI integration and delivery — rather than hand-coding skill. Commit counts cover only commits made under each account&apos;s login.</Why>
       </> : <p className="empty-hint">Nothing imported yet.</p>}
-      <Why label="Update from GitHub and Vercel">Run <code>node scripts/collect-portfolio.mjs ~/Downloads/portfolio.json</code> in this project on your Mac. It reads every GitHub account signed in to the GitHub CLI and the signed-in Vercel CLI account — metadata, languages, dependency names, README openings and commit months, never code or tokens — and writes one file. Upload that file here. Sign in to another account first (<code>gh auth login</code>, <code>vercel login</code>) to include it.</Why>
+      <Why label="How connecting works">Connect GitHub installs a read-only GitHub App on the account you are signed in to, for the repositories you choose, and reads their metadata, languages, dependency names, README openings, your commit months and deployment records (Vercel reports its deployments to the linked repository). The access is used once and not stored. Sign in to your other GitHub account and connect again to add it.</Why>
+      <Why label="Or update from a file">Run <code>node scripts/collect-portfolio.mjs ~/Downloads/portfolio.json</code> in this project on your Mac. It reads every GitHub account signed in to the GitHub CLI and the signed-in Vercel CLI account — metadata, languages, dependency names, README openings and commit months, never code or tokens — and writes one file. Upload that file here. Sign in to another account first (<code>gh auth login</code>, <code>vercel login</code>) to include it.</Why>
     </section>}
     <div className="section-stack"><section className="content-panel"><h2>Your evidence</h2>{items ? <ProfessionalEvidenceList items={items} /> : <p className="empty-hint">Connect Supabase to add evidence.</p>}</section>
       <section className="content-panel">{items ? <Why label="Add evidence (CV, portfolio, certificate or link)"><AIConsentGate purpose="Claims are extracted from what you add using Gemini."><ProfessionalEvidenceForm /></AIConsentGate></Why> : null}</section></div>

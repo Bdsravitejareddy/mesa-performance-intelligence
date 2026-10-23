@@ -34,7 +34,10 @@ export function summarisePortfolio(rows: PortfolioRow[]): PortfolioSummary {
     const pushed = (data.pushedAt as string) ?? null;
     if (pushed && (!project.lastActivity || pushed > project.lastActivity)) project.lastActivity = pushed;
     const deployment = deployedRepos.get(id);
-    if (deployment) { project.deployed = true; project.deployments = deployment.deployments; }
+    if (deployment) { project.deployed = true; project.deployments = Math.max(project.deployments, deployment.deployments); }
+    // Deployment records GitHub holds for the repository (Vercel reports production deployments there).
+    const reported = Number(data.productionDeployments ?? 0);
+    if (reported > 0) { project.deployed = true; project.deployments = Math.max(project.deployments, reported); }
     projects.set(id, project);
   }
   const list = [...projects.values()].sort((a, b) => (b.lastActivity ?? "").localeCompare(a.lastActivity ?? ""));
