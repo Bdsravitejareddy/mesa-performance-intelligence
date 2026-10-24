@@ -120,6 +120,7 @@ export function buildSwotStory(input: StoryInputs): Finding[] {
   const relevanceOf = (id: string) => { const roles = primaryRoles(id); return roles.length ? `Your target ${roles.length === 1 ? "role" : "roles"} (${list(roles)}) ${roles.length === 1 ? "asks" : "ask"} for it.` : null; };
   const weight = (id: string) => primaryRoles(id).length ? 3 : crossRoles(id).length ? 1 : 0;
   const used = new Set<string>();
+  const conflictAnchors = new Map<string, { low: EvidenceRow; highs: EvidenceRow[] }>();
 
   for (const item of input.competencies) {
     const { state, confidence } = item.assessment;
@@ -165,6 +166,7 @@ export function buildSwotStory(input: StoryInputs): Finding[] {
       const aiOnly = !off.length;
       const hi = aiOnly ? aiHighs : highs, lo = aiOnly ? aiLows : lows;
       if (!hi.length || !lo.length) continue;
+      if (!aiOnly) conflictAnchors.set(`weakness:conflict:${item.id}`, { low: lo[0], highs: hi });
       findings.push({ ...base, key: `weakness:conflict:${item.id}`, category: "weakness", kind: "conflict", priority: (aiOnly ? 8 : 16) + weight(item.id) * 3 + confidenceBoost,
         keyFact: aiOnly ? `AI estimates: ${hi.length} high, ${lo.length} low` : `${result(hi[0])} against ${result(lo[0])}`,
         headline: aiOnly ? `The AI's read on your ${item.name.toLowerCase()} is split.` : `Your ${item.name.toLowerCase()} results point in different directions.`,
@@ -181,6 +183,26 @@ export function buildSwotStory(input: StoryInputs): Finding[] {
         action: `Next: ${task}. It would show ${establishes}.`, numbers: [top.mark!, ...ai.map((row) => row.mark!)] });
     } else continue;
     used.add(item.id);
+  }
+
+  // One low assessment behind several conflicts is one finding about that piece of work, not one per skill.
+  const byLow = new Map<string, Finding[]>();
+  for (const finding of findings) { const anchor = conflictAnchors.get(finding.key); if (anchor) byLow.set(anchor.low.assessmentId, [...(byLow.get(anchor.low.assessmentId) ?? []), finding]); }
+  for (const group of byLow.values()) {
+    if (group.length < 2) continue;
+    const low = conflictAnchors.get(group[0].key)!.low;
+    const highs = [...new Map(group.flatMap((finding) => conflictAnchors.get(finding.key)!.highs).map((row) => [row.assessmentId, row])).values()].sort((a, b) => b.mark! - a.mark!);
+    const skills = group.map((finding) => finding.subject);
+    const merged: Finding = { key: `weakness:outlier:${low.assessmentId}`, category: "weakness", kind: "conflict", subject: courseName(low.course), priority: Math.max(...group.map((finding) => finding.priority)) + 2,
+      relevance: group.map((finding) => finding.relevance).find(Boolean) ?? null,
+      keyFact: `${result(low)} against ${result(highs[0])} for the same skills`,
+      headline: `One assessment sits well below the rest: ${named(low).replace(/^your /, "your ")}.`,
+      body: `You scored ${result(low)}, while ${list(skills.map((name) => name.toLowerCase()))} scored as high as ${highs[0].mark} elsewhere. One low piece of work touching ${skills.length} skills more likely points to that assessment than to all of them at once.`,
+      action: `Next: reread the feedback on ${named(low)} and redo the one section that cost you the most marks.`,
+      evidence: [...new Map(group.flatMap((finding) => finding.evidence).map((row) => [`${row.label}|${row.detail}`, row])).values()],
+      numbers: [skills.length, ...group.flatMap((finding) => finding.numbers)] };
+    const keys = new Set(group.map((finding) => finding.key));
+    findings.splice(0, findings.length, ...findings.filter((finding) => !keys.has(finding.key)), merged);
   }
 
   for (const gap of input.criterionGaps) {

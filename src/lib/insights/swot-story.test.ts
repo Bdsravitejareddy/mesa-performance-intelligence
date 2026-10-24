@@ -77,6 +77,18 @@ describe("SWOT story findings", () => {
     expect(lead.split(/\s+/).length).toBeLessThan(95);
   });
 
+  it("merges conflicts that share one low assessment into a single finding about that work", () => {
+    const shared = row("Venture Mid-Term", 51, "low", { course: "Entrepreneurship 101 with Abhishek" });
+    const merged = buildSwotStory({ ...inputs(), competencies: [
+      competency("business.strategy", "Strategy", "conflicting", [row("Marketing Strategy Essay", 90, "high"), shared]),
+      competency("product.customer_needs", "Customer needs", "conflicting", [row("Selling Mid-Term", 92, "high"), shared]),
+    ] }).filter((finding) => finding.category === "weakness");
+    expect(merged).toHaveLength(1);
+    expect(merged[0].body).toMatch(/strategy and customer needs/);
+    expect(merged[0].body).toMatch(/more likely points to that assessment/);
+    expect(merged[0].subject).toBe("Entrepreneurship 101");
+  });
+
   it("calls a mostly strong record with one outlier a strength, not a conflict", () => {
     const mostly = buildSwotStory({ ...inputs(), competencies: [competency("business.strategy", "Strategy", "conflicting", [row("A", 92, "high"), row("B", 90, "high"), row("C", 88, "high"), row("D", 60, "low")], "high")] });
     expect(mostly[0]).toMatchObject({ category: "strength", kind: "mostly_strong" });
