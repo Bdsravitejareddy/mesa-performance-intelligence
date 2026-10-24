@@ -93,6 +93,10 @@ describe("AI rewrite checks", () => {
   it("keeps a grounded card", () => expect(checkCard(sales, good)).toMatchObject({ headline: good.headline }));
   it("rejects invented figures", () => expect(checkCard(sales, { ...good, body: good.body.replace("92", "95") })).toBeNull());
   it("rejects banned template phrases", () => expect(checkCard(sales, { ...good, headline: "Turn emerging persuasion into a demonstrated strength" })).toBeNull());
+  it("checks spelled-out figures, but not exercise sizes", () => {
+    expect(checkCard(sales, { ...good, body: `${good.body} Nine other skills are untested.` })).toBeNull();
+    expect(checkCard(sales, { ...good, action: "Next: record a five-minute pitch and collect two pieces of structured feedback." })).not.toBeNull();
+  });
   it("rejects claims of improvement", () => expect(checkCard(sales, { ...good, body: `${good.body} You have improved steadily.` })).toBeNull());
   it("never lets an AI-only finding be called official", () => {
     expect(checkCard(operations, { headline: "Operations results are split.", body: "Your official marks rate one piece at 91 and one at 52, so this is an open question for now and worth settling with one task.", action: "Next: map one process as-is and to-be." })).toBeNull();

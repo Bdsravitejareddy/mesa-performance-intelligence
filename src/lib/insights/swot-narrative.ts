@@ -7,7 +7,7 @@ import type { Finding } from "./swot-story";
 // The AI only rewords findings that were already ranked and built from evidence. Its output is kept only when
 // it passes deterministic checks; otherwise the built-in wording stands. The rules version is part of the key,
 // so changing these instructions invalidates every earlier write-up.
-export const SWOT_RULES_VERSION = "swot-story-v2-2026-10-24";
+export const SWOT_RULES_VERSION = "swot-story-v3-2026-10-24";
 
 export type CardText = { headline: string; body: string; action: string | null };
 export type SwotNarrative = { standsOut: string; cards: Record<string, CardText>; rulesVersion: string; sources: string[] };
@@ -15,7 +15,7 @@ export type SwotNarrative = { standsOut: string; cards: Record<string, CardText>
 const SYSTEM = [
   "You are a thoughtful mentor who has read a student's work carefully. Rewrite the supplied SWOT findings so each reads as a short, connected story, and write one opening paragraph.",
   "Write to the student as \"you\" in natural, everyday English: candid, specific, measured. No jargon, no inflated praise, no repeated caveats, no templates — vary sentence structure from card to card.",
-  "Use only the facts in each finding. Never add a figure, assessment, course, role or claim that is not in that finding. Keep any number exactly as given.",
+  "Use only the facts in each finding. Never add a figure, assessment, course, role or claim that is not in that finding, and never describe the work in ways the finding doesn't (e.g. calling it a draft). Keep any number exactly as given, as digits. Keep interpretations as tentative as the draft (\"may\", \"suggests\"): never state why a result happened or what a task tested.",
   "Respect each finding's evidence: say \"AI estimate\" for AI-estimated results and never call them official; say a CV entry is your own account, never proof; a qualification is context, not proficiency; missing evidence is never a weakness; never say a skill improved or declined; keep a course result about that course, not about career readiness or personality. When results conflict, say so plainly instead of averaging.",
   "Never use these phrases or close variants: \"turn emerging\", \"demonstrated strength\", \"supported resume claims\", \"lead with your strongest example\", \"low confidence\", \"medium impact\", \"possibility\", \"leverage\", \"showcase\", \"in another context\".",
   "standsOut: 60–90 words connecting the main strength, the most important tension and the next priority, drawn from the highest-priority findings.",
@@ -25,7 +25,12 @@ const SYSTEM = [
 
 const BANNED = /turn emerging|demonstrated strength|supported (resume|cv) claims?|lead with your strongest|low confidence|medium impact|high impact|\bpossibility\b|leverage|showcase|in another context|\bimprov(ed|ing|ement)\b|\bdeclin(ed|ing)\b/i;
 const words = (text: string) => text.split(/\s+/).filter(Boolean).length;
-const numbersIn = (text: string) => [...text.replace(/(\d),(\d{3})/g, "$1$2").matchAll(/\d+(?:\.\d+)?/g)].map((match) => Number(match[0]));
+// Number words count as figures too, so "nine skills" is checked like "9 skills".
+const WORDS: Record<string, number> = { two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, twenty: 20 };
+const numbersIn = (text: string) => [
+  ...[...text.replace(/(\d),(\d{3})/g, "$1$2").matchAll(/\d+(?:\.\d+)?/g)].map((match) => Number(match[0])),
+  ...[...text.toLowerCase().matchAll(/\b(two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|twenty)\b(?![- ](minute|page|sentence|piece|line|word|slide|hour|day|week|month|option|counter|stakeholder|customer|hypothes|unusual|conversation))/g)].map((match) => WORDS[match[1]]),
+];
 
 const allowedNumbers = (findings: Finding[]) => new Set(findings.flatMap((finding) => [...finding.numbers, ...numbersIn([finding.subject, finding.relevance ?? "", finding.keyFact, finding.headline, finding.body, finding.action ?? "", ...finding.evidence.map((row) => row.label)].join(" "))]).map((value) => Math.round(value * 10) / 10));
 
@@ -44,6 +49,7 @@ export function checkCard(finding: Finding, raw: unknown): CardText | null {
   const classes = new Set(finding.evidence.map((row) => row.class));
   // Never "official" where the finding has no official evidence; AI-only findings must say so.
   // ("no official mark yet" is fine; "your official mark" is not.)
+  if (/\b(draft|tested different|because you)\b/i.test(all)) return null;
   if (/official/i.test(all.replace(/\b(?:no|not|without|isn't|aren't|never|before)\s+(?:an?\s+|any\s+)?official\b/gi, "")) && !classes.has("official")) return null;
   if (finding.kind === "ai_signal" || (finding.kind === "conflict" && !classes.has("official"))) { if (!/\bAI\b|estimate/i.test(all)) return null; }
   if (finding.kind === "self_reported" && !/\bCV\b|résumé|resume|your own account|you describe|you say/i.test(all)) return null;
