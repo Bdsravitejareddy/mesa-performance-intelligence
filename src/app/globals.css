@@ -793,3 +793,12 @@ html[data-story-enter="from-below"] .main-content{animation:storyDrop .28s cubic
 .start-title{font-weight:600;text-decoration:underline;text-underline-offset:3px}.is-done .start-title{text-decoration:none;color:var(--ink-2)}
 .start-steps em{font-style:normal;font-size:var(--fs-meta);color:var(--ink-2)}
 .calibration{display:grid;gap:6px}.calibration p{margin:0}
+
+/* Cohort 4 Quiz Tool: a separate source, kept visually quiet beside official standing. */
+.quiz-tool-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.quiz-tool-form { display: grid; gap: 12px; }
+.quiz-tool-total { font-size: 1.15rem; }
+.quiz-tool-session { padding: 8px 0; border-top: 1px solid var(--line, rgba(127,127,127,.2)); }
+.quiz-tool-session ul { margin: 8px 0 0 18px; }
+.quiz-tool-session small { display: block; opacity: .75; }
+.quiz-tool-line { margin-top: 10px; }

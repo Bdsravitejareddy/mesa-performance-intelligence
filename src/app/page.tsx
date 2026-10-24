@@ -9,6 +9,7 @@ import { workspaceSession } from "@/lib/data/cached";
 import { createClient } from "@/lib/supabase/server";
 import { loadGlance } from "@/lib/profile/glance";
 import { onboardingSteps } from "@/lib/profile/onboarding";
+import { summariseQuizTool, type QuizToolRow } from "@/lib/imports/quiz-tool";
 import { after } from "next/server";
 import { BRIEF_RULES_VERSION, generateOverviewBrief } from "@/lib/insights/overview-brief";
 
@@ -27,10 +28,11 @@ export default async function HomePage() {
   }
   const glance = data.demoMode ? null : await cachedRead("tests:glance", loadGlance).catch(() => null);
   const steps = data.demoMode ? [] : await cachedRead("overview:steps", onboardingSteps).catch(() => []);
+  const quizTool = data.demoMode ? null : await cachedRead("overview:quiz-tool", async (client) => summariseQuizTool(((await client.from("quiz_tool_results").select("course, term, session, correct, total, shown, missed")).data ?? []) as QuizToolRow[])).catch(() => null);
   // A summary written under earlier rules is replaced in the background on this visit.
   const stale = !data.demoMode && data.brief && data.brief.brief.rulesVersion !== BRIEF_RULES_VERSION;
   if (stale) after(async () => { try { const client = await createClient(); const { data: claims } = await client.auth.getClaims(); const userId = claims?.claims?.sub; if (typeof userId === "string") await generateOverviewBrief(client, userId, data.term); } catch { /* the next refresh writes it */ } });
-  return <AppShell demoMode={data.demoMode}><DashboardView data={data} name={await firstName()} glance={glance} staleBrief={Boolean(stale)} steps={steps} /></AppShell>;
+  return <AppShell demoMode={data.demoMode}><DashboardView data={data} name={await firstName()} glance={glance} staleBrief={Boolean(stale)} steps={steps} quizTool={quizTool} /></AppShell>;
 }
 
 // The greeting uses the first part of the signed-in address (ravi_bussareddy@… → Ravi); nothing else is shown.

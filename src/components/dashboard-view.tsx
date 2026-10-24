@@ -1,3 +1,4 @@
+import type { QuizToolSummary } from "@/lib/imports/quiz-tool";
 import Link from "next/link";
 import { ArrowDown, ArrowRight, FileText } from "lucide-react";
 import type { DashboardSnapshot } from "@/lib/dashboard-data";
@@ -19,7 +20,7 @@ const shortCourse = (name: string) => name.replace(/\s+with\s+.*$/i, "");
 
 // The overview reads top-down: a one-line summary, four highlights, then the breakdown. Reasoning sits
 // behind "Why?" so the page leads with what the evidence shows rather than how it was worked out.
-export function DashboardView({ data, name = "there", glance = null, staleBrief = false, steps = [] }: { data: DashboardSnapshot; name?: string; glance?: Glance | null; staleBrief?: boolean; steps?: Step[] }) {
+export function DashboardView({ data, name = "there", glance = null, staleBrief = false, steps = [], quizTool = null }: { data: DashboardSnapshot; name?: string; glance?: Glance | null; staleBrief?: boolean; steps?: Step[]; quizTool?: QuizToolSummary | null }) {
   const average = data.averageMark;
   const marked = data.coursePerformance.filter((row) => row.weighted !== null).sort((a, b) => b.weighted! - a.weighted!);
   const best = marked[0];
@@ -95,6 +96,7 @@ export function DashboardView({ data, name = "there", glance = null, staleBrief 
           <div className="panel-heading"><div><h2>By course, for your target roles</h2></div><Link className="text-link" href="/grading">Graded work <ArrowRight size={14} /></Link></div>
           {data.standings.length ? <div className="standing-table">{data.standings.sort((a, b) => (b.standing ?? -1) - (a.standing ?? -1)).map((row) => <StandingRow key={row.courseId} row={row} />)}</div> : <p className="empty-hint">No courses in this term yet.</p>}
           <Why>Standing is your official weighted average; where some work is graded only by the AI, the estimate including those grades is shown beneath it, never instead. Courses without any official mark show the AI grade, marked “AI”. Courses assessed through MRS are read against the cohort's highest score. “Shown” is how much of the course's assessment weight has a mark or a grading. A course is core for a role when it assesses a large share of that role's skills (bar 75) and supporting otherwise (bar 65).</Why>
+          {quizTool && quizTool.total > 0 && <p className="scope-note quiz-tool-line"><Link href="/imports/quiz-tool">Cohort 4 Quiz Tool</Link> (separate, not in your standing): {quizTool.courses.map((course) => `${course.course} ${course.correct}/${course.total}`).join(" · ")} — {quizTool.correct}/{quizTool.total} correct overall ({quizTool.percent}%).</p>}
         </article>
 
         <article className="panel focus-panel">

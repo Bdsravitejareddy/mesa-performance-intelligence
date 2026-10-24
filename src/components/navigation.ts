@@ -35,6 +35,7 @@ export const groups: Act[] = [
         { href: "/assessments", label: "All assessments", blurb: "Every assessment with its status, marks and grades." },
         { href: "/grading", label: "Graded work", blurb: "Each submission graded by code and AI, beside the official mark." },
         { href: "/marks", label: "Marks & LMS sync", blurb: "Official marks and faculty feedback from the LMS." },
+        { href: "/imports/quiz-tool", label: "Quiz Tool", blurb: "Cohort 4 in-class quiz results, summed separately from official marks." },
         { href: "/evidence", label: "Evidence", blurb: "Every record the analysis uses, with its source." },
       ]),
     ],
