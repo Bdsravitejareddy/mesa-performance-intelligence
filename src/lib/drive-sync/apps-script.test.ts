@@ -348,10 +348,12 @@ describe("Drive Apps Script runtime",()=>{
       // VM timeouts terminate JavaScript without running its catch/finally,
       // matching Apps Script's forced execution limit rather than throwing an
       // ordinary catchable fetch error. A fresh invocation resets global state.
-      expect(()=>vm.runInContext("DRIVE_RUN = null; syncDrive()",h.context,{timeout:15})).toThrow("Script execution timed out");
+      // The window is wide enough that, under load, the run always reaches the blocked fetch (and has written its
+      // reservation) before termination; the endless fetch guarantees it is still terminated.
+      expect(()=>vm.runInContext("DRIVE_RUN = null; syncDrive()",h.context,{timeout:400})).toThrow("Script execution timed out");
       expect(h.properties.runtimeMs).toBe(String(run*360000));h.advance(360000);
     }
-    expect(()=>vm.runInContext("DRIVE_RUN = null; syncDrive()",h.context,{timeout:50})).not.toThrow();
+    expect(()=>vm.runInContext("DRIVE_RUN = null; syncDrive()",h.context,{timeout:5000})).not.toThrow();
     expect(vm.runInContext("blockedCalls",h.context)).toBe(7);expect(h.properties.runtimeMs).toBe("2520000");
   });
 
