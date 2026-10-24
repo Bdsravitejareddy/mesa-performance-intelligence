@@ -91,7 +91,8 @@ const official = (rows: EvidenceRow[]) => scored(rows).filter((row) => row.evide
 const aiRows = (rows: EvidenceRow[]) => scored(rows).filter((row) => row.evidenceKind === "ai_grade");
 const courseName = (course: string) => course.replace(/\s+with\s+.*$/i, "").replace(/^the\s+/i, "").trim();
 const GENERIC = /^(mid[- ]?term|end[- ]?term|final|term)?\s*(assignment|assessment|exam|quiz|test|project|submission)\s*\d*$/i;
-const short = (title: string) => title.replace(/\s+-\s+.*$/, "").replace(/\s*\(.*?\)\s*/g, " ").trim();
+// Criterion rows carry their criterion after " · "; it is named separately, so the title drops it.
+const short = (title: string) => title.replace(/\s+·\s+.*$/, "").replace(/\s+-\s+.*$/, "").replace(/\s*\(.*?\)\s*/g, " ").trim();
 // A recognisable name for an assessment: a generic title ("Mid-Term Assignment") gets its course in front.
 const named = (row: EvidenceRow) => { const title = short(row.assessmentTitle); return GENERIC.test(title) ? `your ${courseName(row.course)} ${title.toLowerCase()}` : title; };
 // A result as a phrase: a criterion score is never presented as a whole mark.
@@ -285,6 +286,8 @@ export function startHere(findings: Finding[]): Finding | null {
 // important tension and the next priority, each in its own sentence taken from the finding's own wording.
 const firstSentence = (text: string) => (text.match(/^.*?[.!?](?=\s|$)/)?.[0] ?? text).trim();
 const lower = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
+// Skill names read in lower case mid-sentence; course and assessment names keep their capitals.
+const subjectOf = (finding: Finding) => /:[a-z]+\.[a-z_]+$/.test(finding.key) ? finding.subject.toLowerCase() : finding.subject;
 export function fallbackStandsOut(findings: Finding[]): string {
   const strength = findings.find((finding) => finding.category === "strength");
   const tension = findings.find((finding) => finding.category === "weakness");
@@ -292,9 +295,9 @@ export function fallbackStandsOut(findings: Finding[]): string {
   const next = startHere(findings);
   const parts = [
     strength ? `${strength.headline} ${firstSentence(strength.body)}` : "Nothing in your marked work stands out yet as something to build on, which mostly reflects how few results are in.",
-    tension && tension !== strength ? `The main tension is ${tension.subject.toLowerCase()}: ${lower(firstSentence(tension.body))}` : "No result so far shows a clear shortfall.",
+    tension && tension !== strength ? `The main tension is ${subjectOf(tension)}: ${lower(firstSentence(tension.body))}` : "No result so far shows a clear shortfall.",
     coverage ? firstSentence(coverage.body).replace(/, so .*$/, ", so expect this picture to move as marks arrive.") : "",
-    next ? `If you do one thing next, make it ${next.subject.toLowerCase()}.` : "",
+    next ? `If you do one thing next, make it ${subjectOf(next)}.` : "",
   ];
   return parts.filter(Boolean).join(" ");
 }
