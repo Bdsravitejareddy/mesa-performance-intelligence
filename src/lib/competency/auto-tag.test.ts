@@ -28,7 +28,26 @@ describe("automatic competency mapping", () => {
     const result = await autoTagAssessments(client as never, "member");
     expect(result).toEqual({ assessments: 1, accepted: 2, suggested: 0, criteria: 1 });
     expect(client.inserts.map((row) => [row.competency_id, row.review_status, row.criterion_label ?? null])).toEqual([["business.strategy", "accepted", null], ["product.discovery", "accepted", null], ["business.strategy", "accepted", "GTM foundations"]]);
-    expect(String(client.inserts[1].rationale)).toMatch(/\[brief-v2\] \(low confidence\): Problem validation/);
+    expect(String(client.inserts[1].rationale)).toMatch(/\[brief-v3\] \(low confidence\): Problem validation/);
     expect(client.deletes).toEqual(["assessment_competencies"]);
+  });
+
+  it("gives the mapper the latest course outline, including one from a linked Drive course", async () => {
+    vi.stubEnv("AI_DATA_PROCESSING_APPROVED", "true"); vi.stubEnv("GEMINI_API_KEY", "g"); vi.stubEnv("AI_API_BASE_URL", ""); vi.stubEnv("AI_API_KEY", "");
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ assessments: [] }) } }] })));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = fakeClient({
+      assessments: [{ id: "a1", user_id: "owner", title: "Mid-term", course_id: "c1", brief: "" }],
+      courses: [{ id: "c1", title: "Data 102" }, { id: "d1", title: "mesasem2data" }],
+      assessment_competencies: [], competencies: [{ id: "data.sql", name: "SQL", domain_name: "Technical", description: "" }], submissions: [],
+      course_materials: [{ id: "m1", course_id: "c1", name: "Nexus course outline — Data 102.txt", source_kind: "syllabus", version: 1 }, { id: "m2", course_id: "c1", name: "Nexus course outline — Data 102.txt", source_kind: "syllabus", version: 2 }, { id: "m3", course_id: "d1", name: "Week 1.pdf", source_kind: "slides", version: 1 }],
+      course_links: [{ assessment_course_id: "c1", material_course_id: "d1" }],
+      material_pages: [{ material_id: "m1", page_number: 1, extracted_text: "OLD outline" }, { material_id: "m2", page_number: 1, extracted_text: "Session 4 | joins and window functions" }],
+    });
+    await autoTagAssessments(client as never, "member");
+    const sent = String((fetchMock.mock.calls[0] as unknown[] | undefined)?.[1] && ((fetchMock.mock.calls[0] as unknown as [string, { body: string }])[1].body));
+    expect(sent).toContain("joins and window functions");
+    expect(sent).not.toContain("OLD outline");
+    expect(sent).toContain("Week 1");
   });
 });
