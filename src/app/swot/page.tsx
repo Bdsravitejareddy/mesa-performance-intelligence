@@ -16,6 +16,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { cachedRead } from "@/lib/data/cached";
 
 export const dynamic = "force-dynamic";
+// The written version is produced after the response, with time for one retry.
+export const maxDuration = 300;
 const SECTIONS: [SwotCategory, string, string, string][] = [
   ["strength", "Strengths", "What you can build on", "No result is strong enough yet to build on with confidence. That reflects how few marks are in, not a verdict on you."],
   ["weakness", "Weaknesses", "What needs attention", "Nothing in your marked work shows a clear shortfall. Skills with no evidence are never counted as weaknesses."],

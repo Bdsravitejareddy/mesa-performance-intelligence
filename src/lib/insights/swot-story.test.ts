@@ -72,7 +72,8 @@ describe("SWOT story findings", () => {
     expect(byKey("threat:eligibility")!.body).toContain("5 years");
     expect(startHere(findings)?.action).toBeTruthy();
     const lead = fallbackStandsOut(findings);
-    expect(lead).toMatch(/persuasion/);
+    expect(lead).toMatch(/persuasion/i);
+    expect(lead).toMatch(/main tension is strategy/);
     expect(lead.split(/\s+/).length).toBeLessThan(95);
   });
 

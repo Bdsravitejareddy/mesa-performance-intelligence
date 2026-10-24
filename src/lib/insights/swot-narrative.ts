@@ -7,7 +7,7 @@ import type { Finding } from "./swot-story";
 // The AI only rewords findings that were already ranked and built from evidence. Its output is kept only when
 // it passes deterministic checks; otherwise the built-in wording stands. The rules version is part of the key,
 // so changing these instructions invalidates every earlier write-up.
-export const SWOT_RULES_VERSION = "swot-story-v1-2026-10-24";
+export const SWOT_RULES_VERSION = "swot-story-v2-2026-10-24";
 
 export type CardText = { headline: string; body: string; action: string | null };
 export type SwotNarrative = { standsOut: string; cards: Record<string, CardText>; rulesVersion: string; sources: string[] };
@@ -27,6 +27,8 @@ const BANNED = /turn emerging|demonstrated strength|supported (resume|cv) claims
 const words = (text: string) => text.split(/\s+/).filter(Boolean).length;
 const numbersIn = (text: string) => [...text.replace(/(\d),(\d{3})/g, "$1$2").matchAll(/\d+(?:\.\d+)?/g)].map((match) => Number(match[0]));
 
+const allowedNumbers = (findings: Finding[]) => new Set(findings.flatMap((finding) => [...finding.numbers, ...numbersIn([finding.subject, finding.relevance ?? "", finding.keyFact, finding.headline, finding.body, finding.action ?? "", ...finding.evidence.map((row) => row.label)].join(" "))]).map((value) => Math.round(value * 10) / 10));
+
 export function checkCard(finding: Finding, raw: unknown): CardText | null {
   if (!raw || typeof raw !== "object") return null;
   const item = raw as Record<string, unknown>;
@@ -36,8 +38,8 @@ export function checkCard(finding: Finding, raw: unknown): CardText | null {
   const all = [headline, body, action ?? ""].join(" ");
   const total = words(all);
   if (total < 25 || total > 80 || BANNED.test(all)) return null;
-  // Every figure must come from the finding itself.
-  const allowed = new Set(finding.numbers);
+  // Every figure must come from the finding itself: its results, or numbers in its names (e.g. "Data 102").
+  const allowed = allowedNumbers([finding]);
   if (numbersIn(all).some((value) => !allowed.has(Math.round(value * 10) / 10))) return null;
   const classes = new Set(finding.evidence.map((row) => row.class));
   // Never "official" where the finding has no official evidence; AI-only findings must say so.
@@ -52,7 +54,7 @@ export function checkStandsOut(text: unknown, findings: Finding[]): string | nul
   const value = String(text ?? "").trim();
   const count = words(value);
   if (count < 45 || count > 105 || BANNED.test(value)) return null;
-  const allowed = new Set(findings.flatMap((finding) => finding.numbers));
+  const allowed = allowedNumbers(findings);
   return numbersIn(value).every((number) => allowed.has(Math.round(number * 10) / 10)) ? value : null;
 }
 
@@ -77,12 +79,14 @@ export async function generateNarrative(client: SupabaseClient, userId: string, 
   const existing = await readNarrative(client, key);
   if (existing) return existing;
   const request = () => requestJsonFromProvider(SYSTEM, JSON.stringify({ findings: promptInput(findings) }), { timeoutMs: 90_000 });
-  const raw = await request().catch(() => request()).catch(() => null);
+  const raw = await request().catch(() => request()).catch((error: unknown) => { console.warn("swot-narrative: provider request failed", error instanceof Error ? error.message.slice(0, 160) : ""); return null; });
   if (!raw) return null;
   const cardsRaw = (raw.cards && typeof raw.cards === "object" ? raw.cards : {}) as Record<string, unknown>;
   const cards: Record<string, CardText> = {};
   for (const finding of findings) { const card = checkCard(finding, cardsRaw[finding.key]); if (card) cards[finding.key] = card; }
   const standsOut = checkStandsOut(raw.standsOut, findings);
+  // Counts only, never content: which parts of the write-up passed the checks.
+  console.info(`swot-narrative: ${Object.keys(cards).length} of ${findings.length} cards kept; opening ${standsOut ? "kept" : "rejected"}`);
   if (!standsOut && !Object.keys(cards).length) return null;
   const narrative: SwotNarrative = { standsOut: standsOut ?? "", cards, rulesVersion: SWOT_RULES_VERSION, sources: findings.slice(0, 18).map((finding) => finding.key) };
   await client.from("swot_narratives").insert({ user_id: userId, input_hash: key, rules_version: SWOT_RULES_VERSION, narrative, provider_model: resolveProviderSettings().model.slice(0, 120) });

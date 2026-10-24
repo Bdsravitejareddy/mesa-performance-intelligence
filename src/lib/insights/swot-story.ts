@@ -78,9 +78,9 @@ const EXERCISES: Record<string, [string, string]> = {
   "product.metrics": ["define a metric tree and success criteria for one product decision", "how you choose what to measure"],
   "product.prioritisation": ["prioritise a real backlog with an explicit framework and defend the cut line", "how you make product trade-offs"],
   "technical.ai": ["document one AI feature you built: the prompt design, how you checked outputs and where it fails", "how you apply AI with judgement"],
-  "technical.analytics": ["build a small metrics dashboard and write a paragraph on what it shows", "applied analytics, not just a qualification"],
-  "technical.python": ["build a short Python notebook that answers one business question and publish it", "applied programming someone can check"],
-  "technical.sql": ["publish the queries for a small SQL analysis of a public dataset", "applied SQL someone can check"],
+  "technical.analytics": ["build a small metrics dashboard and write a paragraph on what it shows", "that you can do the analysis, not just hold the qualification"],
+  "technical.python": ["build a short Python notebook that answers one business question and publish it", "that you can program for analysis in a way someone else can check"],
+  "technical.sql": ["publish the queries for a small SQL analysis of a public dataset", "that you can use SQL in a way someone else can check"],
   "technical.systems_understanding": ["draw how one system you used works end to end and where it would fail at scale", "how you reason about systems"],
 };
 const exercise = (id: string, name: string): [string, string] => EXERCISES[id] ?? [`complete one short, marked exercise on ${name.toLowerCase()}`, "where you stand on it"];
@@ -89,7 +89,13 @@ const round = (value: number) => Math.round(value * 10) / 10;
 const scored = (rows: EvidenceRow[]) => rows.filter((row) => row.mark !== null && row.mappingSource !== "practice_test");
 const official = (rows: EvidenceRow[]) => scored(rows).filter((row) => row.evidenceKind !== "ai_grade");
 const aiRows = (rows: EvidenceRow[]) => scored(rows).filter((row) => row.evidenceKind === "ai_grade");
+const courseName = (course: string) => course.replace(/\s+with\s+.*$/i, "").replace(/^the\s+/i, "").trim();
+const GENERIC = /^(mid[- ]?term|end[- ]?term|final|term)?\s*(assignment|assessment|exam|quiz|test|project|submission)\s*\d*$/i;
 const short = (title: string) => title.replace(/\s+-\s+.*$/, "").replace(/\s*\(.*?\)\s*/g, " ").trim();
+// A recognisable name for an assessment: a generic title ("Mid-Term Assignment") gets its course in front.
+const named = (row: EvidenceRow) => { const title = short(row.assessmentTitle); return GENERIC.test(title) ? `your ${courseName(row.course)} ${title.toLowerCase()}` : title; };
+// A result as a phrase: a criterion score is never presented as a whole mark.
+const result = (row: EvidenceRow) => row.granularity === "criterion" ? `${row.mark}% on ${row.criterionLabel ?? "one criterion"} in ${named(row)}` : `${row.mark} in ${named(row)}`;
 const list = (items: string[]) => items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
 
 function evidenceOf(rows: EvidenceRow[]): FindingEvidence[] {
@@ -132,46 +138,46 @@ export function buildSwotStory(input: StoryInputs): Finding[] {
 
     if (state === "demonstrated_strength" && best) {
       findings.push({ ...base, key: `strength:${item.id}`, category: "strength", kind: "strength", priority: 20 + weight(item.id) * 3 + highs.length + confidenceBoost,
-        keyFact: `${highs.length} high official results, best ${best.mark} in ${short(best.assessmentTitle)}`,
+        keyFact: `${highs.length} high official results, best ${result(best)}`,
         headline: `${item.name} is one of your clearest strengths.`,
-        body: `${highs.length} of your official results for it are high, the best being ${best.mark} in ${short(best.assessmentTitle)} (${best.course}).${relevance ? ` ${relevance}` : ""}`,
+        body: `${highs.length} of your official results for it are high, the best being ${result(best)}.${relevance ? ` ${relevance}` : ""}`,
         action: null, numbers: [highs.length, ...off.map((row) => row.mark!)] });
     } else if (state === "conflicting" && off.length && highs.length >= 2 && highs.length >= lows.length * 3 && worst) {
       findings.push({ ...base, key: `strength:mostly:${item.id}`, category: "strength", kind: "mostly_strong", priority: 18 + weight(item.id) * 3 + highs.length + confidenceBoost,
-        keyFact: `${highs.length} high official results and one low, ${worst.mark} in ${short(worst.assessmentTitle)}`,
+        keyFact: `${highs.length} high official results and one low, ${result(worst)}`,
         headline: `${item.name} is mostly strong, with one result that doesn't fit.`,
-        body: `${highs.length} official results are high, including ${best.mark} in ${short(best.assessmentTitle)}. The exception is ${worst.mark} in ${short(worst.assessmentTitle)} (${worst.course}), so that one mark may say more about the task than about the skill.`,
-        action: `Next: go back to ${short(worst.assessmentTitle)}, find the part that cost you marks, and redo just that part.`, numbers: [highs.length, ...off.map((row) => row.mark!)] });
+        body: `${highs.length} official results are high, including ${result(best)}. The exception is ${result(worst)}, so that one mark may say more about the task than about the skill.`,
+        action: `Next: go back to ${named(worst)}, find the part that cost you marks, and redo just that part.`, numbers: [highs.length, ...off.map((row) => row.mark!)] });
     } else if (state === "emerging" && highs[0]) {
       const top = highs[0];
       findings.push({ ...base, key: `strength:promising:${item.id}`, category: "strength", kind: "promising", priority: 14 + weight(item.id) * 3 + confidenceBoost,
-        keyFact: `Official ${short(top.assessmentTitle)}: ${top.mark}`,
+        keyFact: `an official ${result(top)}`,
         headline: `${item.name} looks like a promising strength.`,
-        body: `Your official mark of ${top.mark} in ${short(top.assessmentTitle)} is a strong result in ${top.course}. It is one result, so it tells you about that course rather than settling the question.${cvNote}`,
+        body: `Your official ${top.granularity === "criterion" ? `score of ${result(top)}` : `mark of ${result(top)}`} is a strong result in ${courseName(top.course)}. It is one result, so it tells you about that course rather than settling the question.${cvNote}`,
         action: `Next: ${task}. It would show ${establishes}.`, numbers: [top.mark!, ...off.map((row) => row.mark!)] });
     } else if (state === "development_area" && worst) {
       findings.push({ ...base, key: `weakness:${item.id}`, category: "weakness", kind: "development", priority: 24 + weight(item.id) * 4 + lows.length + confidenceBoost,
-        keyFact: `${lows.length} low official results, lowest ${worst.mark} in ${short(worst.assessmentTitle)}`,
+        keyFact: `${lows.length} low official results, lowest ${result(worst)}`,
         headline: `${item.name} is holding your marks back.`,
-        body: `${lows.length} official results for it are low, the lowest ${worst.mark} in ${short(worst.assessmentTitle)}.${relevance ? ` ${relevance} That makes it worth fixing before it shows up again.` : " More than one result points the same way, so it is a pattern rather than a bad day."}`,
-        action: `Next: ${task}, then compare it with your ${short(worst.assessmentTitle)} answer. It would show whether focused practice closes the gap.`, numbers: [lows.length, ...off.map((row) => row.mark!)] });
+        body: `${lows.length} official results for it are low, the lowest ${result(worst)}.${relevance ? ` ${relevance} That makes it worth fixing before it shows up again.` : " More than one result points the same way, so it is a pattern rather than a bad day."}`,
+        action: `Next: ${task}, then compare it with what you wrote for ${named(worst)}. It would show whether focused practice closes the gap.`, numbers: [lows.length, ...off.map((row) => row.mark!)] });
     } else if (state === "conflicting") {
       const aiOnly = !off.length;
       const hi = aiOnly ? aiHighs : highs, lo = aiOnly ? aiLows : lows;
       if (!hi.length || !lo.length) continue;
       findings.push({ ...base, key: `weakness:conflict:${item.id}`, category: "weakness", kind: "conflict", priority: (aiOnly ? 8 : 16) + weight(item.id) * 3 + confidenceBoost,
-        keyFact: aiOnly ? `AI estimates: ${hi.length} high, ${lo.length} low` : `${hi[0].mark} in ${short(hi[0].assessmentTitle)} against ${lo[0].mark} in ${short(lo[0].assessmentTitle)}`,
+        keyFact: aiOnly ? `AI estimates: ${hi.length} high, ${lo.length} low` : `${result(hi[0])} against ${result(lo[0])}`,
         headline: aiOnly ? `The AI's read on your ${item.name.toLowerCase()} is split.` : `Your ${item.name.toLowerCase()} results point in different directions.`,
         body: aiOnly
           ? `AI estimates of your work rate ${hi.length} pieces high and ${lo.length} low, and there is no official mark yet to settle it. Treat it as an open question, not a weakness.`
-          : `You scored ${hi[0].mark} in ${short(hi[0].assessmentTitle)} but ${lo[0].mark} in ${short(lo[0].assessmentTitle)}. An average would hide that gap, and the two tasks may be testing different things.`,
+          : `You scored ${result(hi[0])} but ${result(lo[0])}. An average would hide that gap, and the two tasks may be testing different things.`,
         action: `Next: ${task}. It would show ${establishes}.`, numbers: [hi.length, lo.length, ...scored(rows).map((row) => row.mark!)] });
     } else if (state === "emerging" && aiHighs[0] && !off.length) {
       const top = aiHighs[0];
       findings.push({ ...base, key: `opportunity:ai:${item.id}`, category: "opportunity", kind: "ai_signal", priority: 6 + weight(item.id) * 3,
-        keyFact: `AI estimate ${top.mark} on ${short(top.assessmentTitle)}`,
+        keyFact: `an AI estimate of ${result(top)}`,
         headline: `There's an early, unofficial signal in ${item.name.toLowerCase()}.`,
-        body: `An AI estimate rated your ${short(top.assessmentTitle)} work ${top.mark}, but no official mark covers ${item.name.toLowerCase()} yet. It is worth testing, not yet worth claiming.`,
+        body: `An AI estimate rated ${named(top).replace(/^your /, "your ")} work ${top.mark}, but no official mark covers ${item.name.toLowerCase()} yet. It is worth testing, not yet worth claiming.`,
         action: `Next: ${task}. It would show ${establishes}.`, numbers: [top.mark!, ...ai.map((row) => row.mark!)] });
     } else continue;
     used.add(item.id);
@@ -197,7 +203,7 @@ export function buildSwotStory(input: StoryInputs): Finding[] {
       keyFact: `${unassessed.length} required skills with no assessed evidence, starting with ${list(names)}`,
       headline: `Several skills your target roles need haven't been tested yet.`,
       body: `Nothing marked so far covers ${list(names)}${unassessed.length > 3 ? `, or ${unassessed.length - 3} other skills the roles ask for` : ""}. That is a gap in the record, not a weakness — but employers will look for it.`,
-      action: `Next: start with ${top.name}: ${task}. It would give you ${establishes}.`,
+      action: `Next: start with ${top.name}: ${task}. It would show ${establishes}.`,
       evidence: unassessed.map((item) => ({ class: "role_requirement" as const, label: item.name, detail: `Required by ${list(primaryRoles(item.id))}; ${item.assessment.why.evidence.some((row) => row.band === "low") ? "one low result so far, not enough to conclude anything" : "no marked evidence yet"}` })),
       numbers: [unassessed.length, unassessed.length - 3] });
     unassessed.forEach((item) => used.add(item.id));
@@ -214,7 +220,7 @@ export function buildSwotStory(input: StoryInputs): Finding[] {
       keyFact: `${claims.length} CV ${claims.length === 1 ? "entry" : "entries"} on ${name.toLowerCase()}, none independently checked`,
       headline: `Your CV tells a ${name.toLowerCase()} story that nothing here can check yet.`,
       body: `You describe ${claims.length === 1 ? "an achievement" : `${claims.length} achievements`} in ${name.toLowerCase()} on your CV. That is your own account; until a piece of work shows it, it cannot count as evidence.`,
-      action: `Next: ${task}. It would give you ${establishes}.`, evidence: claimEvidence(claims), numbers: [claims.length] });
+      action: `Next: ${task}. It would show ${establishes}.`, evidence: claimEvidence(claims), numbers: [claims.length] });
     used.add(id);
   }
 
@@ -253,16 +259,20 @@ export function startHere(findings: Finding[]): Finding | null {
   return [...actionable].sort((a, b) => b.priority - a.priority || order.indexOf(a.category) - order.indexOf(b.category))[0] ?? null;
 }
 
-// The deterministic "What stands out" used when no AI-written version is available.
+// The deterministic "What stands out" used when no AI-written version is available: the main strength, the most
+// important tension and the next priority, each in its own sentence taken from the finding's own wording.
+const firstSentence = (text: string) => (text.match(/^.*?[.!?](?=\s|$)/)?.[0] ?? text).trim();
+const lower = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
 export function fallbackStandsOut(findings: Finding[]): string {
   const strength = findings.find((finding) => finding.category === "strength");
   const tension = findings.find((finding) => finding.category === "weakness");
+  const coverage = findings.find((finding) => finding.kind === "coverage");
   const next = startHere(findings);
   const parts = [
-    strength ? `The firmest thing to build on is ${strength.subject.toLowerCase()}: ${strength.keyFact.charAt(0).toLowerCase()}${strength.keyFact.slice(1)}.` : "Nothing in your marked work yet stands out as a clear strength, which says more about how few results are in than about you.",
-    tension ? `The main tension is ${tension.subject.toLowerCase()}, where ${tension.keyFact.charAt(0).toLowerCase()}${tension.keyFact.slice(1)}.` : "No result so far shows a clear shortfall.",
-    findings.some((finding) => finding.kind === "coverage") ? "Much of the picture still rests on a handful of released marks." : "",
-    next ? `If you do one thing, focus on ${next.subject.toLowerCase()}.` : "",
+    strength ? `${strength.headline} ${firstSentence(strength.body)}` : "Nothing in your marked work stands out yet as something to build on, which mostly reflects how few results are in.",
+    tension && tension !== strength ? `The main tension is ${tension.subject.toLowerCase()}: ${lower(firstSentence(tension.body))}` : "No result so far shows a clear shortfall.",
+    coverage ? firstSentence(coverage.body).replace(/, so .*$/, ", so expect this picture to move as marks arrive.") : "",
+    next ? `If you do one thing next, make it ${next.subject.toLowerCase()}.` : "",
   ];
   return parts.filter(Boolean).join(" ");
 }
