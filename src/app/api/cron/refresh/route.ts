@@ -1,6 +1,6 @@
 import { after, NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { refreshExtras, refreshSkillView } from "@/lib/refresh/extras";
+import { refreshExtras, refreshProjects, refreshSkillView } from "@/lib/refresh/extras";
 import { handOff } from "@/lib/grading/chain";
 
 export const maxDuration = 300;
@@ -9,10 +9,16 @@ export const maxDuration = 300;
 export async function POST(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
   if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) return new Response("Unauthorized", { status: 401 });
-  // Two stages on separate runs: GitHub, projects and readings; then the AI skill view.
+  // Stages on separate runs: GitHub and readings; the AI skill view; project evaluation, chained until done.
   const stage = request.nextUrl.searchParams.get("stage");
+  const pass = Math.max(1, Number(request.nextUrl.searchParams.get("pass") ?? 1) || 1);
   if (stage === "skills") after(async () => { await refreshSkillView(createAdminClient()).catch(() => undefined); });
-  // The skill view starts on its own run straight away, so a long first stage can never stop it from running.
-  else { handOff("/api/cron/refresh?stage=skills"); after(async () => { await refreshExtras(createAdminClient(), 285_000).catch(() => undefined); }); }
+  else if (stage === "projects") after(async () => {
+    const result = await refreshProjects(createAdminClient()).catch(() => ({ skipped: 0 }));
+    // Keep going while projects were left for lack of time (at most five passes).
+    if (result.skipped > 0 && pass < 5) handOff(`/api/cron/refresh?stage=projects&pass=${pass + 1}`);
+  });
+  // The skill view and projects start on their own runs straight away, so a long stage never blocks them.
+  else { handOff("/api/cron/refresh?stage=skills"); handOff("/api/cron/refresh?stage=projects"); after(async () => { await refreshExtras(createAdminClient(), 285_000).catch(() => undefined); }); }
   return NextResponse.json({ accepted: true }, { status: 202 });
 }

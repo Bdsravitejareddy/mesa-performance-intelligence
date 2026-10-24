@@ -17,7 +17,7 @@ const shortCourse = (name: string) => name.replace(/\s+with\s+.*$/i, "");
 
 // The overview reads top-down: a one-line summary, four highlights, then the breakdown. Reasoning sits
 // behind "Why?" so the page leads with what the evidence shows rather than how it was worked out.
-export function DashboardView({ data, name = "there", glance = null }: { data: DashboardSnapshot; name?: string; glance?: Glance | null }) {
+export function DashboardView({ data, name = "there", glance = null, staleBrief = false }: { data: DashboardSnapshot; name?: string; glance?: Glance | null; staleBrief?: boolean }) {
   const average = data.averageMark;
   const marked = data.coursePerformance.filter((row) => row.weighted !== null).sort((a, b) => b.weighted! - a.weighted!);
   const best = marked[0];
@@ -41,6 +41,7 @@ export function DashboardView({ data, name = "there", glance = null }: { data: D
           <div className="eyebrow"><span className="eyebrow-line" /> Your summary</div>
           <h1>{headline}</h1>
           {brief?.summary && <p className="summary-text">{brief.summary}</p>}
+          {staleBrief && <p className="stale-note" role="status">This summary was written under earlier rules; a new one is being written now — reload in a minute.</p>}
           <p className="summary-line">{average === null ? "No marks yet" : <><b>{average}</b> weighted average</>} · <b>{markedCount}</b> of {data.assessmentCount} assessments marked{data.insights ? <> · <b>{data.insights.competenciesAssessed}</b> of {data.insights.competenciesTotal} competencies evidenced</> : null}</p>
           <div className="hero-actions"><a href="#breakdown" className="button button-light">The breakdown <ArrowDown size={15} /></a>{!data.demoMode && <BriefRefresh term={data.term} hasBrief={Boolean(brief)} />}{!data.demoMode && <RefreshEverything />}{data.syncHealth && data.syncHealth.level !== "ok" && <Link href="/marks" className="sync-chip">LMS sync {data.syncHealth.level === "warning" ? "partial" : "needs attention"} ·  details</Link>}</div>
         </div>

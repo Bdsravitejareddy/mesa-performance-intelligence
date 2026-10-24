@@ -780,3 +780,4 @@ html[data-story-enter="from-below"] .main-content{animation:storyDrop .28s cubic
 .lx-example{display:grid;gap:8px;padding:16px 18px;border-radius:18px;background:rgba(10,24,18,.42);border:1px solid rgba(246,245,241,.18);color:#f6f5f1;max-width:420px}
 .lx-example dl{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:0}.lx-example dt{font-size:12px;color:rgba(246,245,241,.82)}.lx-example dd{margin:2px 0 0;font-size:26px;font-weight:700}.lx-example small{color:rgba(246,245,241,.82)}
 .practice-start{display:grid;gap:10px;justify-items:start}.practice-start p{margin:0}
+.stale-note{margin:6px 0 0;font-size:var(--fs-note);padding:6px 10px;border-radius:10px;background:rgba(217,164,65,.18);display:inline-block}

@@ -65,12 +65,14 @@ export async function evaluateProjects(client: SupabaseClient, userId: string, b
   const [portfolio, contexts, previous] = await Promise.all([
     client.from("portfolio_items").select("source, account, external_id, name, url, data"),
     client.from("project_contexts").select("project_key, kind, title, body"),
-    client.from("project_evaluations").select("project_key, input_hash").order("created_at", { ascending: false }),
+    client.from("project_evaluations").select("project_key, input_hash, report").order("created_at", { ascending: false }),
   ]);
   const done = new Set((previous.data ?? []).map((row) => `${row.project_key}:${row.input_hash}`));
   const projects = summarisePortfolio((portfolio.data ?? []) as PortfolioRow[]).projects;
   const result = { evaluated: 0, unchanged: 0, skipped: 0 };
-  for (const project of projects) {
+  // Projects with no evaluation under the current rules go first, so a short run still fixes what is stale.
+  const current = new Set(((previous.data ?? []) as { project_key: string; input_hash: string; report?: { rulesVersion?: string } }[]).filter((row) => row.report?.rulesVersion === PROJECT_RULES_VERSION).map((row) => row.project_key));
+  for (const project of [...projects].sort((a, b) => Number(current.has(a.key)) - Number(current.has(b.key)))) {
     if (Date.now() > deadline - 60_000) { result.skipped += 1; continue; }
     const mine = ((contexts.data ?? []) as ProjectContext[]).filter((item) => item.project_key === project.key);
     const statement = mine.filter((item) => item.kind === "problem_statement").map((item) => item.body).join("\n\n").slice(0, 6000);
@@ -81,7 +83,7 @@ export async function evaluateProjects(client: SupabaseClient, userId: string, b
     if (done.has(`${project.key}:${inputHash}`)) { result.unchanged += 1; continue; }
     try {
       const report = groundOwnWords(await blindEvaluate(work, standard, "project", statement), ownText, standard);
-      await client.from("project_evaluations").insert({ user_id: userId, project_key: project.key, input_hash: inputHash, report: { ...report, standardLabel: standard.label, hasStatement: Boolean(statement), hasOwnWords: ownWords.length > 0 }, provider_model: config.model });
+      await client.from("project_evaluations").insert({ user_id: userId, project_key: project.key, input_hash: inputHash, report: { ...report, standardLabel: standard.label, hasStatement: Boolean(statement), hasOwnWords: ownWords.length > 0, rulesVersion: PROJECT_RULES_VERSION }, provider_model: config.model });
       result.evaluated += 1;
     } catch { result.skipped += 1; }
   }

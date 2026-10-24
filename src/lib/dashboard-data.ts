@@ -15,7 +15,7 @@ import { inTerm, type TermChoice } from "@/lib/term";
 
 export type OverviewBrief = { headline: string; summary: string; insights: { title: string; detail: string; kind: "strength" | "gap" | "risk" | "opportunity" | "context" }[]; focus: string[];
   // About you, what changed in the last 30 days, and where you stand on your objectives.
-  about?: string; changes?: { what: string; evidence: string }[]; objectives?: { objective: string; status: "met" | "on_track" | "not_yet"; detail: string }[] };
+  about?: string; changes?: { what: string; evidence: string }[]; objectives?: { objective: string; status: "met" | "on_track" | "not_yet"; detail: string }[]; rulesVersion?: string };
 
 export type DashboardSnapshot = {
   demoMode: boolean;

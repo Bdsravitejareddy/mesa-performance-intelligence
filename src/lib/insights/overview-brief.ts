@@ -6,6 +6,7 @@ import { getDashboardSnapshot, type OverviewBrief } from "@/lib/dashboard-data";
 import { stakesOf } from "@/lib/assessments/stakes";
 import type { TermChoice } from "@/lib/term";
 
+export const BRIEF_RULES_VERSION = "brief-v5-2026-10-24";
 const SYSTEM = [
   "You write the opening summary of a person's performance dashboard from computed figures only. Write to them in the second person (\"you\"), in plain everyday language, with no jargon.",
   "Interpret each course against the person's target roles using the dashboard's internal benchmarks (core 75, supporting 65, peripheral 50 — conventions of this dashboard, not employer requirements): say a mark is above or below the dashboard's benchmark for that role, never that a role 'requires' a mark. Use each role's relevanceReason when explaining why a course is core.",
@@ -57,12 +58,13 @@ function clean(raw: Record<string, unknown>): OverviewBrief | null {
 export async function generateOverviewBrief(client: SupabaseClient, userId: string, term: TermChoice): Promise<{ status: "reused" | "created"; brief: OverviewBrief } | null> {
   const input = await briefInput(client, term);
   if (!input.courses.length) return null;
-  const inputHash = createHash("sha256").update(JSON.stringify(input)).digest("hex");
+  // The rules version is part of the key: changing the instructions must produce a new summary, not reuse one.
+  const inputHash = createHash("sha256").update(JSON.stringify({ input, rules: BRIEF_RULES_VERSION, prompt: SYSTEM })).digest("hex");
   const { data: existing } = await client.from("overview_briefs").select("brief").eq("term", term).eq("input_hash", inputHash).limit(1).maybeSingle();
   if (existing) return { status: "reused", brief: existing.brief as OverviewBrief };
   const brief = clean(await requestJsonFromProvider(SYSTEM, JSON.stringify(input), { timeoutMs: 60_000 }));
   if (!brief) return null;
-  await client.from("overview_briefs").insert({ user_id: userId, term, input_hash: inputHash, brief, provider_model: resolveProviderSettings().model.slice(0, 120) });
+  await client.from("overview_briefs").insert({ user_id: userId, term, input_hash: inputHash, brief: { ...brief, rulesVersion: BRIEF_RULES_VERSION }, provider_model: resolveProviderSettings().model.slice(0, 120) });
   return { status: "created", brief };
 }
 
