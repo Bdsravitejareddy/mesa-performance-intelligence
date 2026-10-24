@@ -38,6 +38,7 @@ export default async function CompetenciesPage() {
       <section className="competency-summary" aria-label="Summary by classification">
         {STATE_ORDER.map((state) => <div className={`competency-summary-item state-${state}`} key={state}><strong>{counts.get(state) ?? 0}</strong><span><Cue label={STATE_LABELS[state]} /></span></div>)}
       </section>
+      {(counts.get("insufficient_evidence") ?? 0) >= all.length / 2 && <p className="info-callout"><span><b>Most of the map is grey — that is expected early on.</b> Grey means unknown, not weak: a competency turns into a strength or a development area only after two separate assessments show it. It fills as your faculty release marks, as submitted files are graded, and as practice and tests add evidence. Today {all.length - (counts.get("insufficient_evidence") ?? 0)} of {all.length} have enough to say something.</span></p>}
       <p className="scope-note">{mappedTotal} of {all.length} competencies have at least one mapped assessment. Map more assessments below to widen evidence coverage.</p>
       {domains.map((domain) => <section className="content-panel competency-domain" key={domain.key}>
         <h2><Cue label={domain.name} /> <span className="panel-count">{domain.competencies.length}</span></h2>

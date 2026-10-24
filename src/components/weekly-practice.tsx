@@ -7,7 +7,7 @@ type Result = { seconds?: number; overtime?: boolean; questions: { id: string; k
 
 // This week's practice: quiz and trick questions, a short case task and two everyday prompts.
 export function WeeklyPractice() {
-  const [data, setData] = useState<{ week: string; focus: string; course?: string; items: PracticeItem[]; answers: Record<string, unknown>; result: Result | null; submitted: boolean; started?: boolean; outline?: { id: string; kind: string }[]; startedAt?: string | null; timeLimit?: number } | null>(null);
+  const [data, setData] = useState<{ week: string; focus: string; course?: string; items: PracticeItem[]; answers: Record<string, unknown>; result: Result | null; submitted: boolean; started?: boolean; focusReason?: string; outline?: { id: string; kind: string }[]; startedAt?: string | null; timeLimit?: number } | null>(null);
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
   const [answers, setAnswers] = useState<Record<string, number | string>>({});
@@ -22,6 +22,7 @@ export function WeeklyPractice() {
   if (!data) return <p className="empty-hint">{state || "Preparing this week's practice from your course material — this can take a minute the first time…"}</p>;
   if (!data.started && !data.submitted) return <div className="content-panel practice-start">
     <h2>Ready when you are</h2>
+    {data.focusReason && <p className="practice-why"><b>Why this week:</b> {data.focusReason}</p>}
     <p>{data.outline?.filter((item) => item.kind === "quiz" || item.kind === "trick").length ?? 5} extreme questions{data.course ? <> from <b>{data.course.replace(/\s+with\s+.*$/i, "")}</b></> : ""}, a case task and two everyday prompts. You have {Math.round((data.timeLimit ?? 1500) / 60)} minutes once you start; answers so far are submitted when time runs out.</p>
     <button type="button" className="button button-primary" onClick={() => void start()}>Start the {Math.round((data.timeLimit ?? 1500) / 60)}-minute practice</button>{state && <small role="status">{state}</small>}
   </div>;
@@ -35,7 +36,7 @@ export function WeeklyPractice() {
   }
   const label = { quiz: "Quiz", trick: "Trick question", case: `Case task · ${data.focus}`, conversation: "Conversation" } as const;
   return <div className="practice">
-    <div className="practice-head"><p className="empty-hint">Week of {new Date(data.week).toLocaleDateString(undefined, { day: "numeric", month: "long" })} · {data.course ? <>questions from <b>{data.course.replace(/\s+with\s+.*$/i, "")}</b>, chosen for your lowest skill ({data.focus})</> : <>extreme reasoning questions (course questions need AI consent and course material)</>}. Every question is checked twice against the course material before it is used.</p>
+    <div className="practice-head"><p className="empty-hint">Week of {new Date(data.week).toLocaleDateString(undefined, { day: "numeric", month: "long" })} · {data.course ? <>questions from <b>{data.course.replace(/\s+with\s+.*$/i, "")}</b>, chosen for {data.focus}</> : <>extreme reasoning questions (course questions need AI consent and course material)</>}. Every question is checked twice against the course material before it is used.</p>
       {!data.submitted && remaining !== null && <span className={`test-clock${remaining < 120 ? " urgent" : ""}`} aria-live="polite">{Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, "0")}</span>}</div>
     {data.items.map((item, index) => {
       const outcome = result?.questions.find((row) => row.id === item.id);

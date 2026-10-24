@@ -13,10 +13,10 @@ export type CompetencyDomain = { key: string; name: string; competencies: Compet
 
 export type TestEvidence = { id: string; submitted_at: string; result: { sections?: Record<string, { correct: number; total: number; percent: number }> } };
 
-export function buildCompetencyMap(input: { competencies: CompetencyRow[]; mappings: MappingRow[]; assessments: AssessmentRow[]; submissions: SubmissionRow[]; courses: CourseRow[]; tests?: TestEvidence[]; gradings?: { assessment_id: string; ai_score: number | string | null; created_at: string }[]; rubric?: { bands: { high: number; low: number } } }, now: Date = new Date()): CompetencyDomain[] {
+export function buildCompetencyMap(input: { competencies: CompetencyRow[]; mappings: MappingRow[]; assessments: AssessmentRow[]; submissions: SubmissionRow[]; courses: CourseRow[]; tests?: TestEvidence[]; gradings?: { assessment_id: string; ai_score: number | string | null; created_at: string; ai_report?: { summary?: string } | null }[]; rubric?: { bands: { high: number; low: number } } }, now: Date = new Date()): CompetencyDomain[] {
   // The latest blind AI grade per assessment (inputs arrive newest first).
-  const aiGrade = new Map<string, { score: number; date: string }>();
-  for (const row of input.gradings ?? []) if (row.ai_score !== null && !aiGrade.has(row.assessment_id)) aiGrade.set(row.assessment_id, { score: Number(row.ai_score), date: row.created_at });
+  const aiGrade = new Map<string, { score: number; date: string; summary: string }>();
+  for (const row of input.gradings ?? []) if (row.ai_score !== null && !aiGrade.has(row.assessment_id)) aiGrade.set(row.assessment_id, { score: Number(row.ai_score), date: row.created_at, summary: String(row.ai_report?.summary ?? "").slice(0, 280) });
   const assessmentById = new Map(input.assessments.map((row) => [row.id, row]));
   const courseById = new Map(input.courses.map((row) => [row.id, row.title]));
   const submissionsByAssessment = new Map<string, SubmissionRow[]>();
@@ -45,7 +45,7 @@ export function buildCompetencyMap(input: { competencies: CompetencyRow[]; mappi
     const grade = aiGrade.get(assessment.id);
     const officiallyMarked = items.some((item) => item.mark !== null);
     const withAi: CompetencyEvidence[] = !officiallyMarked && grade && !mapping.criterion_label
-      ? [{ ...base, submissionId: submissions[0]?.id ?? null, mark: Math.round(grade.score * 10) / 10, feedback: submissions[0]?.official_feedback ?? "", date: grade.date, source: "Blind AI grade against the brief — not an official mark", evidenceKind: "ai_grade" }]
+      ? [{ ...base, submissionId: submissions[0]?.id ?? null, mark: Math.round(grade.score * 10) / 10, feedback: submissions[0]?.official_feedback ?? "", date: grade.date, source: "Blind AI grade against the brief — not an official mark", evidenceKind: "ai_grade", excerpt: grade.summary }]
       : items;
     evidenceByCompetency.set(mapping.competency_id, [...(evidenceByCompetency.get(mapping.competency_id) ?? []), ...withAi]);
   }

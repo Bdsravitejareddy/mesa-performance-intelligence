@@ -781,3 +781,15 @@ html[data-story-enter="from-below"] .main-content{animation:storyDrop .28s cubic
 .lx-example dl{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:0}.lx-example dt{font-size:12px;color:rgba(246,245,241,.82)}.lx-example dd{margin:2px 0 0;font-size:26px;font-weight:700}.lx-example small{color:rgba(246,245,241,.82)}
 .practice-start{display:grid;gap:10px;justify-items:start}.practice-start p{margin:0}
 .stale-note{margin:6px 0 0;font-size:var(--fs-note);padding:6px 10px;border-radius:10px;background:rgba(217,164,65,.18);display:inline-block}
+.why-summary{margin:0 0 8px;padding:8px 12px;border-radius:10px;background:rgba(18,20,18,.04)}
+.stakes-tag{margin-left:8px;font-style:normal;font-size:var(--fs-meta);padding:1px 7px;border-radius:999px;background:rgba(18,20,18,.06);color:var(--ink-2)}
+.competency-evidence li.is-set-aside{opacity:.65}.why-excerpt{display:block;color:var(--ink-2)}
+.getting-started{display:grid;gap:10px;padding:var(--pad,18px);border-radius:var(--radius,16px);background:rgba(255,255,255,.45);border:1px solid rgba(18,20,18,.08)}
+.getting-started h2{margin:2px 0 0;font-size:var(--fs-panel)}
+.start-bar{width:180px;height:8px;border-radius:999px;background:rgba(18,20,18,.08);overflow:hidden}.start-bar i{display:block;height:100%;background:#3f6a3d;border-radius:inherit}
+.start-steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr));gap:10px 18px}
+.start-steps li{display:grid;grid-template-columns:22px 1fr auto;gap:10px;align-items:start}.start-steps li small{display:block;color:var(--ink-2)}
+.start-check{width:20px;height:20px;border-radius:50%;border:1.5px solid rgba(18,20,18,.25);display:grid;place-items:center}.is-done .start-check{background:#3f6a3d;border-color:#3f6a3d;color:#fff}
+.start-title{font-weight:600;text-decoration:underline;text-underline-offset:3px}.is-done .start-title{text-decoration:none;color:var(--ink-2)}
+.start-steps em{font-style:normal;font-size:var(--fs-meta);color:var(--ink-2)}
+.calibration{display:grid;gap:6px}.calibration p{margin:0}

@@ -2,6 +2,8 @@ import Link from "next/link";
 import { ArrowDown, ArrowRight, FileText } from "lucide-react";
 import type { DashboardSnapshot } from "@/lib/dashboard-data";
 import { ProfileGlance } from "@/components/profile-glance";
+import { GettingStarted } from "@/components/getting-started";
+import type { Step } from "@/lib/profile/onboarding";
 import { Cue } from "@/components/cue";
 import type { Glance } from "@/lib/profile/glance";
 import { formatOfficialMark } from "@/lib/scoring";
@@ -17,7 +19,7 @@ const shortCourse = (name: string) => name.replace(/\s+with\s+.*$/i, "");
 
 // The overview reads top-down: a one-line summary, four highlights, then the breakdown. Reasoning sits
 // behind "Why?" so the page leads with what the evidence shows rather than how it was worked out.
-export function DashboardView({ data, name = "there", glance = null, staleBrief = false }: { data: DashboardSnapshot; name?: string; glance?: Glance | null; staleBrief?: boolean }) {
+export function DashboardView({ data, name = "there", glance = null, staleBrief = false, steps = [] }: { data: DashboardSnapshot; name?: string; glance?: Glance | null; staleBrief?: boolean; steps?: Step[] }) {
   const average = data.averageMark;
   const marked = data.coursePerformance.filter((row) => row.weighted !== null).sort((a, b) => b.weighted! - a.weighted!);
   const best = marked[0];
@@ -51,6 +53,7 @@ export function DashboardView({ data, name = "there", glance = null, staleBrief 
 
       {!data.demoMode && data.courses.length === 0 && data.assessmentCount === 0 && data.marks.length === 0 && <div className="info-callout" role="status"><span><strong>No Mesa records yet.</strong> Run an LMS sync from Marks & feedback to begin.</span></div>}
 
+      {steps.length > 0 && <GettingStarted steps={steps} />}
       {!data.demoMode && <Link href="/practice" className="practice-link"><span className="eyebrow"><span className="eyebrow-line" /> This week&apos;s practice</span><strong>Quiz, trick questions, a case task and two everyday prompts</strong><small>About 20 minutes · aimed at your weakest skill · new every Monday</small><ArrowRight size={16} /></Link>}
       {!data.demoMode && <WeeklyQuest name={name} suggestions={[...(brief?.focus ?? []).map((title) => ({ title: title.slice(0, 200), reason: "From your AI summary" })), ...(data.insights?.focus ?? []).map((item) => ({ title: item.title.slice(0, 200), reason: item.why.slice(0, 300) }))]} />}
 

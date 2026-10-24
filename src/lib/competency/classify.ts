@@ -36,6 +36,8 @@ export type CompetencyEvidence = {
   evidenceKind?: "official" | "ai_grade";
   // How much the assessment counted; practice work is weighted lightly (see stakes.ts).
   stakes?: "exam" | "graded" | "practice";
+  // A short excerpt behind an AI grade: the grader's summary of that piece of work.
+  excerpt?: string;
 };
 
 export type EvidenceRow = CompetencyEvidence & { band: "high" | "middle" | "low" | "unscored" };

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { STATE_LABELS, type CompetencyAssessment, type CompetencyState } from "@/lib/competency/classify";
 import { formatOfficialMark } from "@/lib/scoring";
+import { STAKES_LABEL } from "@/lib/assessments/stakes";
 
 const MAPPING_LABELS = { user_tagged: "member-tagged", official_rubric: "official rubric", learning_objective: "learning objective", ai_suggested: "AI-mapped", practice_test: "practice test" } as const;
 
@@ -14,13 +15,23 @@ export function CompetencyWhy({ assessment, history = [], claims = [], children 
   return <details className="competency-why">
     <summary>Why this conclusion?</summary>
     <div className="competency-why-body">
+      {(() => {
+        // In one line: what counted, at what level, and what was shown but set aside.
+        const graded = why.evidence.some((row) => row.band !== "unscored" && row.stakes !== "practice");
+        const counted = why.evidence.filter((row) => row.band !== "unscored" && !(graded && row.stakes === "practice"));
+        const aside = why.evidence.filter((row) => row.band !== "unscored" && graded && row.stakes === "practice").length;
+        const describe = (band: string) => counted.filter((row) => row.band === band).map((row) => `${row.assessmentTitle} (${row.mark}${row.evidenceKind === "ai_grade" ? ", AI" : ""})`);
+        const high = describe("high"), low = describe("low"), middle = describe("middle");
+        return counted.length ? <p className="why-summary"><b>Counted:</b> {[high.length && `high — ${high.join(", ")}`, middle.length && `mid-range — ${middle.join(", ")}`, low.length && `low — ${low.join(", ")}`].filter(Boolean).join("; ")}.{aside ? ` ${aside} practice result${aside > 1 ? "s" : ""} shown below but not counted.` : ""}</p> : null;
+      })()}
       <h3>Evidence</h3>
-      {why.evidence.length ? <ul className="competency-evidence">{why.evidence.map((row, index) => <li key={`${row.assessmentId}-${row.submissionId ?? "none"}-${index}`}>
-        <span><strong>{row.assessmentTitle}</strong> · {row.course}</span>
-        <span className={`band band-${row.band}`}>{row.mark === null ? "No released mark" : row.granularity === "criterion" ? `${row.mark}% of criterion` : formatOfficialMark(row.mark)}</span>
+      {why.evidence.length ? <ul className="competency-evidence">{why.evidence.map((row, index) => { const setAside = row.band !== "unscored" && row.stakes === "practice" && why.evidence.some((other) => other.band !== "unscored" && other.stakes !== "practice"); return <li key={`${row.assessmentId}-${row.submissionId ?? "none"}-${index}`} className={setAside ? "is-set-aside" : undefined}>
+        <span><strong>{row.assessmentTitle}</strong> · {row.course}{row.stakes && <em className="stakes-tag">{STAKES_LABEL[row.stakes]}</em>}{setAside && <em className="stakes-tag">shown, not counted</em>}</span>
+        <span className={`band band-${row.band}`}>{row.mark === null ? "No released mark" : row.evidenceKind === "ai_grade" ? `AI ${row.mark} (blind, not official)` : row.granularity === "criterion" ? `${row.mark}% of criterion` : formatOfficialMark(row.mark)}</span>
         <small>{row.source}{row.date ? ` · ${new Date(row.date).toLocaleDateString()}` : ""} · {MAPPING_LABELS[row.mappingSource]} mapping · {row.granularity === "criterion" ? "criterion mark" : "whole-assessment mark"}</small>
         {row.feedback.trim() && <q>{row.feedback.trim().slice(0, 300)}</q>}
-      </li>)}</ul> : <p>No assessment is mapped to this competency.</p>}
+        {row.evidenceKind === "ai_grade" && row.excerpt && <small className="why-excerpt"><b>Grader&apos;s reading:</b> {row.excerpt}</small>}
+      </li>; })}</ul> : <p>No assessment is mapped to this competency yet — this is unknown, not weak.</p>}
       <h3>Benchmark</h3><p>{why.benchmark}</p>
       <h3>Interpretation</h3><p>{why.interpretation}</p>
       {why.limitations.length > 0 && <><h3>Limitations</h3><ul>{why.limitations.map((item) => <li key={item}>{item}</li>)}</ul></>}

@@ -5,6 +5,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { buildWeek, expression, weekStart, type PracticeItem } from "@/lib/practice/week";
 import { courseQuestions } from "@/lib/practice/course-questions";
+import { chooseTarget, reflectionPrompt, type PracticeTarget } from "@/lib/practice/target";
+import { loadCompetencyInputs } from "@/lib/competency/load";
+import { buildCompetencyMap } from "@/lib/competency/map";
+import { buildLibrary } from "@/lib/roles/library";
 import { blindEvaluate } from "@/lib/quality/engine";
 import { getAIProcessingConfig, isAIConsentCurrent } from "@/lib/ai/consent";
 
@@ -46,31 +50,52 @@ async function chooseCourse(auth: Auth, focus: string): Promise<{ id: string; ti
   return pick ? { id: pick.id as string, title: pick.title as string } : null;
 }
 
+// The course that holds most of the target competency's assessments.
+async function courseOfAssessments(auth: Auth, assessmentIds: string[]): Promise<{ id: string; title: string } | null> {
+  if (!assessmentIds.length) return null;
+  const { data: rows } = await auth.supabase.from("assessments").select("course_id").in("id", assessmentIds);
+  const counts = new Map<string, number>();
+  for (const row of rows ?? []) counts.set(row.course_id as string, (counts.get(row.course_id as string) ?? 0) + 1);
+  const id = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+  if (!id) return null;
+  const { data: course } = await auth.supabase.from("courses").select("id, title").eq("id", id).maybeSingle();
+  return course ? { id: course.id as string, title: course.title as string } : null;
+}
+
 // This week's set, created on first visit: five extreme questions from your course (cross-checked), a case task
 // from the same course, and two everyday prompts. Timed from when it is first opened. Keys never leave the server.
 export async function GET() {
   const auth = await member();
   if (!auth) return NextResponse.json({ error: "Sign in first." }, { status: 401 });
   const week = weekStart(new Date());
-  const select = "id, seed, focus, items, course_title, time_limit_seconds, answers, result, created_at, started_at, submitted_at, note";
+  const select = "id, seed, focus, focus_reason, items, course_title, time_limit_seconds, answers, result, created_at, started_at, submitted_at, note";
   let { data: row } = await auth.supabase.from("weekly_practice").select(select).eq("week_start", week).maybeSingle();
   // An unstarted set without course questions (older format, or a fallback) is regenerated in place on the next visit.
-  const regenerate = Boolean(row && !row.submitted_at && !row.started_at && (!row.items || !row.course_title));
+  const regenerate = Boolean(row && !row.submitted_at && !row.started_at && (!row.items || !row.course_title || !row.focus_reason));
   if (!row || regenerate) {
+    // The competency to work on: conflicting or weak first, then a role need with little or no signal.
+    let target: PracticeTarget | null = null;
+    try {
+      const inputs = await loadCompetencyInputs(auth.supabase);
+      const needs = new Set(buildLibrary().filter((role) => role.tier === "primary").flatMap((role) => role.requirements.flatMap((requirement) => requirement.competencyIds)));
+      target = chooseTarget(buildCompetencyMap(inputs), needs);
+    } catch { target = null; }
     const { data: view } = await auth.supabase.from("ai_skill_views").select("domains").order("created_at", { ascending: false }).limit(1).maybeSingle();
-    const focus = Object.entries((view?.domains ?? {}) as Record<string, { score: number | null }>).filter(([, value]) => value.score !== null).sort((a, b) => a[1].score! - b[1].score!)[0]?.[0] ?? "Analytical reasoning";
+    const weakestDomain = Object.entries((view?.domains ?? {}) as Record<string, { score: number | null }>).filter(([, value]) => value.score !== null).sort((a, b) => a[1].score! - b[1].score!)[0]?.[0] ?? "Analytical reasoning";
+    const focus = target?.name ?? weakestDomain;
+    const focusReason = target?.reason ?? `${weakestDomain} is your lowest skill in the AI view.`;
     const seed = randomInt(1, 2_147_483_647);
     const fallback = buildWeek(seed, focus);
     let items: PracticeItem[] = fallback.items;
     let key: Record<string, number> = fallback.key, explanations: Record<string, string> = fallback.explanations;
     let courseTitle = "";
     let note = "";
-    const course = await chooseCourse(auth, focus);
+    const course = (target ? await courseOfAssessments(auth, target.assessmentIds) : null) ?? await chooseCourse(auth, target?.domain ?? weakestDomain);
     if (!course) note = "No course to draw questions from.";
     else if (!await aiAllowed(auth)) note = "Course questions need the current AI consent.";
     else {
       try {
-        const generated = await courseQuestions(auth.supabase, course, focus);
+        const generated = await courseQuestions(auth.supabase, course, target ? `${target.name} — ${target.description}` : focus);
         if (generated.questions.length < 3) note = `${course.title}: ${generated.note}`;
         if (generated.questions.length >= 3) {
           courseTitle = course.title;
@@ -81,10 +106,12 @@ export async function GET() {
           explanations = { ...Object.fromEntries(generated.questions.map((question) => [question.id, question.explanation])), ...Object.fromEntries(fill.map((item) => [item.id, fallback.explanations[item.id]])) };
           const caseItem: PracticeItem = { id: "case", kind: "case", prompt: generated.caseTask ?? (fallback.items.find((item) => item.kind === "case") as { prompt: string }).prompt, focus: generated.caseTask ? course.title.replace(/\s+with\s+.*$/i, "") : focus, minWords: 120 };
           items = [...questionItems, caseItem, ...fallback.items.filter((item) => item.kind === "conversation")];
+          // One of the two everyday prompts becomes a reflection on the target competency.
+          if (target) items = items.map((item) => (item.id === "c2" ? { ...item, prompt: reflectionPrompt(target!) } : item));
         }
       } catch (error) { note = `Course questions could not be written (${error instanceof Error ? error.message.slice(0, 120) : "error"}).`; }
     }
-    const values = { week_start: week, seed, focus, items, course_title: courseTitle, time_limit_seconds: TIME_LIMIT, note };
+    const values = { week_start: week, seed, focus, focus_reason: focusReason, items, course_title: courseTitle, time_limit_seconds: TIME_LIMIT, note };
     const saved = row ? await auth.supabase.from("weekly_practice").update(values).eq("id", row.id).select(select).single() : await auth.supabase.from("weekly_practice").insert(values).select(select).single();
     row = saved.data;
     if (row) await createAdminClient().from("weekly_practice_keys").upsert({ practice_id: row.id, key, explanations }, { onConflict: "practice_id" });
@@ -94,7 +121,7 @@ export async function GET() {
   // Until Start is pressed only the outline is sent, so the questions cannot be read before the clock runs.
   const started = Boolean(row.started_at);
   const outline = items.map((item) => ({ id: item.id, kind: item.kind }));
-  return NextResponse.json({ week, focus: row.focus, course: row.course_title, items: started ? items : [], outline, note: row.note, answers: row.answers, result: row.result, submitted: Boolean(row.submitted_at), started, startedAt: row.started_at, timeLimit: row.time_limit_seconds });
+  return NextResponse.json({ week, focus: row.focus, course: row.course_title, items: started ? items : [], outline, note: row.note, focusReason: row.focus_reason, answers: row.answers, result: row.result, submitted: Boolean(row.submitted_at), started, startedAt: row.started_at, timeLimit: row.time_limit_seconds });
 }
 
 // Starts the clock for this week's set.

@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { AppShell } from "@/components/app-shell";
 import { RunGrading } from "@/components/run-grading";
 import { DetachFile } from "@/components/detach-file";
+import { calibrate, corrected, MIN_PAIRS } from "@/lib/grading/calibration";
 import { Cue } from "@/components/cue";
 import { Why } from "@/components/why";
 import { cachedRead } from "@/lib/data/cached";
@@ -33,6 +34,7 @@ export default async function GradingPage() {
   const close = withOfficial.filter((row) => Math.abs(row.ai_score! - row.official_mark!) <= 7.5).length;
   const facultyPoints = rows.reduce((sum, row) => sum + (row.comparison?.agreed?.length ?? 0) + (row.comparison?.facultyOnly?.length ?? 0), 0);
   const agreedPoints = rows.reduce((sum, row) => sum + (row.comparison?.agreed?.length ?? 0), 0);
+  const calibration = calibrate(rows.map((row) => ({ official: row.official_mark, ai: row.ai_score })));
   const reviews = rows.filter((row) => row.review).sort((a, b) => (a.review!.strength === b.review!.strength ? b.review!.gap - a.review!.gap : a.review!.strength === "strong" ? -1 : 1));
 
   const headline = !rows.length
@@ -53,6 +55,12 @@ export default async function GradingPage() {
       <Stat value={`${data.waiting.length}`} unit="" label="Not graded — no file found" />
     </section>}
 
+    {data && !data.missing && <section className="content-panel calibration" aria-label="How far to trust AI grades">
+      <h2>How far to trust AI grades</h2>
+      {calibration.pairs ? <p>Across the <b>{calibration.pairs}</b> submission{calibration.pairs === 1 ? "" : "s"} with both an official mark and a blind AI grade, the AI sits on average <b>{Math.abs(calibration.bias!)} points {calibration.bias! >= 0 ? "above" : "below"}</b> your faculty, typically {calibration.mae} points away, and within 7.5 points on {calibration.within} of {calibration.pairs}.</p> : <p>No submission has both an official mark and an AI grade yet, so the AI cannot be checked against your faculty.</p>}
+      <p className="empty-hint">{calibration.ready ? "Each AI grade below also shows a corrected estimate — the AI grade adjusted for this bias, with the typical error as its range. Official marks always take precedence." : `With fewer than ${MIN_PAIRS} marked pairs this is too little to correct for, so AI grades are shown as they are. Read them as a second opinion on the brief, not a predicted mark; the gap usually comes from criteria, weights or penalties the AI cannot see.`}</p>
+    </section>}
+
     {reviews.length > 0 && <section className="content-panel review-cases" aria-label="Where a higher mark may be justified">
       <h2>Where a higher mark may be justified <span className="panel-count">{reviews.length}</span></h2>
       <p className="empty-hint">The blind AI grade is at least {REVIEW_GAP} points above the official mark and rests on quotes verified in your own work. This is a case to discuss, not proof the mark is wrong — the counterpoints are listed with it.</p>
@@ -70,7 +78,7 @@ export default async function GradingPage() {
         <ScoreTrack official={row.official_mark} ai={row.ai_score} code={row.code_score} />
         <div className="grade-figures">
           <Figure label="Official" value={row.official_mark} />
-          <Figure label="AI" value={row.ai_score} note={row.ai_status === "complete" ? undefined : row.ai_status === "skipped" ? "not run" : "retrying"} />
+          <Figure label="AI" value={row.ai_score} note={row.ai_status !== "complete" ? (row.ai_status === "skipped" ? "not run" : "retrying") : (() => { const estimate = row.official_mark === null ? corrected(row.ai_score, calibration) : null; return estimate ? `corrected ${estimate.low}–${estimate.high}` : undefined; })()} />
           <Figure label="Code" value={row.code_score} note={row.code_report?.completeness !== undefined && row.code_report?.completeness !== null ? `${row.code_report.parts?.filter((part) => part.answered).length}/${row.code_report.parts?.length} parts` : row.code_score === null ? "nothing to tick off" : undefined} />
         </div>
         {row.comparison && (row.comparison.agreed.length > 0 || row.comparison.facultyOnly.length > 0) && <p className="grade-insight">{insightLine(row.comparison)}</p>}
