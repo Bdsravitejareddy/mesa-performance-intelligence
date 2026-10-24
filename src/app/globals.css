@@ -802,3 +802,34 @@ html[data-story-enter="from-below"] .main-content{animation:storyDrop .28s cubic
 .quiz-tool-session ul { margin: 8px 0 0 18px; }
 .quiz-tool-session small { display: block; opacity: .75; }
 .quiz-tool-line { margin-top: 10px; }
+
+/* SWOT story: calm, solid cards with a clear hierarchy; no glass, glow or badges. */
+.swot-story{max-width:1080px}
+.story-lead,.story-start{background:var(--white);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin:0 0 20px}
+.story-lead h2,.story-start h2{font:700 13px Arial,'Helvetica Neue',Helvetica,sans-serif;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+.story-lead p{font-size:17px;line-height:1.6;color:var(--ink);margin:0;max-width:72ch}
+.story-sections{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px 22px}
+.story-section{display:flex;flex-direction:column;gap:12px;min-width:0}
+.story-section>header{border-top:3px solid var(--line);padding-top:10px}
+.story-strength>header{border-top-color:var(--mint)}.story-weakness>header{border-top-color:var(--amber)}.story-opportunity>header{border-top-color:var(--blue)}.story-threat>header{border-top-color:var(--rose)}
+.story-section>header h2{font:700 20px Arial,'Helvetica Neue',Helvetica,sans-serif;color:var(--ink);margin:0}
+.story-section>header p{font-size:14px;color:var(--muted);margin:2px 0 0}
+.story-card{background:var(--white);border:1px solid var(--line);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:8px}
+.story-card h3{font:700 16px/1.35 Arial,'Helvetica Neue',Helvetica,sans-serif;color:var(--ink);margin:0}
+.story-card p{font-size:15px;line-height:1.6;color:var(--ink-2);margin:0}
+.story-card .story-next{font-size:14.5px;color:var(--ink)}
+.story-evidence summary,.story-more>summary,.story-own>summary{cursor:pointer;font:700 13.5px Arial,'Helvetica Neue',Helvetica,sans-serif;color:var(--mint);width:max-content;max-width:100%;padding:4px 0;border-radius:4px}
+.story-evidence summary:focus-visible,.story-more>summary:focus-visible,.story-own>summary:focus-visible{outline:2px solid var(--mint);outline-offset:3px}
+.story-evidence{border-top:1px solid var(--line);padding-top:8px}
+.story-evidence h4{font:700 12px Arial,'Helvetica Neue',Helvetica,sans-serif;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin:10px 0 4px}
+.story-evidence ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.story-evidence li span{display:block;font-size:13.5px;color:var(--ink)}
+.story-evidence li small{display:block;font-size:12.5px;line-height:1.5;color:var(--muted);overflow-wrap:anywhere}
+.story-relevance{font-size:13.5px!important;color:var(--ink-2)!important;margin-top:6px!important}
+.story-more{display:flex;flex-direction:column;gap:12px}.story-more[open]>summary{margin-bottom:12px}
+.story-more>.story-card+.story-card{margin-top:12px}
+.story-empty{font-size:14.5px;line-height:1.6;color:var(--ink-2);background:var(--paper);border-radius:12px;padding:14px 16px;margin:0}
+.story-start{margin-top:24px;border-left:4px solid var(--mint)}
+.story-start p{font-size:16px;line-height:1.6;color:var(--ink);margin:0}
+.story-own{margin-top:20px}
+@media(max-width:760px){.story-sections{grid-template-columns:1fr}.story-lead,.story-start{padding:16px}.story-lead p{font-size:16px}.story-card{padding:14px}}
