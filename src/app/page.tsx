@@ -31,7 +31,8 @@ export default async function HomePage() {
   const quizTool = data.demoMode ? null : await cachedRead("overview:quiz-tool", async (client) => summariseQuizTool(((await client.from("quiz_tool_results").select("course, term, session, correct, total, shown, missed")).data ?? []) as QuizToolRow[])).catch(() => null);
   // A summary written under earlier rules is replaced in the background on this visit.
   const stale = !data.demoMode && data.brief && data.brief.brief.rulesVersion !== BRIEF_RULES_VERSION;
-  if (stale) after(async () => { try { const client = await createClient(); const { data: claims } = await client.auth.getClaims(); const userId = claims?.claims?.sub; if (typeof userId === "string") await generateOverviewBrief(client, userId, data.term); } catch { /* the next refresh writes it */ } });
+  // A page's after() callback cannot read cookies, so the client and user are resolved during render.
+  if (stale) { const client = await createClient(); const { data: claims } = await client.auth.getClaims(); const userId = claims?.claims?.sub; if (typeof userId === "string") after(async () => { try { await generateOverviewBrief(client, userId, data.term); } catch { /* the next refresh writes it */ } }); }
   return <AppShell demoMode={data.demoMode}><DashboardView data={data} name={await firstName()} glance={glance} staleBrief={Boolean(stale)} steps={steps} quizTool={quizTool} /></AppShell>;
 }
 

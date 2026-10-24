@@ -153,7 +153,7 @@ export function buildSwotStory(input: StoryInputs): Finding[] {
       findings.push({ ...base, key: `strength:promising:${item.id}`, category: "strength", kind: "promising", priority: 14 + weight(item.id) * 3 + confidenceBoost,
         keyFact: `an official ${result(top)}`,
         headline: `${item.name} looks like a promising strength.`,
-        body: `Your official ${top.granularity === "criterion" ? `score of ${result(top)}` : `mark of ${result(top)}`} is a strong result in ${courseName(top.course)}. It is one result, so it tells you about that course rather than settling the question.${cvNote}`,
+        body: `Your official ${top.granularity === "criterion" ? `score of ${result(top)}` : `mark of ${result(top)}`} is a strong result ${GENERIC.test(short(top.assessmentTitle)) ? "for that course" : `in ${courseName(top.course)}`}. It is one result, so it tells you about that course rather than settling the question.${cvNote}`,
         action: `Next: ${task}. It would show ${establishes}.`, numbers: [top.mark!, ...off.map((row) => row.mark!)] });
     } else if (state === "development_area" && worst) {
       findings.push({ ...base, key: `weakness:${item.id}`, category: "weakness", kind: "development", priority: 24 + weight(item.id) * 4 + lows.length + confidenceBoost,

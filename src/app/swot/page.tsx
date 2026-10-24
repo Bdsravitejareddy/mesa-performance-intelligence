@@ -85,7 +85,8 @@ async function load() {
   // The written version is keyed by the findings and the writing rules; until it exists, the built-in wording is shown.
   const key = narrativeKey(findings);
   const narrative = findings.length ? await readNarrative(supabase, key).catch(() => null) : null;
-  if (!narrative && findings.length) after(async () => { try { const client = await createClient(); await generateNarrative(client, userId, findings); } catch { /* the built-in wording stands */ } });
+  // A page's after() callback cannot read cookies, so it reuses the client (and session) created during render.
+  if (!narrative && findings.length) after(async () => { try { await generateNarrative(supabase, userId, findings); } catch { /* the built-in wording stands */ } });
   return { findings, entries, cards: narrative?.cards ?? {}, standsOut: narrative?.standsOut || fallbackStandsOut(findings) };
 }
 
