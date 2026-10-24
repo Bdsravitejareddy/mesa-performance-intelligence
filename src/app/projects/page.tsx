@@ -8,6 +8,7 @@ import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { summarisePortfolio, type PortfolioRow } from "@/lib/portfolio/summary";
 import type { BlindReport } from "@/lib/quality/engine";
 import { PROJECT_RULES_VERSION } from "@/lib/portfolio/evaluate";
+import { softenReport } from "@/lib/portfolio/soften";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +50,7 @@ async function load(supabase: SupabaseClient) {
     supabase.from("project_evaluations").select("project_key, report, created_at").order("created_at", { ascending: false }),
   ]);
   const latest = new Map<string, Evaluation>();
-  for (const row of (evaluations.data ?? []) as Evaluation[]) if (!latest.has(row.project_key)) latest.set(row.project_key, row);
+  // Claims are softened at display too, so evaluations saved before the rule read the same way.
+  for (const row of (evaluations.data ?? []) as Evaluation[]) if (!latest.has(row.project_key)) latest.set(row.project_key, { ...row, report: softenReport(row.report) });
   return { rows: (rows.data ?? []) as PortfolioRow[], contexts: (contexts.data ?? []) as Context[], evaluations: latest };
 }

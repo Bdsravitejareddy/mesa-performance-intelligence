@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAIProcessingConfig } from "@/lib/ai/consent";
 import { blindEvaluate, BLIND_PROMPT_VERSION, type BlindReport, type Standard } from "@/lib/quality/engine";
 import { summarisePortfolio, type PortfolioRow, type Project } from "./summary";
+import { softenReport } from "./soften";
 
 // A blind, grounded evaluation of each self-directed project. The problem statement the member was given is the
 // task the project is judged against — never part of the work, so it cannot be quoted as their communication.
@@ -82,7 +83,7 @@ export async function evaluateProjects(client: SupabaseClient, userId: string, b
     const inputHash = createHash("sha256").update(JSON.stringify({ work, statement, standard, rules: PROJECT_RULES_VERSION, prompt: BLIND_PROMPT_VERSION })).digest("hex");
     if (done.has(`${project.key}:${inputHash}`)) { result.unchanged += 1; continue; }
     try {
-      const report = groundOwnWords(await blindEvaluate(work, standard, "project", statement), ownText, standard);
+      const report = softenReport(groundOwnWords(await blindEvaluate(work, standard, "project", statement), ownText, standard));
       await client.from("project_evaluations").insert({ user_id: userId, project_key: project.key, input_hash: inputHash, report: { ...report, standardLabel: standard.label, hasStatement: Boolean(statement), hasOwnWords: ownWords.length > 0, rulesVersion: PROJECT_RULES_VERSION }, provider_model: config.model });
       result.evaluated += 1;
     } catch { result.skipped += 1; }
