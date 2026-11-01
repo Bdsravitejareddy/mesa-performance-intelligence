@@ -1,8 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getAllowedEmails, hasSupabaseConfig, isAllowedEmail, isDemoMode } from "./config";
+import { guestBlockedPath, guestUntil, type GuestClaims } from "@/lib/guest";
 
-const publicPaths = ["/login", "/setup", "/unauthorized", "/auth/callback", "/api/auth/magic-link"];
+const publicPaths = ["/login", "/setup", "/unauthorized", "/auth/callback", "/api/auth/magic-link", "/api/auth/guest"];
 const machinePaths = new Set(["pair", "pair-request", "pair-status", "installer", "session", "inventory", "upload", "finalize", "checkpoint"]
   .map((name) => `/api/drive-agent/${name}`));
 const cronPaths = new Set(["/api/cron/lms-sync", "/api/cron/grading", "/api/cron/refresh"]);
@@ -38,6 +39,22 @@ export async function updateSession(request: NextRequest) {
     loginUrl.pathname = "/login";
     loginUrl.searchParams.set("next", request.nextUrl.pathname);
     return NextResponse.redirect(loginUrl);
+  }
+
+  // A guest (marked in server-managed app_metadata) is a workspace member for its session's lifetime only, and never
+  // reaches paths that leave the app or cannot be undone. Signing out stays open so an expired session is cleaned up.
+  const guestEnds = guestUntil(claims as GuestClaims);
+  if (claims && guestEnds) {
+    const path = request.nextUrl.pathname;
+    if (isPublic || path === "/auth/signout") return response;
+    if (guestEnds.getTime() <= Date.now()) {
+      const expiredUrl = request.nextUrl.clone();
+      expiredUrl.pathname = "/login";
+      expiredUrl.search = "?error=guest_expired";
+      return NextResponse.redirect(expiredUrl);
+    }
+    if (guestBlockedPath(path)) return NextResponse.json({ error: "Not available in guest mode." }, { status: 403 });
+    return response;
   }
 
   const allowlistConfigured = getAllowedEmails().length > 0;

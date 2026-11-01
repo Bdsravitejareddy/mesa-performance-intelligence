@@ -1,13 +1,15 @@
 import { Activity, BrainCircuit, FileSearch, ShieldCheck, Target } from "lucide-react";
 import { LoginForm } from "@/components/login-form";
+import { GuestLoginForm } from "@/components/guest-login-form";
 import { IntelligenceVisual } from "@/components/intelligence-visual";
 import { ParallaxHero, RotatingWord } from "@/components/motion";
 
 // The same phrases as the feature list, so the page speaks with one voice.
 const MARQUEE = ["Every conclusion explained", "Blind evaluation", "Role readiness from real job postings", "Course-grounded evaluation", "Evidence, not verdicts", "Private by design", "AI-described slides", "Growth you can verify"];
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
-  const { error } = await searchParams;
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string; guest?: string }> }) {
+  const { error, guest } = await searchParams;
+  const guestNotice = error?.startsWith("guest_") ? error : guest === "ended" ? "ended" : undefined;
   return <main className="lx-page" data-theme="nature" aria-label="Sign in to Mesa Performance Intelligence">
     <ParallaxHero className="lx-scene">
       <div className="lx-layout">
@@ -32,7 +34,11 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <span className="lx-card-eyebrow">Welcome back</span>
           <h2 id="sign-in-title">Sign in</h2>
           <p>We&apos;ll email you a one-time secure link. No password to remember.</p>
-          <LoginForm errorCode={error} />
+          <LoginForm errorCode={error?.startsWith("guest_") ? undefined : error} />
+          <details className="guest-login" open={Boolean(guestNotice)}>
+            <summary>Sign in as a guest</summary>
+            <GuestLoginForm notice={guestNotice} />
+          </details>
         </section>
       </div>
       <div className="lx-marquee" aria-hidden="true"><div className="lx-marquee-track">{[...MARQUEE, ...MARQUEE].map((item, index) => <span key={index}>{item}<i /></span>)}</div></div>

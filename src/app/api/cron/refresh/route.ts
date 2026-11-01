@@ -1,5 +1,6 @@
 import { after, NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { endExpiredGuests } from "@/lib/guest";
 import { refreshExtras, refreshProjects, refreshSkillView } from "@/lib/refresh/extras";
 import { handOff } from "@/lib/grading/chain";
 
@@ -19,6 +20,10 @@ export async function POST(request: NextRequest) {
     if (result.skipped > 0 && pass < 5) handOff(`/api/cron/refresh?stage=projects&pass=${pass + 1}`);
   });
   // The skill view and projects start on their own runs straight away, so a long stage never blocks them.
-  else { handOff("/api/cron/refresh?stage=skills"); handOff("/api/cron/refresh?stage=projects"); after(async () => { await refreshExtras(createAdminClient(), 285_000).catch(() => undefined); }); }
+  else {
+    handOff("/api/cron/refresh?stage=skills"); handOff("/api/cron/refresh?stage=projects");
+    // Guest sessions left open past their time are undone before the day's analyses are rebuilt.
+    after(async () => { await endExpiredGuests(createAdminClient()).catch(() => 0); await refreshExtras(createAdminClient(), 285_000).catch(() => undefined); });
+  }
   return NextResponse.json({ accepted: true }, { status: 202 });
 }

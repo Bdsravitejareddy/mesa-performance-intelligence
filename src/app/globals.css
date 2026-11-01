@@ -833,3 +833,10 @@ html[data-story-enter="from-below"] .main-content{animation:storyDrop .28s cubic
 .story-start p{font-size:16px;line-height:1.6;color:var(--ink);margin:0}
 .story-own{margin-top:20px}
 @media(max-width:760px){.story-sections{grid-template-columns:1fr}.story-lead,.story-start{padding:16px}.story-lead p{font-size:16px}.story-card{padding:14px}}
+
+/* Guest sessions: a quiet sign-in option and a banner that says changes are undone on sign-out. */
+.guest-login { margin-top: 14px; }
+.guest-login > summary { cursor: pointer; font-size: .9rem; opacity: .8; }
+.guest-login[open] > summary { margin-bottom: 10px; }
+.guest-banner form { margin-left: auto; }
+.guest-signout { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; color: inherit; font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; }

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { GuestBanner } from "@/components/guest-banner";
 import { useRevealOnScroll, useSpotlight } from "@/components/motion";
 import { CommandPalette } from "@/components/command-palette";
 import { useEffect, useState } from "react";
@@ -89,6 +90,7 @@ export function AppShell({ children, demoMode }: { children: React.ReactNode; de
           </div>
         </header>
         {demoMode && <div className="demo-banner"><span className="demo-banner-icon"><Sparkles size={14} /></span><strong>Illustrative preview</strong><span>Sample figures are synthetic and are not actual Mesa student records.</span><Link href="/setup">Connect your workspace <ArrowUpRight size={13} /></Link></div>}
+        <GuestBanner />
         <main className="main-content">{current && current.tabs.length > 1 && <nav className="section-tabs" aria-label={`${current.label} pages`}>{current.tabs.map((tab) => { const on = pathname === tab.href || pathname.startsWith(`${tab.href}/`); return <Link key={tab.href} href={tab.href} className={on ? "is-on" : ""} aria-current={on ? "page" : undefined}>{tab.label}</Link>; })}</nav>}{children}<StorySeams pathname={pathname} /></main>
       </div>
       <ChapterRail pathname={pathname} />

@@ -1,8 +1,11 @@
 import { fetchWithKeyFailover, resolveProviderSettings } from "./settings";
+import { isGuestRequest } from "@/lib/guest-request";
 
 // timeoutMs bounds each attempt; long analyses pass a larger value.
 export async function requestJsonFromProvider(system: string, user: string, options: { timeoutMs?: number } = {}): Promise<Record<string, unknown>> {
   if (process.env.AI_DATA_PROCESSING_APPROVED !== "true") throw new Error("AI processing is disabled until excerpt sharing is explicitly approved in server configuration.");
+  // Guests can try everything else, but never spend AI processing on the member's behalf.
+  if (await isGuestRequest()) throw new Error("AI is turned off in guest mode.");
   const { base: apiBase, key: apiKey, keys, model, kind } = resolveProviderSettings();
   if (!apiBase || !apiKey || !model) throw new Error("Configure the server-side AI endpoint, key, and model before requesting an evaluation.");
   const url = new URL(`${apiBase}/chat/completions`);
