@@ -14,9 +14,12 @@ export const GUEST_COOKIE = "mesa_guest_until";
 // An entry matches itself and everything under it; one ending in "-" matches any path that starts with it.
 const BLOCKED = ["/api/ai-consent", "/api/ai-context", "/api/conversations", "/api/drive-sync", "/api/drive-agent", "/api/github", "/api/lms-sync", "/api/lms",
   "/api/imports/nexus-", "/api/refresh", "/api/cron", "/api/gradings/detach", "/api/assessment-competencies/auto"];
+// Erasing a quarantined file is permanent, so it is never a guest action.
+const BLOCKED_PATTERNS = [/^\/api\/materials\/[^/]+\/purge$/];
 
 export function guestBlockedPath(pathname: string): boolean {
-  return BLOCKED.some((entry) => entry.endsWith("-") ? pathname.startsWith(entry) : pathname === entry || pathname.startsWith(`${entry}/`));
+  return BLOCKED.some((entry) => entry.endsWith("-") ? pathname.startsWith(entry) : pathname === entry || pathname.startsWith(`${entry}/`))
+    || BLOCKED_PATTERNS.some((pattern) => pattern.test(pathname));
 }
 
 export type GuestClaims = { app_metadata?: { guest?: unknown; guest_until?: unknown } } | null | undefined;

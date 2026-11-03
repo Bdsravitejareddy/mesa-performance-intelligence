@@ -2,20 +2,21 @@ import type { CompetencyState } from "@/lib/competency/classify";
 import type { Importance } from "@/lib/roadmap/prioritise";
 import type { LibraryRequirement, LibraryRole } from "./library";
 
-export type RequirementStatus = "demonstrated" | "partial" | "gap" | "conflicting" | "supported_claim" | "unverified_claim" | "missing_evidence" | "eligibility" | "unmapped";
+export type RequirementStatus = "demonstrated" | "partial" | "gap" | "conflicting" | "supported_claim" | "self_confirmed" | "unverified_claim" | "missing_evidence" | "eligibility" | "unmapped";
 export const STATUS_LABELS: Record<RequirementStatus, string> = {
   demonstrated: "Demonstrated",
   partial: "Partly shown",
   gap: "Demonstrated gap",
   conflicting: "Conflicting evidence",
-  supported_claim: "Supported claim",
+  supported_claim: "Claim backed by other evidence",
+  self_confirmed: "Confirmed by you, not independently shown",
   unverified_claim: "Claimed, not yet supported",
   missing_evidence: "No evidence yet",
   eligibility: "Eligibility — check yourself",
   unmapped: "Not linked to a competency",
 };
 // A demonstrated gap is more informative than an unverified claim, so it ranks above it.
-const RANK: RequirementStatus[] = ["demonstrated", "partial", "supported_claim", "conflicting", "gap", "unverified_claim", "missing_evidence"];
+const RANK: RequirementStatus[] = ["demonstrated", "partial", "supported_claim", "conflicting", "gap", "self_confirmed", "unverified_claim", "missing_evidence"];
 
 export type CompetencyView = { state: CompetencyState; name: string };
 export type ClaimView = { competencyId: string; status: string };
@@ -27,22 +28,41 @@ function statusFor(competencyId: string, competencies: Map<string, CompetencyVie
   if (state === "development_area") return "gap";
   if (state === "conflicting") return "conflicting";
   const own = claims.filter((claim) => claim.competencyId === competencyId);
-  // Claims backed by another evidence item, or confirmed as accurate by the member, count as supported.
-  if (own.some((claim) => claim.status === "supported" || claim.status === "attested")) return "supported_claim";
+  // A claim backed by another evidence item is supported; one only confirmed by the member is kept apart, because
+  // saying you have a skill is not the same as showing it.
+  if (own.some((claim) => claim.status === "supported")) return "supported_claim";
+  if (own.some((claim) => claim.status === "attested")) return "self_confirmed";
   if (own.some((claim) => claim.status === "claimed")) return "unverified_claim";
   return "missing_evidence";
 }
 
-export type RequirementReadiness = LibraryRequirement & { status: RequirementStatus };
-export type RoleReadiness = { role: LibraryRole; requirements: RequirementReadiness[]; skillRequirements: number; evidenced: number; demonstrated: number; partial: number; claimed: number; gaps: number; unknown: number; eligibility: RequirementReadiness[] };
+export type RequirementReadiness = LibraryRequirement & { status: RequirementStatus; matched?: { shown: number; total: number } };
+export type RoleReadiness = { role: LibraryRole; requirements: RequirementReadiness[]; skillRequirements: number; evidenced: number; demonstrated: number; partial: number; claimed: number; selfConfirmed: number; gaps: number; unknown: number; eligibility: RequirementReadiness[] };
 
-// The best-evidenced competency behind a requirement decides its status; eligibility is listed, never scored.
+const SHOWN: RequirementStatus[] = ["demonstrated", "partial", "supported_claim"];
+
+// A requirement that rests on several competencies needs all of them: it is demonstrated only when every one is,
+// a gap or conflict in any of them is reported, and a mix of shown and unshown is "partly shown" with a count.
+export function combineStatuses(statuses: RequirementStatus[]): { status: RequirementStatus; matched?: { shown: number; total: number } } {
+  if (statuses.length === 1) return { status: statuses[0] };
+  const shown = statuses.filter((status) => SHOWN.includes(status)).length;
+  const matched = { shown, total: statuses.length };
+  if (statuses.every((status) => status === "demonstrated")) return { status: "demonstrated", matched };
+  if (statuses.includes("gap")) return { status: "gap", matched };
+  if (statuses.includes("conflicting")) return { status: "conflicting", matched };
+  if (statuses.some((status) => status === "demonstrated" || status === "partial")) return { status: "partial", matched };
+  if (statuses.every((status) => status === "supported_claim")) return { status: "supported_claim", matched };
+  // Nothing is shown: report the most informative of the remaining statuses (a claim over no evidence). None of
+  // these counts as evidenced.
+  return { status: [...statuses].sort((a, b) => RANK.indexOf(a) - RANK.indexOf(b))[0], matched };
+}
+
+// Each requirement is judged on all the competencies behind it; eligibility is listed, never scored.
 export function roleReadiness(role: LibraryRole, competencies: Map<string, CompetencyView>, claims: ClaimView[]): RoleReadiness {
   const requirements = role.requirements.map((requirement) => {
     if (requirement.eligibility) return { ...requirement, status: "eligibility" as const };
     if (!requirement.competencyIds.length) return { ...requirement, status: "unmapped" as const };
-    const statuses = requirement.competencyIds.map((id) => statusFor(id, competencies, claims)).sort((a, b) => RANK.indexOf(a) - RANK.indexOf(b));
-    return { ...requirement, status: statuses[0] };
+    return { ...requirement, ...combineStatuses(requirement.competencyIds.map((id) => statusFor(id, competencies, claims))) };
   });
   // The same skill asked for in two postings is one requirement: merge requirements that rest on the same
   // competencies, keeping the first quote, so nothing is counted twice.
@@ -61,8 +81,9 @@ export function roleReadiness(role: LibraryRole, competencies: Map<string, Compe
     demonstrated: skill.filter((item) => item.status === "demonstrated").length,
     partial: skill.filter((item) => item.status === "partial").length,
     claimed: skill.filter((item) => item.status === "supported_claim").length,
+    selfConfirmed: skill.filter((item) => item.status === "self_confirmed").length,
     gaps: skill.filter((item) => item.status === "gap" || item.status === "conflicting").length,
-    unknown: skill.filter((item) => item.status === "missing_evidence" || item.status === "unverified_claim").length,
+    unknown: skill.filter((item) => item.status === "missing_evidence" || item.status === "unverified_claim" || item.status === "self_confirmed").length,
     eligibility: requirements.filter((item) => item.status === "eligibility"),
   };
 }

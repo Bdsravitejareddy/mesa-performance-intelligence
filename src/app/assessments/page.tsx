@@ -37,7 +37,7 @@ export default async function AssessmentsPage() {
     {byCourse.map((course) => <section key={course} className="content-panel register-course">
       <h2>{shortCourse(course)} <span className="panel-count">{rows.filter((row) => row.course === course).length}</span></h2>
       <div className="register-table" role="table">
-        <div className="register-head" role="row"><span>Assessment</span><span>Status</span><span><Cue label="Official" /></span><span><Cue label="AI" /></span><span><Cue label="Code" /></span></div>
+        <div className="register-head" role="row"><span>Assessment</span><span>Status</span><span><Cue label="Official" /></span><span><Cue label="AI" /></span><span><Cue label="Completeness" /></span></div>
         {rows.filter((row) => row.course === course).map((row) => <Link key={row.id} href={row.ai !== null || row.code !== null ? "/grading" : "/marks"} className={`register-row status-${row.status}`} role="row">
           <span className="register-title"><strong>{row.title}</strong><small>{[row.submittedAt && `submitted ${row.submittedAt}${row.timing === "late" ? " (late)" : ""}`, row.group && "group", row.files && `${row.files} file${row.files === 1 ? "" : "s"}`, row.links && `${row.links} link${row.links === 1 ? "" : "s"}${row.linksImported < row.links ? ` (${row.links - row.linksImported} importing)` : ""}`, row.feedback && "feedback"].filter(Boolean).join(" · ") || (row.status === "not_submitted" ? "no submission recorded" : row.status === "marked" ? "marked on the LMS" : "submitted on the LMS — no file or link to import")}</small></span>
           <span><em className={`status-chip chip-${row.status}`}>{STATUS[row.status]}</em></span>
@@ -68,7 +68,7 @@ function LossCard({ row }: { row: Row }) {
     {(loss.facultyComments.length > 0 || loss.missingParts.length > 0 || loss.aiView) && <Why label="Faculty comments and other evidence">
       {loss.aiView && <p>{loss.aiView}</p>}
       {loss.facultyComments.length > 0 && <><h4>Faculty said</h4><ul className="reason-list">{loss.facultyComments.map((comment) => <li key={comment}>{comment}</li>)}</ul></>}
-      {loss.missingParts.length > 0 && <><h4>Parts of the brief the code check could not find</h4><ul className="reason-list">{loss.missingParts.map((part) => <li key={part}>{part}</li>)}</ul></>}
+      {loss.missingParts.length > 0 && <><h4>Parts of the brief the completeness check could not find</h4><ul className="reason-list">{loss.missingParts.map((part) => <li key={part}>{part}</li>)}</ul></>}
     </Why>}
   </article>;
 }

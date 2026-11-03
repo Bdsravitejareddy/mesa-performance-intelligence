@@ -21,7 +21,7 @@ export async function onboardingSteps(client: SupabaseClient): Promise<Step[]> {
   return [
     { key: "lms", title: "Sync your learning platform", fills: "Courses, assessments, briefs and official marks — the backbone of every page.", href: "/marks", done: syncs > 0 },
     { key: "drive", title: "Connect your Drive course folders", fills: "Course material for grading against the course, and your submitted files.", href: "/drive-sync", done: drive > 0 },
-    { key: "files", title: "Get submitted work graded", fills: "Blind AI grades and code checks, and competencies where no mark is released yet.", href: "/grading", done: files > 0 },
+    { key: "files", title: "Get submitted work graded", fills: "Blind AI grades and completeness checks, and competencies where no mark is released yet.", href: "/grading", done: files > 0 },
     { key: "questionnaire", title: "Take the personality questionnaire (about 4 minutes)", fills: "The personality chart, tips for you, and context for your thinking patterns.", href: "/tests", done: personality > 0 },
     { key: "reasoning", title: "Take a reasoning test (Extreme, 18 minutes)", fills: "Foundational reasoning and analytical reasoning in your skills.", href: "/tests", done: reasoning > 0 },
     { key: "profile", title: "Paste your AI assistants' view of you", fills: "Context for the thinking patterns and the personality reading.", href: "/thinking", done: profiles > 0 },

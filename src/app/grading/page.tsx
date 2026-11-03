@@ -68,7 +68,7 @@ export default async function GradingPage() {
     </section>}
 
     {rows.length > 0 && <section className="grade-list" aria-label="Graded submissions">
-      <div className="grade-legend"><span><i className="mark-official" /> <Cue label="Official" /></span><span><i className="mark-ai" /> <Cue label="AI">AI (blind)</Cue></span><span><i className="mark-code" /> <Cue label="Code">Code check (completeness)</Cue></span></div>
+      <div className="grade-legend"><span><i className="mark-official" /> <Cue label="Official" /></span><span><i className="mark-ai" /> <Cue label="AI">AI (blind)</Cue></span><span><i className="mark-code" /> <Cue label="Completeness">Completeness check</Cue></span></div>
       {rows.map((row) => <article key={row.id} className="content-panel grade-row">
         <header className="grade-row-head">
           <div><h2>{row.assessment}</h2><small>{row.course}</small></div>
@@ -78,8 +78,8 @@ export default async function GradingPage() {
         <ScoreTrack official={row.official_mark} ai={row.ai_score} code={row.code_score} />
         <div className="grade-figures">
           <Figure label="Official" value={row.official_mark} />
-          <Figure label="AI" value={row.ai_score} note={row.ai_status !== "complete" ? (row.ai_status === "skipped" ? "not run" : "retrying") : (() => { const estimate = row.official_mark === null ? corrected(row.ai_score, calibration) : null; return estimate ? `corrected ${estimate.low}–${estimate.high}` : undefined; })()} />
-          <Figure label="Code" value={row.code_score} note={row.code_report?.completeness !== undefined && row.code_report?.completeness !== null ? `${row.code_report.parts?.filter((part) => part.answered).length}/${row.code_report.parts?.length} parts` : row.code_score === null ? "nothing to tick off" : undefined} />
+          <Figure label="AI" value={row.ai_score} note={row.ai_status !== "complete" ? (row.ai_status === "skipped" ? "not run" : "retrying") : (() => { const estimate = row.official_mark === null ? corrected(row.ai_score, calibration) : null; const provisional = !["official_rubric", "approved_rubric"].includes(row.standard_source); return [estimate ? `corrected ${estimate.low}–${estimate.high}` : "/100", provisional ? "provisional: criteria inferred" : ""].filter(Boolean).join(" · "); })()} />
+          <Figure label="Completeness" value={row.code_score} note={row.code_report?.completeness !== undefined && row.code_report?.completeness !== null ? `${row.code_report.parts?.filter((part) => part.answered).length}/${row.code_report.parts?.length} parts` : row.code_score === null ? "nothing to tick off" : undefined} />
         </div>
         {row.comparison && (row.comparison.agreed.length > 0 || row.comparison.facultyOnly.length > 0) && <p className="grade-insight">{insightLine(row.comparison)}</p>}
         {row.comparison?.documents && row.comparison.documents.length > 1 && <div className="doc-scores">{row.comparison.documents.map((doc) => <span key={doc.name}><strong>{doc.name}</strong> code {fmt(doc.code)}{doc.ai !== null ? ` · AI ${fmt(doc.ai)}` : ""}</span>)}</div>}
@@ -87,7 +87,7 @@ export default async function GradingPage() {
         <Why label="See the reasoning">
           <p className="scope-note">{SOURCE_LABEL[row.standard_source] ?? row.standard_source}. {row.comparison?.note}</p>
           {row.code_report?.parts && row.code_report.parts.length > 0 && <table className="criteria-table"><thead><tr><th>Part of the brief</th><th>Answered?</th></tr></thead><tbody>{row.code_report.parts.map((part) => <tr key={part.label}><td><b>{part.label}</b> {part.text.slice(0, 120)}</td><td>{part.how === "label" ? "Yes — labelled" : part.how === "formula" ? "Yes — formulas used" : part.how === "keywords" ? "Yes — by content" : "Not found"}</td></tr>)}</tbody></table>}
-          <table className="criteria-table"><thead><tr><th>Criterion</th><th>AI /10</th><th>Code /10</th><th>Terms found</th></tr></thead><tbody>
+          <table className="criteria-table"><thead><tr><th>Criterion</th><th>AI /10</th><th>Coverage /10</th><th>Terms found</th></tr></thead><tbody>
             {(row.code_report?.criteria ?? []).map((criterion) => {
               const dimension = row.ai_report?.dimensions.find((item) => item.name === criterion.name);
               return <tr key={criterion.name}><td>{criterion.name}{dimension?.issue && <small>{dimension.issue}</small>}</td><td>{fmt(dimension?.score ?? null)}</td><td>{fmt(criterion.score)}</td><td><small>{criterion.matched.length} of {criterion.expected.length}{criterion.expected.length - criterion.matched.length > 0 && ` · missing ${criterion.expected.filter((term) => !criterion.matched.includes(term)).slice(0, 4).join(", ")}`}</small></td></tr>;

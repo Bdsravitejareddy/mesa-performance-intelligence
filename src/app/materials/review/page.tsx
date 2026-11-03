@@ -6,12 +6,15 @@ import { visionAvailable } from "@/lib/ai/gemini-vision";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cachedRead } from "@/lib/data/cached";
+import { createClient } from "@/lib/supabase/server";
+import { QuarantinedMaterials, type QuarantinedMaterial } from "@/components/quarantined-materials";
 
 export const dynamic = "force-dynamic";
 
 export default async function MaterialReviewListPage() {
   const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
   const rows = demoMode || !hasSupabaseConfig() ? [] : await loadQueue();
+  const quarantined = demoMode || !hasSupabaseConfig() ? [] : (((await (await createClient()).rpc("quarantined_materials_overview")).data ?? []) as QuarantinedMaterial[]);
   // Slides drawn only with vector graphics or shapes have nothing more to read automatically once the rest are described.
   const covered = (row: (typeof rows)[number]) => row.summary.attention.every((item) => row.describedPages.includes(item.pageNumber)) || Boolean(row.lastRun?.message.includes("vector graphics"));
   const open = rows.filter((row) => !row.review && row.summary.attention.length > 0 && !covered(row));
@@ -22,6 +25,7 @@ export default async function MaterialReviewListPage() {
   const blind = open.reduce((sum, row) => sum + row.summary.noText, 0);
   return <AppShell demoMode={demoMode}><div className="section-page">
     <div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> Course materials</div><h1>Material review</h1><p className="page-subtitle">Slides the importer could not read on its own. Your notes fill the gap without changing the imported document.</p></div></div>
+    <QuarantinedMaterials rows={quarantined} />
     <div className="info-callout"><span>A document is flagged when any slide has an image or no text, so most flags are harmless logos. Only slides with <strong>no readable text</strong> or <strong>mostly image</strong> are listed for review. Notes are labelled as member interpretation wherever they are used.</span></div>
     <section className="competency-summary" aria-label="Review progress">
       <div className="competency-summary-item"><strong>{open.length}</strong><span>Documents with slides still to describe</span></div>

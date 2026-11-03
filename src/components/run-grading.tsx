@@ -19,7 +19,7 @@ export function RunGrading({ submissionId, label = "Grade now" }: { submissionId
       if (!response.ok) throw new Error(body.error ?? "Grading failed.");
       const outcomes = body.outcomes ?? [];
       const count = (status: string) => outcomes.filter((row) => row.status === status).length;
-      setMessage(outcomes.length ? `${count("graded")} graded by AI and code, ${count("code_only")} by code only, ${count("unchanged")} unchanged, ${count("skipped")} waiting.${body.continuing ? " The rest continues on the server — you can close this page." : ""}` : "Nothing to grade yet: no submitted work has been found.");
+      setMessage(outcomes.length ? `${count("graded")} graded by AI and code, ${count("code_only")} by the completeness check only, ${count("unchanged")} unchanged, ${count("skipped")} waiting.${body.continuing ? " The rest continues on the server — you can close this page." : ""}` : "Nothing to grade yet: no submitted work has been found.");
       setState("done");
       router.refresh();
     } catch (error) {

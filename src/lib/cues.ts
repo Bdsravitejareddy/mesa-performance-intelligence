@@ -33,7 +33,7 @@ export const CUES: Record<string, string> = {
   // Graded work
   "Official": "The mark your faculty gave, from the learning platform.",
   "AI": "A blind AI grade against the assignment brief and course material. It never sees your official mark.",
-  "Code": "A tick-list check that each question or task in the brief was attempted. Completeness, not quality.",
+  "Completeness": "A tick-list check that each question or task in the brief was attempted. Completeness, not quality.",
   "Marked": "Grades: official marks, and blind AI grades of your submissions where no mark exists yet.",
   "AI view": "The AI's reading of all your evidence — work, feedback, projects, tests and self-report — with quotes.",
   "Holistic": "Marked and AI view combined, using the weights on Rubric & weights.",

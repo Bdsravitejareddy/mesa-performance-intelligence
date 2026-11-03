@@ -33,7 +33,7 @@ export const groups: Act[] = [
       ]),
       section("Assessments", FileCheck2, "Every assessment, its marks and how your work was graded.", [
         { href: "/assessments", label: "All assessments", blurb: "Every assessment with its status, marks and grades." },
-        { href: "/grading", label: "Graded work", blurb: "Each submission graded by code and AI, beside the official mark." },
+        { href: "/grading", label: "Graded work", blurb: "Each submission graded by a completeness check and AI, beside the official mark." },
         { href: "/marks", label: "Marks & LMS sync", blurb: "Official marks and faculty feedback from the LMS." },
         { href: "/imports/quiz-tool", label: "Quiz Tool", blurb: "Cohort 4 in-class quiz results, summed separately from official marks." },
         { href: "/evidence", label: "Evidence", blurb: "Every record the analysis uses, with its source." },

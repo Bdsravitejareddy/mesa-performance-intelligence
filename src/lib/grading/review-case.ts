@@ -37,14 +37,14 @@ export function reviewCase(input: {
   const completeness = input.codeReport?.completeness ?? null;
   const parts = input.codeReport?.parts ?? [];
   const corroboration: string[] = [];
-  if (completeness !== null && parts.length) corroboration.push(`The code check found ${parts.filter((part) => part.answered).length} of ${parts.length} parts of the brief answered (${completeness}%).`);
+  if (completeness !== null && parts.length) corroboration.push(`The completeness check found ${parts.filter((part) => part.answered).length} of ${parts.length} parts of the brief answered (${completeness}%).`);
   const agreed = input.comparison?.agreed.length ?? 0;
   if (agreed) corroboration.push(`The AI independently raised ${agreed} of the same point${agreed === 1 ? "" : "s"} as the faculty, so it read the work in a comparable way.`);
 
   const counterpoints: string[] = [];
   if (!OFFICIAL_SOURCES.has(input.standardSource)) counterpoints.push("The AI graded against criteria inferred from the brief, not the official rubric; official criteria or weights may differ.");
   if (input.late) counterpoints.push("The work was submitted late; a late penalty, if applied, is part of the official mark and invisible to the AI.");
-  if (completeness !== null && completeness < 70) counterpoints.push(`The code check could locate only ${completeness}% of the brief's parts; if parts are missing, the official mark may reflect that.`);
+  if (completeness !== null && completeness < 70) counterpoints.push(`The completeness check could locate only ${completeness}% of the brief's parts; if parts are missing, the official mark may reflect that.`);
   for (const point of (input.comparison?.facultyOnly ?? []).slice(0, 3)) counterpoints.push(`Faculty raised a point the AI did not: “${point.slice(0, 200)}”`);
   for (const requirement of report.missingRequirements.slice(0, 2)) counterpoints.push(`The AI itself noted an unmet requirement: ${requirement.slice(0, 200)}`);
   counterpoints.push("Faculty may assess things the AI cannot see: presentation, peer or class participation, visuals, or standards applied across the cohort.");

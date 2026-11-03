@@ -45,7 +45,7 @@ export default async function MethodologyPage() {
       <Block title="Graded work: three views of a submission" items={[
         "Official — your faculty's mark.",
         "AI (blind) — graded against the assignment brief and course material on meaning, not keywords; a different method that reaches a right answer is not penalised. The grader first checks the file is really this assessment's submission and flags it if not.",
-        "Code check — a deterministic tick-list of whether each question or task in the brief was attempted. It checks completeness, not quality; with no task list it gives no score.",
+        "Completeness check — a deterministic tick-list of whether each question or task in the brief was attempted. It checks completeness, not quality; with no task list it gives no score.",
         "Where the marks went — lost marks split by the faculty's own criterion scores or question-by-question feedback; only when neither exists, by the blind AI's weakest criteria, labelled as an estimate.",
       ]} />
       <Block title="Competencies" items={[

@@ -17,8 +17,8 @@ describe("guest sign-in", () => {
     expect(guestUntil(null)).toBeNull();
   });
   it("blocks paths that leave the app or cannot be undone, and nothing else", () => {
-    for (const path of ["/api/lms-sync", "/api/lms", "/api/lms/assignment", "/api/drive-sync/connections/x", "/api/github/connect", "/api/ai-consent", "/api/imports/nexus-submission", "/api/refresh", "/api/cron/refresh", "/api/gradings/detach"]) expect(guestBlockedPath(path)).toBe(true);
-    for (const path of ["/api/imports/quiz-tool", "/api/gradings", "/api/rubric", "/api/lmsx", "/competencies", "/api/refreshments"]) expect(guestBlockedPath(path)).toBe(false);
+    for (const path of ["/api/lms-sync", "/api/lms", "/api/lms/assignment", "/api/drive-sync/connections/x", "/api/github/connect", "/api/ai-consent", "/api/imports/nexus-submission", "/api/refresh", "/api/cron/refresh", "/api/gradings/detach", "/api/materials/64f95e25-21a2-461f-870a-14079b1f3ae6/purge"]) expect(guestBlockedPath(path)).toBe(true);
+    for (const path of ["/api/imports/quiz-tool", "/api/gradings", "/api/rubric", "/api/lmsx", "/competencies", "/api/refreshments", "/api/materials/abc/notes"]) expect(guestBlockedPath(path)).toBe(false);
   });
   it("gives each sign-in its own address and a two-hour end, and hashes the client address", () => {
     const now = new Date("2026-11-01T10:00:00Z");

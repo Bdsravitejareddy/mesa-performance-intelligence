@@ -121,7 +121,7 @@ export async function gradeSubmissions(client: SupabaseClient, budgetMs: number,
     const code = codeGradeV2(text, standard.criteria, refs.map((ref) => ref.excerpt), assessment.brief ?? "");
     let aiReport: Awaited<ReturnType<typeof blindEvaluate>> | null = null;
     let aiStatus: "complete" | "failed" | "skipped" = "skipped";
-    let note = aiAllowed ? "" : "AI grading needs the current AI consent for this account; only the code score was computed.";
+    let note = aiAllowed ? "" : "AI grading needs the current AI consent for this account; only the completeness score was computed.";
     const aiHash = createHash("sha256").update(JSON.stringify({ text, standard, brief: assessment.brief ?? "", prompt: BLIND_PROMPT_VERSION })).digest("hex");
     const reusable = previousAi.get(submission.id);
     if (visualsUnread) note = `${note} Images and charts in the submitted file were not read; only its text was graded.`.trim();
@@ -144,7 +144,7 @@ export async function gradeSubmissions(client: SupabaseClient, budgetMs: number,
     const comparison = compareWithFeedback({ feedback, aiPoints, official, ai: aiScore, code: code.score });
     const reasons = mismatch ? [`The attached file looks like a different piece of work: ${mismatch} It was not scored; detach it on this page if it is the wrong file.`] : differenceReasons(code.report, aiReport, { ai: aiScore, code: code.score, official }, comparison.facultyOnly.length);
     // With several files (e.g. a data sheet and a deck), each is also scored on its own. Data sheets get their
-    // own blind AI grade when time allows; every file gets a code score.
+    // own blind AI grade when time allows; every file gets a completeness score.
     const readableDocs = docs.filter(readable);
     const documents: { name: string; code: number | null; ai: number | null }[] = [];
     if (readableDocs.length > 1) {

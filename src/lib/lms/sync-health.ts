@@ -5,6 +5,8 @@ export type SyncHealth = {
   latest: SyncRun | null;
   lastCompletedAt: string | null;
   warnings: string[];
+  // Data that is incomplete although the sync worked, e.g. assignments waiting for a course mapping.
+  notices: string[];
 };
 
 // The cron runs every 24 hours; allow two hours of slack before calling the data stale.
@@ -14,7 +16,7 @@ const STUCK_AFTER_MINUTES = 15;
 // Runs must be ordered newest first. "partial" counts as completed: records were read and kept, with skips reported in its message.
 export function describeSyncHealth(runs: SyncRun[], now: Date = new Date()): SyncHealth {
   const latest = runs[0] ?? null;
-  if (!latest) return { level: "never", latest: null, lastCompletedAt: null, warnings: ["The LMS has never been synced. Marks shown here were entered manually, if any."] };
+  if (!latest) return { level: "never", latest: null, lastCompletedAt: null, warnings: ["The LMS has never been synced. Marks shown here were entered manually, if any."], notices: [] };
 
   const completed = runs.find((run) => (run.status === "succeeded" || run.status === "partial") && run.finished_at);
   const lastCompletedAt = completed?.finished_at ?? null;
@@ -27,10 +29,14 @@ export function describeSyncHealth(runs: SyncRun[], now: Date = new Date()): Syn
   } else if (latest.status === "running" && minutesSince(latest.started_at, now) > STUCK_AFTER_MINUTES) {
     level = "warning";
     warnings.push(`An LMS sync started ${Math.round(minutesSince(latest.started_at, now))} minutes ago and has not finished.`);
-  } else if (latest.status === "partial") {
+  } else if (latest.status === "partial" && !readsAllSucceeded(latest.message)) {
     level = "warning";
-    warnings.push("The most recent LMS sync was partial. Some LMS records were skipped or unreadable; see the sync message.");
+    warnings.push("The most recent LMS sync was partial. Some LMS records were unreadable; see the sync message.");
   }
+  // Earlier runs were labelled partial when only course mapping was outstanding; every read succeeded in those.
+  const notices: string[] = [];
+  const needsMapping = Number(/(\d+) (?:assignment\(s\) need course mapping|record\(s\) without a course are held for review)/.exec(latest.message ?? "")?.[1] ?? 0);
+  if (needsMapping > 0 && level !== "error") notices.push(`Sync successful · ${needsMapping} assignment${needsMapping === 1 ? "" : "s"} need${needsMapping === 1 ? "s" : ""} a course mapping before ${needsMapping === 1 ? "it counts" : "they count"}.`);
 
   if (!lastCompletedAt) {
     level = "error";
@@ -43,7 +49,11 @@ export function describeSyncHealth(runs: SyncRun[], now: Date = new Date()): Syn
     }
   }
 
-  return { level, latest, lastCompletedAt, warnings };
+  return { level, latest, lastCompletedAt, warnings, notices };
+}
+
+function readsAllSucceeded(message: string | null) {
+  return /\b0 read operation\(s\) failed/.test(message ?? "");
 }
 
 function minutesSince(iso: string, now: Date) {

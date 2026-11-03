@@ -45,4 +45,16 @@ describe("role readiness", async () => {
     expect(importance.get("technical.python")?.stage).toBe("primary");
     expect(importance.get("technical.python")!.weight).toBe(3);
   });
+
+  it("needs every competency behind a requirement and keeps self-confirmed claims apart", async () => {
+    const { combineStatuses } = await import("./readiness");
+    expect(combineStatuses(["demonstrated", "missing_evidence"])).toEqual({ status: "partial", matched: { shown: 1, total: 2 } });
+    expect(combineStatuses(["demonstrated", "demonstrated"])).toEqual({ status: "demonstrated", matched: { shown: 2, total: 2 } });
+    expect(combineStatuses(["demonstrated", "gap"]).status).toBe("gap");
+    expect(combineStatuses(["self_confirmed", "missing_evidence"])).toEqual({ status: "self_confirmed", matched: { shown: 0, total: 2 } });
+    const readiness = roleReadiness(fde, new Map(), [{ competencyId: "leadership.ownership", status: "attested" }]);
+    expect(readiness.requirements.find((item) => item.quote.startsWith("High agency"))!.status).toBe("self_confirmed");
+    expect(readiness.evidenced).toBe(0);
+    expect(readiness.selfConfirmed).toBeGreaterThan(0);
+  });
 });

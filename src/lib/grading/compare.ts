@@ -52,7 +52,7 @@ export function compareWithFeedback(input: { feedback: string; aiPoints: string[
   const distance = aiGap === null ? null : Math.abs(aiGap);
   const agreement = distance === null ? "no_official_mark" : distance <= 7.5 ? "close" : distance <= 15 ? "moderate" : "far";
   const note = input.official === null
-    ? "No official mark is recorded yet, so only the AI and code views can be compared."
+    ? "No official mark is recorded yet, so only the AI and completeness views can be compared."
     : `The AI is ${aiGap === null ? "unavailable" : aiGap === 0 ? "level with" : `${Math.abs(aiGap)} points ${aiGap > 0 ? "above" : "below"}`} the official mark. A difference is not evidence that either is wrong; the criteria and quotes show where they diverge.`;
   return { agreed, facultyOnly, aiOnly, gaps: { aiMinusOfficial: aiGap, codeMinusOfficial: gap(input.code, input.official), aiMinusCode: gap(input.ai, input.code) }, agreement, note };
 }

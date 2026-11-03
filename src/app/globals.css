@@ -840,3 +840,10 @@ html[data-story-enter="from-below"] .main-content{animation:storyDrop .28s cubic
 .guest-login[open] > summary { margin-bottom: 10px; }
 .guest-banner form { margin-left: auto; }
 .guest-signout { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; color: inherit; font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; }
+
+/* Quarantined files: listed by name and reason only, with a permanent erase the member chooses. */
+.quarantine-panel h2 { display: flex; align-items: center; gap: 8px; }
+.quarantine-list { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 10px; }
+.quarantine-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.quarantine-list li > span { display: grid; gap: 2px; }
+.quarantine-list small { opacity: .75; }

@@ -50,3 +50,21 @@ describe("LMS sync health", () => {
     expect(health.lastCompletedAt).toBeNull();
   });
 });
+
+describe("sync health separates failures from data completeness", () => {
+  const now = new Date("2026-11-03T10:00:00Z");
+  const at = (message: string, status = "partial") => ({ status, started_at: "2026-11-03T03:17:00Z", finished_at: "2026-11-03T03:18:00Z", message });
+  it("treats a run whose reads all succeeded as healthy, with the mapping work as a notice", () => {
+    const health = describeSyncHealth([at("Imported 49 assessment(s), 6 marks, and 3 feedback records. 7 record(s) without a course are held for review; 0 read operation(s) failed.")], now);
+    expect(health.level).toBe("ok");
+    expect(health.notices).toEqual(["Sync successful · 7 assignments need a course mapping before they count."]);
+  });
+  it("still warns when a read failed", () => {
+    expect(describeSyncHealth([at("Imported 49 assessment(s). 7 record(s) without a course are held for review; 2 read operation(s) failed.")], now).level).toBe("warning");
+  });
+  it("reads the new success message", () => {
+    const health = describeSyncHealth([at("Synced 49 assessments, 6 marks, and 3 feedback records. 1 assignment(s) need course mapping. Scores are converted to the 0–100 scale.", "succeeded")], now);
+    expect(health.level).toBe("ok");
+    expect(health.notices).toEqual(["Sync successful · 1 assignment needs a course mapping before it counts."]);
+  });
+});

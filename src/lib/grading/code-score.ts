@@ -164,15 +164,15 @@ export function completeness(work: string, brief: string): { score: number | nul
   return { score: Math.round((parts.filter((part) => part.answered).length / parts.length) * 1000) / 10, parts };
 }
 
-// The code score: completeness against the brief's parts when the brief lists them (75%), with criterion
+// The completeness score: completeness against the brief's parts when the brief lists them (75%), with criterion
 // coverage (25%); otherwise criterion coverage alone. Arithmetic errors and very short work still adjust it.
 export function codeGradeV2(work: string, criteria: CriterionInput[], courseExcerpts: string[], brief: string): { score: number | null; report: CodeReport } {
   const base = codeGrade(work, criteria, courseExcerpts);
   const check = completeness(work, brief);
   // Without tasks to tick off there is nothing objective to check: word overlap with the criteria says little
-  // about the work, so no code score is given and only the AI's judgement applies.
+  // about the work, so no completeness score is given and only the AI's judgement applies.
   if (check.score === null || base.score === null) {
-    return { score: null, report: { ...base.report, rulesVersion: CODE_RULES_VERSION, parts: [], completeness: null, method: "The brief doesn't list separate questions or tasks, so the code check has nothing to tick off and gives no score. Only the AI's judgement applies here." } };
+    return { score: null, report: { ...base.report, rulesVersion: CODE_RULES_VERSION, parts: [], completeness: null, method: "The brief doesn't list separate questions or tasks, so the completeness check has nothing to tick off and gives no score. Only the AI's judgement applies here." } };
   }
   let score = 0.75 * check.score + 0.25 * base.score;
   const adjustments = [...base.report.adjustments];
@@ -181,6 +181,6 @@ export function codeGradeV2(work: string, criteria: CriterionInput[], courseExce
   return {
     score: round1(Math.max(0, Math.min(100, score))),
     report: { ...base.report, rulesVersion: CODE_RULES_VERSION, parts: check.parts, completeness: check.score, adjustments,
-      method: `The code check ticks off what the brief asks for: ${check.parts.filter((part) => part.answered).length} of ${check.parts.length} questions or tasks were found answered — by their label, by using the spreadsheet functions they name, or by covering most of their key words. That makes up 75% of its score; the other 25% is how much of each criterion's key vocabulary appears. It checks that everything was attempted, not whether the answers are right — that is what the AI and your faculty judge.` },
+      method: `The completeness check ticks off what the brief asks for: ${check.parts.filter((part) => part.answered).length} of ${check.parts.length} questions or tasks were found answered — by their label, by using the spreadsheet functions they name, or by covering most of their key words. That makes up 75% of its score; the other 25% is how much of each criterion's key vocabulary appears. It checks that everything was attempted, not whether the answers are right — that is what the AI and your faculty judge.` },
   };
 }
