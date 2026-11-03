@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { matchDriveSubmissions, shortlistAssessment, titleScore } from "./submission-matching";
+import { attachDocument, attachLinkedFiles, matchDriveSubmissions, shortlistAssessment, titleScore } from "./submission-matching";
 
 describe("matching Drive files to assessments by name", () => {
   const assessments = [
@@ -86,5 +86,51 @@ describe("recognising submissions among Drive files", () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(outcomes.filter((item) => item.attached)).toEqual([]);
     expect(outcomes.find((item) => item.materialId === "m-sub")?.kind).toBe("undetermined");
+  });
+});
+
+describe("attaching a Drive file to a submission at most once", () => {
+  const version = (id: string, n: number) => ({ id, user_id: "owner", name: "Ops Week Hackathon", mime_type: "application/pdf", file_size: 100, version: n, extraction_status: "complete", drive_source_id: "ds1" });
+  const tables = (documents: Row[], matches: Row[] = []) => ({
+    course_materials: [version("m1", 1), version("m2", 2), version("m3", 3)],
+    material_submission_matches: matches,
+    submission_documents: documents,
+  });
+
+  it("replaces the attached row when a later Drive version arrives instead of adding another", async () => {
+    const client = fakeClient(tables([{ id: "d1", submission_id: "s1", source_kind: "drive", source_id: "ds1", course_material_id: "m1", source_version: "1" }]));
+    expect(await attachDocument(client as never, version("m2", 2), "s1", "owner", "text", "complete")).toBe("replaced");
+    expect(client.writes.filter((write) => write.table === "submission_documents").map((write) => write.op)).toEqual(["update"]);
+    expect(client.writes[0].row).toMatchObject({ course_material_id: "m2", source_version: "2" });
+  });
+
+  it("treats the same or an older version as already attached", async () => {
+    const client = fakeClient(tables([{ id: "d1", submission_id: "s1", source_kind: "drive", source_id: "ds1", course_material_id: "m3", source_version: "3" }]));
+    expect(await attachDocument(client as never, version("m3", 3), "s1", "owner", "text", "complete")).toBe("duplicate");
+    expect(await attachDocument(client as never, version("m2", 2), "s1", "owner", "text", "complete")).toBe("duplicate");
+    expect(client.writes).toEqual([]);
+  });
+
+  it("keeps every version off a submission once a member detached one of them", async () => {
+    const client = fakeClient(tables([], [{ material_id: "m1", method: "member" }]));
+    expect(await attachDocument(client as never, version("m3", 3), "s1", "owner", "text", "complete")).toBe("detached_by_member");
+    expect(client.writes).toEqual([]);
+  });
+
+  it("attaches three successive versions linked on Nexus as one document", async () => {
+    const documents: Row[] = [];
+    const tablesWithLink = { ...tables(documents), submission_links: [{ submission_id: "s1", drive_file_id: "f1" }], drive_sources: [{ drive_file_id: "f1", current_material_id: "m1" }], submissions: [{ id: "s1", user_id: "owner", assessment_id: "a1" }], material_pages: [] };
+    const client = fakeClient(tablesWithLink);
+    for (const current of ["m1", "m2", "m3"]) {
+      tablesWithLink.drive_sources[0].current_material_id = current;
+      await attachLinkedFiles(client as never);
+      // The fake does not persist writes, so mirror them: one row, moved to the newest version.
+      const write = client.writes.filter((item) => item.table === "submission_documents").at(-1)!;
+      if (write.op === "insert") documents.push({ id: "d1", ...(write.row as Row) });
+      else Object.assign(documents[0], write.row as Row);
+    }
+    expect(client.writes.filter((write) => write.table === "submission_documents").map((write) => write.op)).toEqual(["insert", "update", "update"]);
+    expect(documents).toHaveLength(1);
+    expect(documents[0]).toMatchObject({ course_material_id: "m3", source_version: "3" });
   });
 });

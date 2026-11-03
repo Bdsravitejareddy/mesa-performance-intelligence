@@ -145,11 +145,11 @@ export async function attachLinkedFiles(client: SupabaseClient): Promise<MatchOu
     if (!material || !submission || material.user_id !== submission.user_id) continue;
     const { data: pages } = await client.from("material_pages").select("page_number, extracted_text").eq("material_id", material.id).order("page_number");
     const text = (pages ?? []).map((page) => `[Page or sheet ${page.page_number}]\n${page.extracted_text}`).join("\n\n");
-    const { error } = await client.from("submission_documents").insert({ user_id: submission.user_id, submission_id: submission.id, source_kind: "drive", source_id: material.drive_source_id ?? material.id, course_material_id: material.id, name: material.name, mime_type: material.mime_type, file_size: material.file_size, extracted_text: text.slice(0, 500_000), extraction_status: material.extraction_status, source_version: String(material.version) });
-    if (error && error.code !== "23505") continue;
+    const result = await attachDocument(client, material as Omit<Material, "course_id">, submission.id as string, submission.user_id as string, text, material.extraction_status);
+    if (result === "failed" || result === "detached_by_member") continue;
     const title = (submission.assessments as unknown as { title: string } | null)?.title ?? null;
     await client.from("material_submission_matches").upsert({ material_id: material.id, user_id: material.user_id, kind: "submission", method: "nexus_link", confidence: "high", reason: "Linked as submitted work on the Nexus assignment page.", title_score: 1, submission_id: submission.id, assessment_id: submission.assessment_id, assessment_user_id: submission.user_id, updated_at: new Date().toISOString() }, { onConflict: "material_id" });
-    if (!error) outcomes.push({ materialId: material.id, kind: "submission", assessmentTitle: title, attached: true, note: "Linked on the Nexus submission page." });
+    if (result !== "duplicate") outcomes.push({ materialId: material.id, kind: "submission", assessmentTitle: title, attached: true, note: "Linked on the Nexus submission page." });
   }
   return outcomes;
 }
@@ -164,10 +164,36 @@ async function attachSubmission(client: SupabaseClient, material: Material, asse
     if (error || !created) return { attached: false, submissionId: null, note: "Not attached: a submission record could not be created." };
     submissionId = created.id as string;
   }
-  const { error } = await client.from("submission_documents").insert({ user_id: assessment.user_id, submission_id: submissionId, source_kind: "drive", source_id: material.drive_source_id ?? material.id, course_material_id: material.id, name: material.name, mime_type: material.mime_type, file_size: material.file_size, extracted_text: text.slice(0, 500_000), extraction_status: material.extraction_status === "needs_visual_review" ? "needs_visual_review" : "complete", source_version: String(material.version) });
-  // A duplicate means this exact version is already attached.
-  if (error && error.code !== "23505") return { attached: false, submissionId, note: "Not attached: the evidence row could not be saved." };
-  return { attached: true, submissionId };
+  const result = await attachDocument(client, material, submissionId, assessment.user_id, text, material.extraction_status === "needs_visual_review" ? "needs_visual_review" : "complete");
+  if (result === "failed") return { attached: false, submissionId, note: "Not attached: the evidence row could not be saved." };
+  if (result === "detached_by_member") return { attached: false, submissionId: null, note: "Not attached: a workspace member detached an earlier version of this file." };
+  return { attached: true, submissionId, note: result === "replaced" ? "Replaced the earlier version already attached." : undefined };
+}
+
+type AttachResult = "inserted" | "replaced" | "duplicate" | "detached_by_member" | "failed";
+
+// A Drive file is attached to a submission at most once. Each Drive edit is a new material version with its own id,
+// so the check is by Drive source: a newer version replaces the attached row, and a member's detach of any
+// version keeps later versions off as well.
+export async function attachDocument(client: SupabaseClient, material: Omit<Material, "course_id">, submissionId: string, userId: string, text: string, extractionStatus: string): Promise<AttachResult> {
+  const sourceId = material.drive_source_id ?? material.id;
+  if (material.drive_source_id) {
+    const { data: versions } = await client.from("course_materials").select("id").eq("drive_source_id", material.drive_source_id);
+    const { data: decided } = await client.from("material_submission_matches").select("material_id").in("material_id", (versions ?? []).map((row) => row.id as string)).eq("method", "member");
+    if (decided?.length) return "detached_by_member";
+  }
+  const fields = { course_material_id: material.id, name: material.name, mime_type: material.mime_type, file_size: material.file_size, extracted_text: text.slice(0, 500_000), extraction_status: extractionStatus, source_version: String(material.version) };
+  const { data: attached } = await client.from("submission_documents").select("id, course_material_id, source_version").eq("submission_id", submissionId).eq("source_kind", "drive").eq("source_id", sourceId);
+  const current = (attached ?? [])[0] as { id: string; course_material_id: string | null; source_version: string } | undefined;
+  if (current) {
+    if (current.course_material_id === material.id || Number(current.source_version) >= material.version) return "duplicate";
+    const { error } = await client.from("submission_documents").update(fields).eq("id", current.id);
+    return error ? "failed" : "replaced";
+  }
+  const { error } = await client.from("submission_documents").insert({ user_id: userId, submission_id: submissionId, source_kind: "drive", source_id: sourceId, ...fields });
+  // A unique violation means this exact version is already attached.
+  if (error) return error.code === "23505" ? "duplicate" : "failed";
+  return "inserted";
 }
 
 async function fileHeldAssignment(client: SupabaseClient, held: { id: string; title: string; record: MesaAssignmentRecord }, courseId: string): Promise<{ id: string; user_id: string; title: string } | null> {

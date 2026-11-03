@@ -64,8 +64,6 @@ export const STATE_LABELS: Record<CompetencyState, string> = {
   insufficient_evidence: "Insufficient evidence",
 };
 
-const BENCHMARK = `Criteria-based bands on the official 0–100 scale: ${HIGH_RESULT} or above is a high result, below ${LOW_RESULT} is a low result. No cohort ranking or percentile is used.`;
-
 export type Bands = { high: number; low: number };
 export function bandFor(mark: number | null, bands: Bands = { high: HIGH_RESULT, low: LOW_RESULT }): EvidenceRow["band"] {
   if (mark === null || !Number.isFinite(mark)) return "unscored";
