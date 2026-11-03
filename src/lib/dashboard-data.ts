@@ -1,3 +1,4 @@
+import { comparableWithOfficial } from "@/lib/grading/calibration";
 import { demoData, demoMarkSeries } from "@/lib/demo-data";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
@@ -191,11 +192,12 @@ async function buildInsights(supabase: SupabaseClient, markedAssessments: number
 
 // Latest grading per submission: how often the blind AI lands close to the official mark.
 async function gradingSummary(supabase: SupabaseClient): Promise<{ graded: number; compared: number; close: number; meanGap: number | null } | null> {
-  const { data, error } = await supabase.from("submission_gradings").select("submission_id, ai_score, official_mark, created_at").order("created_at", { ascending: false });
+  const { data, error } = await supabase.from("submission_gradings").select("submission_id, ai_score, official_mark, created_at, task_match:ai_report->>taskMatch").order("created_at", { ascending: false });
   if (error) return null;
-  const latest = new Map<string, { ai: number | null; official: number | null }>();
-  for (const row of data ?? []) if (!latest.has(row.submission_id as string)) latest.set(row.submission_id as string, { ai: row.ai_score === null ? null : Number(row.ai_score), official: row.official_mark === null ? null : Number(row.official_mark) });
-  const pairs = [...latest.values()].filter((row) => row.ai !== null && row.official !== null).map((row) => Math.abs(row.ai! - row.official!));
+  const latest = new Map<string, { ai: number | null; official: number | null; taskMatch: unknown }>();
+  for (const row of data ?? []) if (!latest.has(row.submission_id as string)) latest.set(row.submission_id as string, { ai: row.ai_score === null ? null : Number(row.ai_score), official: row.official_mark === null ? null : Number(row.official_mark), taskMatch: (row as { task_match?: unknown }).task_match });
+  // Grades the AI judged only a partial match (a draft or the wrong file) are not compared with faculty marks.
+  const pairs = [...latest.values()].filter((row) => row.ai !== null && row.official !== null && comparableWithOfficial(row.taskMatch)).map((row) => Math.abs(row.ai! - row.official!));
   return { graded: latest.size, compared: pairs.length, close: pairs.filter((gap) => gap <= 7.5).length, meanGap: pairs.length ? Math.round((pairs.reduce((sum, gap) => sum + gap, 0) / pairs.length) * 10) / 10 : null };
 }
 

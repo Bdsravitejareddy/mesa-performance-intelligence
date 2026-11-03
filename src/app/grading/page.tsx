@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { AppShell } from "@/components/app-shell";
 import { RunGrading } from "@/components/run-grading";
 import { DetachFile } from "@/components/detach-file";
-import { calibrate, corrected, MIN_PAIRS } from "@/lib/grading/calibration";
+import { calibrate, comparableWithOfficial, corrected, MIN_PAIRS } from "@/lib/grading/calibration";
 import { Cue } from "@/components/cue";
 import { Why } from "@/components/why";
 import { cachedRead } from "@/lib/data/cached";
@@ -29,12 +29,14 @@ export default async function GradingPage() {
   const term = await selectedTerm();
   const data = demoMode || !hasSupabaseConfig() ? null : await cachedRead(`grading:${term}`, (client) => loadGrading(client, term));
   const rows = data?.rows ?? [];
-  const withOfficial = rows.filter((row) => row.official_mark !== null && row.ai_score !== null);
+  const comparable = rows.filter((row) => comparableWithOfficial(row.ai_report?.taskMatch));
+  const withOfficial = comparable.filter((row) => row.official_mark !== null && row.ai_score !== null);
+  const setAside = rows.filter((row) => row.official_mark !== null && row.ai_score !== null && !comparableWithOfficial(row.ai_report?.taskMatch)).length;
   const meanGap = withOfficial.length ? withOfficial.reduce((sum, row) => sum + Math.abs(row.ai_score! - row.official_mark!), 0) / withOfficial.length : null;
   const close = withOfficial.filter((row) => Math.abs(row.ai_score! - row.official_mark!) <= 7.5).length;
   const facultyPoints = rows.reduce((sum, row) => sum + (row.comparison?.agreed?.length ?? 0) + (row.comparison?.facultyOnly?.length ?? 0), 0);
   const agreedPoints = rows.reduce((sum, row) => sum + (row.comparison?.agreed?.length ?? 0), 0);
-  const calibration = calibrate(rows.map((row) => ({ official: row.official_mark, ai: row.ai_score })));
+  const calibration = calibrate(comparable.map((row) => ({ official: row.official_mark, ai: row.ai_score })));
   const reviews = rows.filter((row) => row.review).sort((a, b) => (a.review!.strength === b.review!.strength ? b.review!.gap - a.review!.gap : a.review!.strength === "strong" ? -1 : 1));
 
   const headline = !rows.length
@@ -57,6 +59,7 @@ export default async function GradingPage() {
 
     {data && !data.missing && <section className="content-panel calibration" aria-label="How far to trust AI grades">
       <h2>How far to trust AI grades</h2>
+      {setAside > 0 && <p className="scope-note">{setAside} grade{setAside === 1 ? " is" : "s are"} left out of this comparison because the AI found only part of the work the assessment asks for — usually a draft or the wrong file. Those are flagged below.</p>}
       {calibration.pairs ? <p>Across the <b>{calibration.pairs}</b> submission{calibration.pairs === 1 ? "" : "s"} with both an official mark and a blind AI grade, the AI sits on average <b>{Math.abs(calibration.bias!)} points {calibration.bias! >= 0 ? "above" : "below"}</b> your faculty, typically {calibration.mae} points away, and within 7.5 points on {calibration.within} of {calibration.pairs}.</p> : <p>No submission has both an official mark and an AI grade yet, so the AI cannot be checked against your faculty.</p>}
       <p className="empty-hint">{calibration.ready ? "Each AI grade below also shows a corrected estimate — the AI grade adjusted for this bias, with the typical error as its range. Official marks always take precedence." : `With fewer than ${MIN_PAIRS} marked pairs this is too little to correct for, so AI grades are shown as they are. Read them as a second opinion on the brief, not a predicted mark; the gap usually comes from criteria, weights or penalties the AI cannot see.`}</p>
     </section>}
@@ -74,6 +77,7 @@ export default async function GradingPage() {
           <div><h2>{row.assessment}</h2><small>{row.course}</small></div>
           <span className="grade-badges">{row.review && <span className={`agreement review-badge review-${row.review.strength}`}>Case for +{fmt(row.review.gap)}</span>}<span className={`agreement agreement-${row.comparison?.agreement ?? "no_official_mark"}`}>{agreementLabel(row.comparison?.agreement)}</span></span>
         </header>
+        {!row.comparison?.mismatch && row.ai_report?.taskMatch === "partly" && <div className="mismatch-callout"><p><b>The AI found only part of what this assessment asks for.</b> {row.ai_report.taskMatchReason} This may be a draft or the wrong file, so its grade is left out of the AI-versus-faculty comparison.</p>{row.files.map((file) => <DetachFile key={file.id} submissionId={row.submission_id} documentId={file.id} name={file.name} />)}</div>}
         {row.comparison?.mismatch && <div className="mismatch-callout"><p><b>This file may not be the submission for this assessment.</b> {row.comparison.mismatch} It was not scored.</p>{row.files.map((file) => <DetachFile key={file.id} submissionId={row.submission_id} documentId={file.id} name={file.name} />)}</div>}
         <ScoreTrack official={row.official_mark} ai={row.ai_score} code={row.code_score} />
         <div className="grade-figures">

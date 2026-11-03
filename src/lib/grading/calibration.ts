@@ -4,6 +4,10 @@
 export const MIN_PAIRS = 5;
 export type Calibration = { pairs: number; bias: number | null; mae: number | null; within: number; ready: boolean };
 
+// A grade the AI itself judged only a partial match for the task (often a draft or the wrong file) says little about
+// how AI grading compares with faculty marking, so it is left out of every agreement and calibration figure.
+export const comparableWithOfficial = (taskMatch: unknown) => taskMatch !== "partly" && taskMatch !== "no";
+
 export function calibrate(rows: { official: number | null; ai: number | null }[]): Calibration {
   const pairs = rows.filter((row) => row.official !== null && row.ai !== null).map((row) => row.ai! - row.official!);
   if (!pairs.length) return { pairs: 0, bias: null, mae: null, within: 0, ready: false };

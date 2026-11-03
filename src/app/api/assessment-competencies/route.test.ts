@@ -3,17 +3,19 @@ import { NextRequest } from "next/server";
 import { PUT } from "./route";
 
 type Call = { table: string; op: string; args: unknown[] };
-const { state } = vi.hoisted(() => ({ state: { userId: "member" as string | null, assessment: { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", user_id: "owner" } as Record<string, string> | null, known: [] as { id: string }[], existing: [] as { competency_id: string; mapping_source: string; criterion_label?: string | null }[], feedback: [] as { official_feedback: string }[], calls: [] as Call[] } }));
+const { state } = vi.hoisted(() => ({ state: { reviewable: [] as { competency_id: string }[], userId: "member" as string | null, assessment: { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", user_id: "owner" } as Record<string, string> | null, known: [] as { id: string }[], existing: [] as { competency_id: string; mapping_source: string; criterion_label?: string | null }[], feedback: [] as { official_feedback: string }[], calls: [] as Call[] } }));
 
 function query(table: string) {
   const record = (op: string, args: unknown[]) => state.calls.push({ table, op, args });
   const chain: Record<string, unknown> = {};
   let result: unknown = { data: null, error: null };
-  chain.select = (...args: unknown[]) => { record("select", args); result = table === "competencies" ? { data: state.known, error: null } : table === "assessment_competencies" ? { data: state.existing.map((row) => ({ criterion_label: null, ...row })), error: null } : table === "submissions" ? { data: state.feedback, error: null } : { data: state.assessment, error: null }; return chain; };
+  chain.select = (...args: unknown[]) => { record("select", args); if (updating) return chain; result = table === "competencies" ? { data: state.known, error: null } : table === "assessment_competencies" ? { data: state.existing.map((row) => ({ criterion_label: null, ...row })), error: null } : table === "submissions" ? { data: state.feedback, error: null } : { data: state.assessment, error: null }; return chain; };
   chain.eq = (...args: unknown[]) => { record("eq", args); return chain; };
   chain.in = (...args: unknown[]) => { record("in", args); return chain; };
   chain.is = (...args: unknown[]) => { record("is", args); return chain; };
   chain.delete = (...args: unknown[]) => { record("delete", args); result = { error: null }; return chain; };
+  let updating = false;
+  chain.update = (...args: unknown[]) => { record("update", args); updating = true; result = { data: state.reviewable ?? [], error: null }; return chain; };
   chain.insert = (...args: unknown[]) => { record("insert", args); return Promise.resolve({ error: null }); };
   chain.maybeSingle = async () => result;
   chain.then = (resolve: (value: unknown) => unknown) => Promise.resolve(result).then(resolve);
@@ -28,14 +30,14 @@ const req = (body: unknown) => new NextRequest("https://app.test/api/assessment-
 const assessmentId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
 describe("assessment competency tagging", () => {
-  afterEach(() => { state.userId = "member"; state.assessment = { id: assessmentId, user_id: "owner" }; state.known = []; state.existing = []; state.feedback = []; state.calls = []; });
+  afterEach(() => { state.reviewable = []; state.userId = "member"; state.assessment = { id: assessmentId, user_id: "owner" }; state.known = []; state.existing = []; state.feedback = []; state.calls = []; });
 
   it("adds new tags owned by the assessment owner and removes only member tags", async () => {
     state.known = [{ id: "analytical.numerical_analysis" }, { id: "business.strategy" }];
     state.existing = [{ competency_id: "business.strategy", mapping_source: "user_tagged" }, { competency_id: "business.finance", mapping_source: "user_tagged" }, { competency_id: "decision.judgement", mapping_source: "official_rubric" }];
     const response = await PUT(req({ assessmentId, competencyIds: ["analytical.numerical_analysis", "business.strategy"] }));
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ ok: true, added: 1, removed: 1, historyRecorded: 1 });
+    expect(await response.json()).toEqual({ ok: true, added: 1, removed: 1, reviewed: 0, historyRecorded: 1 });
     const insert = state.calls.find((call) => call.op === "insert");
     expect(insert?.args[0]).toEqual([expect.objectContaining({ user_id: "owner", competency_id: "analytical.numerical_analysis", mapping_source: "user_tagged", review_status: "accepted" })]);
     const deletes = state.calls.filter((call) => call.table === "assessment_competencies" && call.op === "delete").length;
@@ -69,5 +71,16 @@ describe("assessment competency tagging", () => {
   it("returns not found for assessments outside the workspace", async () => {
     state.assessment = null;
     expect((await PUT(req({ assessmentId, competencyIds: [] }))).status).toBe(404);
+  });
+
+  it("marks the AI links a member keeps as reviewed when they save", async () => {
+    state.known = [{ id: "business.strategy" }];
+    state.existing = [{ competency_id: "business.strategy", mapping_source: "ai_suggested" }];
+    state.reviewable = [{ competency_id: "business.strategy" }];
+    const response = await PUT(req({ assessmentId, competencyIds: ["business.strategy"] }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ ok: true, added: 0, removed: 0, reviewed: 1 });
+    const update = state.calls.find((call) => call.op === "update");
+    expect(update?.args[0]).toEqual({ mapping_source: "user_tagged" });
   });
 });

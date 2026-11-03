@@ -13,3 +13,13 @@ describe("AI grade calibration", () => {
     expect(corrected(90, calibration)).toEqual({ value: 80, low: 70, high: 90 });
   });
 });
+
+describe("which AI grades are compared with faculty marks", () => {
+  it("leaves out grades the AI judged a partial or no match for the task", async () => {
+    const { comparableWithOfficial } = await import("./calibration");
+    expect(comparableWithOfficial("yes")).toBe(true);
+    expect(comparableWithOfficial(undefined)).toBe(true);
+    expect(comparableWithOfficial("partly")).toBe(false);
+    expect(comparableWithOfficial("no")).toBe(false);
+  });
+});

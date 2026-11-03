@@ -71,10 +71,14 @@ export async function PUT(request: NextRequest) {
     const { error } = await supabase.from("assessment_competencies").insert(additions.map((item) => ({ user_id: assessment.user_id, assessment_id: assessmentId, competency_id: item.competencyId, criterion_label: item.label, mapping_source: "user_tagged", review_status: "accepted" })));
     if (error) return NextResponse.json({ error: "Could not update mappings." }, { status: 500 });
   }
+  // Saving is the member's review: AI links they kept become their own, so they are no longer "AI-mapped, unreviewed"
+  // and a later automatic re-map leaves them alone.
+  const { data: confirmed, error: confirmError } = await supabase.from("assessment_competencies").update({ mapping_source: "user_tagged" }).eq("assessment_id", assessmentId).eq("mapping_source", "ai_suggested").eq("review_status", "accepted").select("competency_id");
+  if (confirmError) return NextResponse.json({ error: "Mappings were saved, but could not be marked as reviewed." }, { status: 500 });
   // The mapping is saved either way; a history failure is reported so the change is not silently unrecorded.
   let historyRecorded: number | null = null;
-  if (additions.length || removals.length) {
+  if (additions.length || removals.length || confirmed?.length) {
     try { historyRecorded = await recordCompetencySnapshots(supabase, userId); } catch { historyRecorded = null; }
   }
-  return NextResponse.json({ ok: true, added: additions.length, removed: removals.length, historyRecorded, ...(historyRecorded === null && (additions.length || removals.length) ? { warning: "Mapping saved, but the competency history could not be updated." } : {}) });
+  return NextResponse.json({ ok: true, added: additions.length, removed: removals.length, reviewed: confirmed?.length ?? 0, historyRecorded, ...(historyRecorded === null && (additions.length || removals.length || confirmed?.length) ? { warning: "Mapping saved, but the competency history could not be updated." } : {}) });
 }

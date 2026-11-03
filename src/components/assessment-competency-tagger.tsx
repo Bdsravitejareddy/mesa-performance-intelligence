@@ -5,11 +5,12 @@ import { useMemo, useState } from "react";
 import { formatOfficialMark } from "@/lib/scoring";
 
 type Competency = { id: string; domain: string; name: string };
-type Assessment = { id: string; title: string; course: string; tagged: string[]; locked: string[]; mark: number | null; criteria: { label: string; score: number; max: number }[]; criterionTags: Record<string, string> };
+type Assessment = { id: string; title: string; course: string; tagged: string[]; locked: string[]; mark: number | null; criteria: { label: string; score: number; max: number }[]; criterionTags: Record<string, string>; unreviewed: number };
 
 export function AssessmentCompetencyTagger({ competencies, assessments }: { competencies: Competency[]; assessments: Assessment[] }) {
   const [filter, setFilter] = useState("");
-  const visible = assessments.filter((item) => `${item.title} ${item.course}`.toLowerCase().includes(filter.trim().toLowerCase()));
+  const [needsReview, setNeedsReview] = useState(false);
+  const visible = assessments.filter((item) => `${item.title} ${item.course}`.toLowerCase().includes(filter.trim().toLowerCase()) && (!needsReview || item.unreviewed > 0));
   const byDomain = useMemo(() => {
     const groups = new Map<string, Competency[]>();
     for (const item of competencies) groups.set(item.domain, [...(groups.get(item.domain) ?? []), item]);
@@ -17,6 +18,7 @@ export function AssessmentCompetencyTagger({ competencies, assessments }: { comp
   }, [competencies]);
   return <div className="competency-tagger">
     <label className="field"><span>Filter assessments</span><input type="search" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Course or assessment title" /></label>
+    <label className="tagger-option"><input type="checkbox" checked={needsReview} onChange={(event) => setNeedsReview(event.target.checked)} /> Only assessments with AI links to review</label>
     {visible.map((assessment) => <AssessmentTags key={assessment.id} assessment={assessment} byDomain={byDomain} names={new Map(competencies.map((item) => [item.id, item.name]))} />)}
     {!visible.length && <p className="empty-hint">No assessments match.</p>}
   </div>;
@@ -29,7 +31,7 @@ function AssessmentTags({ assessment, byDomain, names }: { assessment: Assessmen
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const criterionDirty = assessment.criteria.some((item) => (criterionTags[item.label] ?? "") !== (assessment.criterionTags[item.label] ?? ""));
-  const dirty = criterionDirty || selected.size !== assessment.tagged.length || assessment.tagged.some((id) => !selected.has(id));
+  const dirty = criterionDirty || selected.size !== assessment.tagged.length || assessment.tagged.some((id) => !selected.has(id)) || assessment.unreviewed > 0;
   const toggle = (id: string) => setSelected((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
 
   async function save() {
@@ -39,7 +41,7 @@ function AssessmentTags({ assessment, byDomain, names }: { assessment: Assessmen
       const response = await fetch("/api/assessment-competencies", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ assessmentId: assessment.id, competencyIds: [...selected], criteria: Object.entries(criterionTags).filter(([, competencyId]) => competencyId).map(([label, competencyId]) => ({ label, competencyId })) }) });
       const result = await response.json() as { error?: string };
       if (!response.ok) throw new Error(result.error || "Could not save.");
-      setStatus("Saved.");
+      setStatus("Saved and marked as reviewed.");
       router.refresh();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not save.");
@@ -51,7 +53,7 @@ function AssessmentTags({ assessment, byDomain, names }: { assessment: Assessmen
   const criterionCount = Object.values(criterionTags).filter(Boolean).length;
   const summary = [[...selected, ...assessment.locked].map((id) => names.get(id)).filter(Boolean).join(", "), criterionCount ? `${criterionCount} criterion tag${criterionCount > 1 ? "s" : ""}` : ""].filter(Boolean).join(" · ");
   return <details className="tagger-row">
-    <summary><span><strong>{assessment.title}</strong><small>{assessment.course} · {assessment.mark === null ? "no released mark" : formatOfficialMark(assessment.mark)}</small></span><small className="tagger-summary">{summary || "Not mapped"}</small></summary>
+    <summary><span><strong>{assessment.title}</strong><small>{assessment.course} · {assessment.mark === null ? "no released mark" : formatOfficialMark(assessment.mark)}</small></span><small className="tagger-summary">{summary || "Not mapped"}{assessment.unreviewed > 0 && <em className="tagger-review"> · {assessment.unreviewed} AI link{assessment.unreviewed === 1 ? "" : "s"} to review</em>}</small></summary>
     <div className="tagger-body">
       {byDomain.map(([domain, items]) => <fieldset key={domain}><legend>{domain}</legend>{items.map((item) => {
         const locked = assessment.locked.includes(item.id);
@@ -61,7 +63,7 @@ function AssessmentTags({ assessment, byDomain, names }: { assessment: Assessmen
         <small>Tag a criterion when it tests one competency. Criterion marks are direct evidence and replace the whole-assessment mark for that competency.</small>
         {assessment.criteria.map((item) => <label key={item.label} className="tagger-criterion"><span>{item.label} <small>{item.score}/{item.max}</small></span><select value={criterionTags[item.label] ?? ""} disabled={busy} onChange={(event) => setCriterionTags((current) => ({ ...current, [item.label]: event.target.value }))}><option value="">Not mapped</option>{byDomain.map(([domain, items]) => <optgroup key={domain} label={domain}>{items.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</optgroup>)}</select></label>)}
       </fieldset>}
-      <div className="tagger-actions"><button className="button button-primary" type="button" onClick={save} disabled={!dirty || busy || selected.size > 12}>{busy ? "Saving…" : "Save mapping"}</button>{selected.size > 12 && <small>Choose at most 12.</small>}{status && <small role="status">{status}</small>}</div>
+      <div className="tagger-actions"><button className="button button-primary" type="button" onClick={save} disabled={!dirty || busy || selected.size > 12}>{busy ? "Saving…" : assessment.unreviewed > 0 ? "Confirm and save" : "Save mapping"}</button>{selected.size > 12 && <small>Choose at most 12.</small>}{status && <small role="status">{status}</small>}</div>
     </div>
   </details>;
 }

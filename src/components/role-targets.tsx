@@ -16,7 +16,7 @@ export function RoleTargets({ readiness, library }: { readiness: RoleReadiness[]
 function RoleCard({ item, overlap }: { item: RoleReadiness; overlap?: number }) {
   const share = item.skillRequirements ? Math.round((item.evidenced / item.skillRequirements) * 100) : 0;
   return <article className="content-panel role-card">
-    <header><div><strong>{item.role.name}</strong><small>{item.role.postings.map((posting) => posting.employer).join(" · ")} · retrieved {item.role.postings[0]?.retrievedAt}</small></div>{overlap !== undefined && <span className="competency-state state-emerging">{overlap}% overlap</span>}</header>
+    <header><div><strong>{item.role.name}</strong><small>{benchmarkNote(item.role.postings)}</small></div>{overlap !== undefined && <span className="competency-state state-emerging">{overlap}% overlap</span>}</header>
     <div className="role-meter" aria-label={`${item.evidenced} of ${item.skillRequirements} skill requirements evidenced`}><i style={{ width: `${share}%` }} /></div>
     <p className="role-counts"><b>{item.evidenced}</b> of {item.skillRequirements} skill requirements evidenced · <b>{item.gaps}</b> gaps or conflicting results · <b>{item.unknown}</b> without evidence</p>
     <p className="scope-note">Interview readiness reflects evidenced skills only. Eligibility (experience, degree) is listed separately for you to judge; no offer likelihood is implied.</p>
@@ -25,4 +25,13 @@ function RoleCard({ item, overlap }: { item: RoleReadiness; overlap?: number }) 
     </li>)}</ul>
     {item.eligibility.length > 0 && <><h3>Eligibility — check yourself</h3><ul>{item.eligibility.map((requirement, index) => <li key={`${requirement.quote}-${index}`}>{requirement.quote} <small>({requirement.source.employer})</small></li>)}</ul></>}</details>
   </article>;
+}
+
+// A role's benchmark is a small sample of postings: say how many, from whom, how old, and what is not recorded.
+export function benchmarkNote(postings: { employer: string; retrievedAt: string }[], now = new Date()): string {
+  if (!postings.length) return "No postings recorded";
+  const oldest = postings.map((posting) => posting.retrievedAt).sort()[0];
+  const days = Math.floor((now.getTime() - new Date(`${oldest}T00:00:00Z`).getTime()) / 86_400_000);
+  const age = days > 30 ? `retrieved ${oldest}, ${days} days ago — refresh before relying on it` : `retrieved ${oldest}`;
+  return `A sample of ${postings.length} posting${postings.length === 1 ? "" : "s"} (${[...new Set(postings.map((posting) => posting.employer))].join(", ")}) · ${age} · location, industry and seniority not recorded`;
 }
