@@ -104,21 +104,28 @@ export type Conflict = { kind: "opposite_advice" | "praised_and_flagged" | "facu
 export function findConflicts(points: FeedbackPoint[]): Conflict[] {
   const out: Conflict[] = [];
   const seen = new Set<string>();
-  const add = (conflict: Conflict) => { const id = [conflict.kind, conflict.theme, ...conflict.points.map((point) => point.key)].sort().join(":"); if (!seen.has(id)) { seen.add(id); out.push(conflict); } };
+  // One entry per kind, theme and place: many pairs saying the same thing are one conflict.
+  const add = (conflict: Conflict, place = conflict.points.map((point) => point.key).sort().join(":")) => { const id = `${conflict.kind}:${conflict.theme}:${place}`; if (!seen.has(id)) { seen.add(id); out.push(conflict); } };
   const where = (point: FeedbackPoint) => point.assessmentTitle || point.courseTitle || "one assessment";
   for (let i = 0; i < points.length; i += 1) for (let j = i + 1; j < points.length; j += 1) {
     const [a, b] = [points[i], points[j]];
     for (const theme of a.themes.filter((name) => b.themes.includes(name))) {
       const pair = DIRECTIONS.find((entry) => entry.theme === theme && entry.direction === a.direction && entry.opposite === b.direction);
-      if (pair) add({ kind: "opposite_advice", theme, summary: `${THEMES[theme].label}: one piece of feedback asks for ${a.direction!.replace("_", " ")}, another for ${b.direction!.replace("_", " ")}.`, points: [a, b] });
+      if (pair) add({ kind: "opposite_advice", theme, summary: `${THEMES[theme].label}: one piece of feedback asks for ${a.direction!.replace("_", " ")}, another for ${b.direction!.replace("_", " ")}.`, points: [a, b] }, [a.assessmentId, b.assessmentId].sort().join(":"));
       else if (a.submissionId === b.submissionId && a.authority !== b.authority && a.polarity !== b.polarity && a.polarity !== "note" && b.polarity !== "note") {
         const [faculty, ai] = a.authority === "faculty" ? [a, b] : [b, a];
-        add({ kind: "faculty_vs_ai", theme, summary: `${THEMES[theme].label}: on ${where(faculty)}, the faculty ${faculty.polarity === "strength" ? "praised" : "flagged"} it but the AI grader ${ai.polarity === "strength" ? "praised" : "flagged"} it. The faculty's view is the official one.`, points: [faculty, ai] });
-      } else if (a.assessmentId !== b.assessmentId && a.authority === "faculty" && b.authority === "faculty" && a.polarity !== b.polarity && a.polarity !== "note" && b.polarity !== "note") {
-        const [praised, flagged] = a.polarity === "strength" ? [a, b] : [b, a];
-        add({ kind: "praised_and_flagged", theme, summary: `${THEMES[theme].label}: praised in ${where(praised)}, flagged in ${where(flagged)} — likely depends on the task.`, points: [praised, flagged] });
+        add({ kind: "faculty_vs_ai", theme, summary: `${THEMES[theme].label}: on ${where(faculty)}, the faculty ${faculty.polarity === "strength" ? "praised" : "flagged"} it but the AI grader ${ai.polarity === "strength" ? "praised" : "flagged"} it. The faculty's view is the official one.`, points: [faculty, ai] }, faculty.submissionId ?? "");
       }
     }
+  }
+  // Praised in one assessment and flagged in others: one entry per theme (not one per pair), faculty points only.
+  for (const theme of Object.keys(THEMES)) {
+    const faculty = points.filter((point) => point.authority === "faculty" && point.themes[0] === theme);
+    const praised = faculty.filter((point) => point.polarity === "strength"), flagged = faculty.filter((point) => point.polarity === "improve");
+    const praisedIn = new Set(praised.map((point) => point.assessmentId)), flaggedElsewhere = flagged.filter((point) => !praisedIn.has(point.assessmentId));
+    if (!praised.length || !flaggedElsewhere.length) continue;
+    const others = new Set(flaggedElsewhere.map(where));
+    add({ kind: "praised_and_flagged", theme, summary: `${THEMES[theme].label}: praised in ${where(praised[0])}, flagged in ${others.size === 1 ? [...others][0] : `${others.size} other assessments`} — likely depends on the task.`, points: [praised[0], flaggedElsewhere[0]] });
   }
   return out;
 }
