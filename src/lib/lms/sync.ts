@@ -12,8 +12,9 @@ import { extractPdfPages, extractPptxSlides } from "@/lib/documents";
 import { extractDocxPages, extractXlsxSheets } from "@/lib/office-documents";
 import { toAssessmentRow, toSubmissionRow } from "./records";
 import { assignmentDetailArguments, selectAssignmentReadTools, toolArgumentVariants } from "./tool-selection";
+import { messageArguments, normalizeMessages, selectMessageTools } from "./messages";
 
-type SyncResult = { status: "succeeded" | "partial"; runId: string; courses: number; assessments: number; submissions: number; marks: number; feedback: number; message: string; competencySnapshots?: number | null; briefs?: number; terms?: number };
+type SyncResult = { status: "succeeded" | "partial"; runId: string; courses: number; assessments: number; submissions: number; marks: number; feedback: number; message: string; competencySnapshots?: number | null; briefs?: number; terms?: number; messages?: number | null };
 
 async function workspaceMembers(client: SupabaseClient): Promise<string[]> {
   const emails = new Set(getAllowedEmails());
@@ -207,6 +208,8 @@ export async function syncMesaLms(): Promise<SyncResult> {
     if (courseListTool) {
       try { summary.terms = await refreshTerms(client, mcp, courseListTool); } catch { summary.terms = 0; }
     }
+    // Notifications and announcements, where links to other sources (e.g. Mesa's Feedback page) first appear.
+    try { summary.messages = await refreshMessages(client, mcp, availableTools, ownerId); } catch { summary.messages = null; }
     // Briefs for assessments that have none yet (or are a week old), so grading can use the task's own requirements.
     if (assignmentDetailTool) {
       try { summary.briefs = await refreshBriefs(client, mcp, assignmentDetailTool); } catch { summary.briefs = 0; }
@@ -218,6 +221,20 @@ export async function syncMesaLms(): Promise<SyncResult> {
     await client.from("sync_runs").update({ status: "failed", finished_at: new Date().toISOString(), message: "LMS sync failed. Check connector configuration and try again." }).eq("id", run.id).eq("user_id", ownerId);
     throw error instanceof Error ? error : new Error("LMS sync failed.");
   }
+}
+
+async function refreshMessages(client: SupabaseClient, mcp: MesaMcpClient, tools: McpTool[], ownerId: string): Promise<number> {
+  let saved = 0;
+  for (const { tool, kind } of selectMessageTools(tools)) {
+    const messages = normalizeMessages(unwrapToolResult(await mcp.callTool(tool.name, messageArguments(tool))), kind);
+    if (!messages.length) continue;
+    // Upserted by source id: the first time a message was seen is kept; its text and links are refreshed.
+    const { data, error } = await client.from("lms_messages").upsert(messages.map((message) => ({
+      user_id: ownerId, kind: message.kind, source_record_id: message.sourceRecordId.slice(0, 300), title: message.title, body: message.body, course: message.course, posted_at: message.postedAt, links: message.links,
+    })), { onConflict: "user_id,source_record_id", ignoreDuplicates: false }).select("id");
+    if (!error) saved += data?.length ?? 0;
+  }
+  return saved;
 }
 
 async function refreshBriefs(client: SupabaseClient, mcp: MesaMcpClient, tool: McpTool): Promise<number> {

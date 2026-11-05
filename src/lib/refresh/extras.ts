@@ -5,6 +5,7 @@ import { runBehaviourAnalysis } from "@/lib/behaviour/run";
 import { runContextReading } from "@/lib/tests/context-reading";
 import { isProviderConfigured } from "@/lib/ai/settings";
 import { runAiSkillView } from "@/lib/profile/skills";
+import { rebuildFeedbackItems } from "@/lib/feedback/repository";
 
 // The last stage of the daily (or manual) refresh, after the LMS sync and grading: re-read GitHub, evaluate
 // changed projects, then re-run the behaviour analysis and the context reading on everything now known.
@@ -14,6 +15,8 @@ export async function refreshExtras(admin: SupabaseClient, budgetMs: number) {
   const userId = owner?.user_id as string | undefined;
   const step = async <T,>(run: () => Promise<T>) => { try { return await run(); } catch (error) { return { error: error instanceof Error ? error.message.slice(0, 200) : "failed" }; } };
   const github = await step(() => refreshGithub(admin, deadline - 200_000));
+  // Deterministic and quick: new faculty feedback and AI grades become feedback points before the AI steps read them.
+  await step(() => rebuildFeedbackItems(admin));
   if (!userId || !isProviderConfigured()) return { github, projects: null, behaviour: null, context: null };
   // Project evaluation runs as its own chained stage (see the refresh route), so it can finish every project.
   const projects = { delegated: true };

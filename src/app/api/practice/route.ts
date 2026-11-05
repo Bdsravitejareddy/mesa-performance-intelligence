@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { buildWeek, expression, weekStart, type PracticeItem } from "@/lib/practice/week";
 import { courseQuestions } from "@/lib/practice/course-questions";
+import { loadPoints, rankPoints } from "@/lib/feedback/repository";
 import { chooseTarget, reflectionPrompt, type PracticeTarget } from "@/lib/practice/target";
 import { loadCompetencyInputs } from "@/lib/competency/load";
 import { buildCompetencyMap } from "@/lib/competency/map";
@@ -95,7 +96,10 @@ export async function GET() {
     else if (!await aiAllowed(auth)) note = "Course questions need the current AI consent.";
     else {
       try {
-        const generated = await courseQuestions(auth.supabase, course, target ? `${target.name} — ${target.description}` : focus);
+        // The faculty's open points on this skill or course, most relevant first, steer the questions.
+        const flagged = rankPoints(await loadPoints(auth.supabase).catch(() => []), { courseId: course.id, competencyIds: target ? [target.id] : [], text: focus, openOnly: true, limit: 3 })
+          .filter((point) => point.authority === "faculty" && point.polarity === "improve").map((point) => point.text.slice(0, 240));
+        const generated = await courseQuestions(auth.supabase, course, target ? `${target.name} — ${target.description}` : focus, flagged);
         if (generated.questions.length < 3) note = `${course.title}: ${generated.note}`;
         if (generated.questions.length >= 3) {
           courseTitle = course.title;

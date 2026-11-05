@@ -12,6 +12,7 @@ const WRITE = [
   "Write the number and kind of questions asked for (applied: multi-step reasoning or calculation with the course's concepts; trick: a common misconception the excerpts correct). Each has exactly 4 distinct, short options, one correct. Keep every field brief.",
   "Make distractors plausible: the mistakes a good student makes. No trivia, no recall of names or dates, nothing answerable without the course.",
   "For each give kind (quiz|trick), prompt, options, answer (0-3), explanation (one sentence), quote (an exact short quote from the excerpt that supports the answer) and ref (the excerpt key).",
+  "When facultyFlagged is given, it lists points the member's faculty asked them to work on; prefer questions and a case that exercise those points, still answerable only from the excerpts.",
   "When asked for a case, also write case: one short case task (2–3 sentences) that applies a concept from the excerpts to a new situation and asks for a reasoned answer in about 150 words.",
   "Return JSON {\"questions\":[{\"kind\":string,\"prompt\":string,\"options\":[string],\"answer\":number,\"explanation\":string,\"quote\":string,\"ref\":string}],\"case\":string}.",
 ].join(" ");
@@ -34,7 +35,7 @@ export function validateQuestions(raw: Record<string, unknown>, refs: RetrievedR
   });
 }
 
-export async function courseQuestions(client: SupabaseClient, course: { id: string; title: string }, focus: string): Promise<{ questions: CourseQuestion[]; caseTask: string | null; note: string }> {
+export async function courseQuestions(client: SupabaseClient, course: { id: string; title: string }, focus: string, facultyFlagged: string[] = []): Promise<{ questions: CourseQuestion[]; caseTask: string | null; note: string }> {
   // Any assessment of the course will do as the retrieval scope; course-wide materials are always included.
   const { data: assessment } = await client.from("assessments").select("id").eq("course_id", course.id).limit(1).maybeSingle();
   if (!assessment) return { questions: [], caseTask: null, note: "the course has no assessments to scope its material" };
@@ -42,7 +43,7 @@ export async function courseQuestions(client: SupabaseClient, course: { id: stri
   if (refs.length < 2) return { questions: [], caseTask: null, note: `only ${refs.length} matching course excerpt${refs.length === 1 ? "" : "s"} found` };
   const excerpts = refs.map((ref) => ({ key: ref.key, source: ref.label, excerpt: ref.excerpt.slice(0, 1800) }));
   // Two smaller requests in parallel (long replies can come back malformed), each retried once.
-  const ask = (request: string) => { const call = () => requestJsonFromProvider(WRITE, JSON.stringify({ course: course.title, focus, request, excerpts }), { timeoutMs: 80_000 }); return call().catch(() => call()).catch(() => ({} as Record<string, unknown>)); };
+  const ask = (request: string) => { const call = () => requestJsonFromProvider(WRITE, JSON.stringify({ course: course.title, focus, request, excerpts, ...(facultyFlagged.length ? { facultyFlagged } : {}) }), { timeoutMs: 80_000 }); return call().catch(() => call()).catch(() => ({} as Record<string, unknown>)); };
   const [applied, tricks] = await Promise.all([ask("Write 4 applied questions."), ask("Write 3 trick questions, and the case.")]);
   const raw = { questions: [...(Array.isArray(applied.questions) ? applied.questions : []), ...(Array.isArray(tricks.questions) ? tricks.questions : [])], case: tricks.case ?? applied.case };
   const drafted = validateQuestions(raw, refs);
