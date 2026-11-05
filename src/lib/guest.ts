@@ -13,7 +13,7 @@ export const GUEST_COOKIE = "mesa_guest_until";
 // on the member's behalf, runs the full refresh, or removes evidence with privileged access (not undoable).
 // An entry matches itself and everything under it; one ending in "-" matches any path that starts with it.
 const BLOCKED = ["/api/ai-consent", "/api/ai-context", "/api/conversations", "/api/drive-sync", "/api/drive-agent", "/api/github", "/api/lms-sync", "/api/lms",
-  "/api/imports/nexus-", "/api/refresh", "/api/cron", "/api/gradings/detach", "/api/assessment-competencies/auto"];
+  "/api/imports/nexus-", "/api/imports/mesa-feedback", "/api/refresh", "/api/cron", "/api/gradings/detach", "/api/assessment-competencies/auto"];
 // Erasing a quarantined file is permanent, so it is never a guest action.
 const BLOCKED_PATTERNS = [/^\/api\/materials\/[^/]+\/purge$/];
 
