@@ -858,3 +858,7 @@ html[data-story-enter="from-below"] .main-content{animation:storyDrop .28s cubic
 .feedback-point.is-addressed p{text-decoration:line-through;opacity:.65}.feedback-toggle{margin-top:4px;background:none;border:0;padding:0;cursor:pointer}
 .feedback-conflict{border-top:1px solid var(--line);padding-top:10px;margin-top:10px}.feedback-conflict li small{display:block;color:var(--muted);font-size:12.5px}.feedback-conflict li{font-size:14px;color:var(--ink-2)}
 .nexus-messages ul{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:10px}.nexus-messages li strong{display:block;font-size:14px}.nexus-messages li small{display:block;font-size:12.5px;color:var(--muted)}.nexus-link{display:block;font-size:13.5px;margin-top:2px}
+
+/* Whether a released mark is part of the course grade. */
+.counts-toward-grade { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: .85rem; }
+.counts-toward-grade small { opacity: .75; }

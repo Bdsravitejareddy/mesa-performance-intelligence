@@ -8,7 +8,9 @@ export const STAKES_LABEL: Record<Stakes, string> = { exam: "Term exam", graded:
 const EXAM = /\b(mid[\s-]?term|end[\s-]?term|final|graded submission|written assessment|assessment\s*(form\s*)?\d|mrs\b)/i;
 const PRACTICE = /\b(async|workbook|practice|reflection|recording|template|week\s*\d|session\s*\d|live .*writing)/i;
 
-export function stakesOf(title: string): Stakes {
+// An assessment the member marked as not counting toward the grade is practice, whatever its title says.
+export function stakesOf(title: string, countsTowardGrade: boolean | null = true): Stakes {
+  if (countsTowardGrade === false) return "practice";
   if (EXAM.test(title)) return "exam";
   if (PRACTICE.test(title)) return "practice";
   return "graded";

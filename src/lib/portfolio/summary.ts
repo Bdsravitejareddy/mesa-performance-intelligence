@@ -12,6 +12,7 @@ export const projectKey = (name: string) => name.toLowerCase().replace(/[-_](\d+
 
 export function summarisePortfolio(rows: PortfolioRow[]): PortfolioSummary {
   const projects = new Map<string, Project>();
+  const contentPushed = new Map<string, string>();
   const deployedRepos = new Map<string, { deployments: number; last: string | null }>();
   for (const row of rows.filter((item) => item.source === "vercel")) {
     const repo = String(row.data.repo ?? row.name).split("/").pop() ?? row.name;
@@ -25,9 +26,16 @@ export function summarisePortfolio(rows: PortfolioRow[]): PortfolioSummary {
     const languages = Object.keys((data.languages ?? {}) as Record<string, number>);
     const project: Project = current ?? { structure: null, key: id, name: row.name, accounts: [], description: "", languages: [], aiPackages: [], commits: 0, activeMonths: [], deployed: false, deployments: 0, lastActivity: null, readme: "", isPublic: false };
     project.accounts = [...new Set([...project.accounts, row.account])];
-    project.description ||= String(data.description ?? "");
-    project.readme ||= String(data.readme ?? "");
-    project.structure ||= (data.structure as Structure | undefined) ?? null;
+    // Versions of one project (meerabot, meerabot-1, meerabot-final) are evaluated on the most recently pushed one's
+    // content, falling back to an older version only for what the newest lacks.
+    const pushedAt = (data.pushedAt as string) ?? "";
+    const newest = !current || pushedAt > (contentPushed.get(id) ?? "");
+    if (newest) contentPushed.set(id, pushedAt);
+    const take = <T,>(existing: T, incoming: T, empty: (value: T) => boolean) => (newest ? (empty(incoming) ? existing : incoming) : (empty(existing) ? incoming : existing));
+    project.description = take(project.description, String(data.description ?? ""), (value) => !value);
+    project.readme = take(project.readme, String(data.readme ?? ""), (value) => !value);
+    project.structure = take(project.structure, (data.structure as Structure | undefined) ?? null, (value) => !value);
+    if (newest && current) project.name = row.name;
     project.languages = [...new Set([...project.languages, ...languages])];
     project.aiPackages = [...new Set([...project.aiPackages, ...((data.aiPackages ?? []) as string[])])];
     project.commits += Number(data.commitsByYou ?? 0);

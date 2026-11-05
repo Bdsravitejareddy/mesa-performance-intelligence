@@ -92,7 +92,7 @@ async function personContext(client: SupabaseClient) {
     client.from("competency_snapshots").select("competency_id, state, recorded_at, reason, competencies(name)").gte("recorded_at", new Date(now - 30 * day).toISOString()).order("recorded_at"),
     client.from("ai_context_reports").select("report").order("created_at", { ascending: false }).limit(3),
     client.from("submission_gradings").select("submission_id, ai_score, created_at").order("created_at", { ascending: false }),
-    client.from("submissions").select("id, submitted_at, page_capture, assessments(title)"),
+    client.from("submissions").select("id, submitted_at, page_capture, assessments(title, counts_toward_grade)"),
     client.from("weekly_tasks").select("week_start, done_at").gte("week_start", new Date(now - 30 * day).toISOString().slice(0, 10)),
   ]);
   const factors = (personality.data?.result as { factors?: Record<string, { score: number }> } | null)?.factors ?? null;
@@ -100,7 +100,7 @@ async function personContext(client: SupabaseClient) {
   const observed = ((behaviour.data?.dimensions ?? []) as { dimension: string; status: string; overview?: string }[]).filter((row) => row.status === "observed").map((row) => ({ pattern: row.dimension, overview: (row.overview ?? "").slice(0, 200) }));
   // Grades of work submitted in each window (latest grading per submission), so a change compares like with like.
   const submittedAt = new Map((submissions.data ?? []).map((row) => [row.id as string, (row.page_capture as { submittedAt?: string } | null)?.submittedAt ?? (row.submitted_at as string | null)]));
-  const stakesOfSubmission = new Map((submissions.data ?? []).map((row) => [row.id as string, stakesOf(String((row.assessments as unknown as { title?: string } | null)?.title ?? ""))]));
+  const stakesOfSubmission = new Map((submissions.data ?? []).map((row) => [row.id as string, stakesOf(String((row.assessments as unknown as { title?: string } | null)?.title ?? ""), (row.assessments as unknown as { counts_toward_grade?: boolean } | null)?.counts_toward_grade ?? true)]));
   const byStakes: Record<string, { last30: number[]; previous30: number[] }> = {};
   const seen = new Set<string>(); const recent: number[] = []; const before: number[] = [];
   for (const row of gradings.data ?? []) {

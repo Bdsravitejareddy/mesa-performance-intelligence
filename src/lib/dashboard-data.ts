@@ -75,7 +75,7 @@ export async function getDashboardSnapshot(client?: SupabaseClient, term: TermCh
   const rubric = await loadRubric(supabase);
   const [courseResult, assessmentResult, submissionResult, competencyResult, syncResult] = await Promise.all([
     supabase.from("courses").select("id, code, title, term").order("created_at", { ascending: false }),
-    supabase.from("assessments").select("id, course_id, title, assessment_format, due_at, official_max_mark"),
+    supabase.from("assessments").select("id, course_id, title, assessment_format, due_at, official_max_mark, counts_toward_grade"),
     supabase.from("submissions").select("id, assessment_id, official_mark, source_original_max_mark, submitted_at").not("official_mark", "is", null).order("submitted_at", { ascending: false }),
     supabase.from("topic_competencies").select("topic, state, score"),
     supabase.from("sync_runs").select("status, started_at, finished_at, message").eq("source_name", "Mesa Nexus MCP").order("started_at", { ascending: false }).limit(20),
@@ -103,7 +103,8 @@ export async function getDashboardSnapshot(client?: SupabaseClient, term: TermCh
       format: assessment?.assessment_format ?? "Assessment",
       // Original LMS maximum; marks entered on the 0–100 scale weigh as 100.
       // Maximum marks times stakes: a term exam counts three times a practice task of the same size.
-      weight: (submission.source_original_max_mark === null || submission.source_original_max_mark === undefined ? 100 : Number(submission.source_original_max_mark)) * rubric.stakes[stakesOf(assessment?.title ?? "")],
+      // Work that does not count toward the grade stays listed but carries no weight in any average.
+      weight: assessment?.counts_toward_grade === false ? 0 : (submission.source_original_max_mark === null || submission.source_original_max_mark === undefined ? 100 : Number(submission.source_original_max_mark)) * rubric.stakes[stakesOf(assessment?.title ?? "")],
       courseId: assessment?.course_id ?? "",
     };
   });
@@ -133,7 +134,7 @@ export async function getDashboardSnapshot(client?: SupabaseClient, term: TermCh
     topicCount: competencies.length,
     syncHealth: describeSyncHealth((syncResult.data ?? []) as SyncRun[]),
     term,
-    standings: await loadStandings(supabase, courses as { id: string; title: string; term: string | null }[], assessments as { id: string; course_id: string; official_max_mark: number | null; title: string }[]),
+    standings: await loadStandings(supabase, courses as { id: string; title: string; term: string | null }[], (assessments as { counts_toward_grade?: boolean }[]).filter((row) => row.counts_toward_grade !== false) as { id: string; course_id: string; official_max_mark: number | null; title: string }[]),
     brief: await latestBrief(supabase, term),
     insights: await buildInsights(supabase, new Set(submissions.map((row) => row.assessment_id as string)).size),
   };

@@ -11,7 +11,7 @@ export async function loadCompetencyInputs(supabase: SupabaseClient): Promise<Co
   const [competencies, mappings, assessments, submissions, courses, tests, gradings] = await Promise.all([
     supabase.from("competencies").select("id, domain_key, domain_name, name, description, sort_order").order("sort_order"),
     supabase.from("assessment_competencies").select("assessment_id, competency_id, mapping_source, review_status, criterion_label"),
-    supabase.from("assessments").select("id, course_id, title").order("title"),
+    supabase.from("assessments").select("id, course_id, title, counts_toward_grade").order("title"),
     supabase.from("submissions").select("id, assessment_id, official_mark, official_feedback, official_mark_source, submitted_at, source_updated_at"),
     supabase.from("courses").select("id, title"),
     // Only the two most recent reasoning attempts count, so retakes cannot inflate the evidence.

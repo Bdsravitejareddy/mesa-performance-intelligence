@@ -4,7 +4,7 @@ import { classifyCompetency, type CompetencyAssessment, type CompetencyEvidence 
 
 export type CompetencyRow = { id: string; domain_key: string; domain_name: string; name: string; description: string; sort_order: number };
 export type MappingRow = { assessment_id: string; competency_id: string; mapping_source: CompetencyEvidence["mappingSource"]; review_status: string; criterion_label?: string | null };
-export type AssessmentRow = { id: string; course_id: string; title: string };
+export type AssessmentRow = { id: string; course_id: string; title: string; counts_toward_grade?: boolean };
 export type SubmissionRow = { id: string; assessment_id: string; official_mark: number | string | null; official_feedback: string | null; official_mark_source: string | null; submitted_at: string | null; source_updated_at?: string | null };
 export type CourseRow = { id: string; title: string };
 
@@ -30,7 +30,7 @@ export function buildCompetencyMap(input: { competencies: CompetencyRow[]; mappi
     const assessment = assessmentById.get(mapping.assessment_id);
     if (!assessment) continue;
     mappedCount.set(mapping.competency_id, (mappedCount.get(mapping.competency_id) ?? 0) + 1);
-    const base = { assessmentId: assessment.id, assessmentTitle: assessment.title, course: courseById.get(assessment.course_id) ?? "Course", mappingSource: mapping.mapping_source, granularity: "whole_assessment" as const, stakes: stakesOf(assessment.title) };
+    const base = { assessmentId: assessment.id, assessmentTitle: assessment.title, course: courseById.get(assessment.course_id) ?? "Course", mappingSource: mapping.mapping_source, granularity: "whole_assessment" as const, stakes: stakesOf(assessment.title, assessment.counts_toward_grade ?? true) };
     const submissions = submissionsByAssessment.get(assessment.id) ?? [];
     const items: CompetencyEvidence[] = !submissions.length
       ? [{ ...base, submissionId: null, mark: null, feedback: "", date: null, source: "No submission recorded", ...(mapping.criterion_label ? { granularity: "criterion" as const, criterionLabel: mapping.criterion_label, assessmentTitle: `${assessment.title} · ${mapping.criterion_label}` } : {}) }]

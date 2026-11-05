@@ -19,4 +19,13 @@ describe("portfolio", () => {
     expect(() => parsePortfolioUpload({ items: [] })).toThrow();
     expect(parsePortfolioUpload({ kind: "mesa-portfolio", items: [{ source: "gitlab", external_id: "x", name: "x", data: {} }, { source: "github", external_id: "a/b", name: "b", url: "javascript:alert(1)", data: {} }] })).toEqual([{ source: "github", account: "github", external_id: "a/b", name: "b", url: null, data: {} }]);
   });
+
+  it("evaluates a project on its most recently pushed version's content", () => {
+    const repo = (name: string, pushedAt: string, readme: string) => ({ source: "github", account: "me", name, data: { pushedAt, readme, description: `${name} description`, commitsByYou: 2 } });
+    const summary = summarisePortfolio([repo("Meerabot", "2026-10-01T00:00:00Z", "old readme"), repo("meerabot-final", "2026-11-04T00:00:00Z", "final readme"), repo("Meerabot-1", "2026-10-15T00:00:00Z", "")] as never);
+    const project = summary.projects.find((item) => item.key === "meerabot")!;
+    expect(project.readme).toBe("final readme");
+    expect(project.name).toBe("meerabot-final");
+    expect(project.commits).toBe(6);
+  });
 });
