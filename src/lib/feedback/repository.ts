@@ -44,12 +44,25 @@ const PREFIX: [RegExp, Polarity][] = [
   [/^notes?\s*:\s*/i, "note"],
 ];
 const POSITIVE = /\b(good|well|strong(est)?|clear|sound|correct|sincere|accurately|exceptional|memorable|easy to follow|right)\b/i;
-const NEGATIVE = /\b(however|but|missing|lacks?|weak(est)?|should|could|needs?|not\b|unclear|wrong|brief|hard to follow|fix|improve|less|more)\b/i;
+const NEGATIVE = /\b(however|but|missing|lacks?|weak(est)?|should|could|needs?|not|no|without|unclear|wrong|brief|hard to follow|fix|improve|less|more|better than|instead|too)\b/i;
+// Advice phrased as an instruction ("Offer a concrete step towards bigger work.") is something to act on.
+const IMPERATIVE = /^(offer|add|use|include|make|try|consider|practi[cs]e|avoid|state|explain|show|keep|give|link|quantify|cite|focus|say|propose|look|bring|notice|reduce|cut|start|write|check|test|support|back|tie|define|clarify|structure|lead|ask|end|open|slow|speak|prepare|review|replace|remove|separate|label|compare)\b/i;
 
 export function classify(text: string): { text: string; polarity: Polarity } {
-  for (const [pattern, polarity] of PREFIX) if (pattern.test(text)) return { text: text.replace(pattern, "").trim(), polarity };
-  // Without a label: a corrective cue wins over praise ("Correct answer, but not formatted" is something to fix).
-  return { text, polarity: NEGATIVE.test(text) ? "improve" : POSITIVE.test(text) ? "strength" : "note" };
+  for (const [pattern, polarity] of PREFIX) {
+    if (!pattern.test(text)) continue;
+    const rest = text.replace(pattern, "").trim();
+    // "Note:" is a label of form, not of meaning: a note that gives advice is something to work on, one that
+    // praises went well, and only a neutral observation stays a note.
+    return { text: rest, polarity: polarity === "note" ? judge(rest, "note") : polarity };
+  }
+  return { text, polarity: judge(text, "note") };
+}
+
+// Without a usable label: a corrective cue or an instruction wins over praise ("Correct answer, but not formatted"
+// is something to fix).
+function judge(text: string, otherwise: Polarity): Polarity {
+  return NEGATIVE.test(text) || IMPERATIVE.test(text) ? "improve" : POSITIVE.test(text) ? "strength" : otherwise;
 }
 
 export function tag(text: string): { themes: string[]; direction: string | null } {
@@ -162,7 +175,7 @@ export async function rebuildFeedbackItems(client: SupabaseClient): Promise<{ in
     client.from("submission_gradings").select("submission_id, assessment_id, ai_report, ai_status, created_at").not("ai_report", "is", null),
     client.from("assessments").select("id, title, course_id"),
     client.from("courses").select("id, title, user_id"),
-    client.from("feedback_items").select("id, item_key"),
+    client.from("feedback_items").select("id, item_key, polarity"),
   ]);
   const assessmentMap = new Map((assessments.data ?? []).map((row) => [row.id as string, { title: row.title as string, courseId: row.course_id as string }]));
   const courseMap = new Map((courses.data ?? []).map((row) => [row.id as string, row.title as string]));
@@ -178,6 +191,13 @@ export async function rebuildFeedbackItems(client: SupabaseClient): Promise<{ in
     assessment_title: point.assessmentTitle.slice(0, 300), course_title: point.courseTitle.slice(0, 300), text: point.text, polarity: point.polarity, themes: point.themes, direction: point.direction, given_on: point.givenOn,
   })));
   if (stale.length) await client.from("feedback_items").delete().in("id", stale);
+  // A point whose wording is unchanged but whose reading changed (e.g. a "Note:" that gives advice) is relabelled in
+  // place, so the member's "addressed" mark survives.
+  const polarityOf = new Map((existing.data ?? []).map((row) => [row.item_key as string, row.polarity as string]));
+  for (const point of points) {
+    const id = have.get(point.key);
+    if (id && polarityOf.get(point.key) !== point.polarity) await client.from("feedback_items").update({ polarity: point.polarity }).eq("id", id);
+  }
   return { inserted: fresh.length, removed: stale.length, total: points.length };
 }
 

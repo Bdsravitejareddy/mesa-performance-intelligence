@@ -35,6 +35,10 @@ describe("feedback repository", () => {
   it("reads labelled polarity and treats a corrective cue as something to improve", () => {
     expect(classify("What went well: A decent opening, a strong ending.")).toEqual({ text: "A decent opening, a strong ending.", polarity: "strength" });
     expect(classify("Correct answer, but the cell is not formatted as currency.").polarity).toBe("improve");
+    // A "Note:" that gives advice is something to work on; one that praises went well.
+    expect(classify("Note: Look less practised and make more eye contact.").polarity).toBe("improve");
+    expect(classify("Note: 'Star matters a lot to me' was memorable.").polarity).toBe("strength");
+    expect(classify("Note: Offer a concrete step towards bigger work.").polarity).toBe("improve");
     expect(tag("However, the reasons are brief.")).toEqual({ themes: ["reasoning", "clarity"], direction: "more_detail" });
   });
 
