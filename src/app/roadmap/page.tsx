@@ -12,7 +12,7 @@ export default async function RoadmapPage() {
   const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
   const data = demoMode || !hasSupabaseConfig() ? null : await cachedRead("roadmap", loadRoadmap);
   return <AppShell demoMode={demoMode}><div className="section-page">
-    <div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> Development roadmap</div><h1>Growth roadmap</h1><p className="page-subtitle">What to do next, ranked by a formula you can see: importance × demonstrated gap × confidence.</p></div></div>
+    <div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> Development roadmap</div><h1>Growth roadmap</h1><p className="page-subtitle">What to do next: skills your target roles need most, where your evidence is furthest from a strength, come first. Open “How this is ranked” on any item for the numbers.</p></div></div>
     <TermScopeNote term={await selectedTerm().catch(() => "all" as const)} reason="the plan works on skills, which build up across terms." />
     {data && <div className="info-callout"><span>Ranked against your targets: <b>Stage 1</b> {data.stages.primary}; <b>Stage 2</b> {data.stages.cross}. Requirements come from real job postings (see Career readiness).</span></div>}
     <div className="section-stack plan-first"><section className="content-panel"><h2>Recommended next <span className="panel-count">{data?.recommendations.length ?? 0}</span></h2>{data ? <>

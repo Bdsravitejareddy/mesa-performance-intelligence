@@ -18,7 +18,7 @@ export function AssessmentCompetencyTagger({ competencies, assessments }: { comp
   }, [competencies]);
   return <div className="competency-tagger">
     <label className="field"><span>Filter assessments</span><input type="search" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Course or assessment title" /></label>
-    <label className="tagger-option"><input type="checkbox" checked={needsReview} onChange={(event) => setNeedsReview(event.target.checked)} /> Only assessments with AI links to review</label>
+    <label className="tagger-option"><input type="checkbox" checked={needsReview} onChange={(event) => setNeedsReview(event.target.checked)} /> Only assessments with AI-suggested skills to confirm</label>
     {visible.map((assessment) => <AssessmentTags key={assessment.id} assessment={assessment} byDomain={byDomain} names={new Map(competencies.map((item) => [item.id, item.name]))} />)}
     {!visible.length && <p className="empty-hint">No assessments match.</p>}
   </div>;
@@ -53,7 +53,7 @@ function AssessmentTags({ assessment, byDomain, names }: { assessment: Assessmen
   const criterionCount = Object.values(criterionTags).filter(Boolean).length;
   const summary = [[...selected, ...assessment.locked].map((id) => names.get(id)).filter(Boolean).join(", "), criterionCount ? `${criterionCount} criterion tag${criterionCount > 1 ? "s" : ""}` : ""].filter(Boolean).join(" · ");
   return <details className="tagger-row">
-    <summary><span><strong>{assessment.title}</strong><small>{assessment.course} · {assessment.mark === null ? "no released mark" : formatOfficialMark(assessment.mark)}</small></span><small className="tagger-summary">{summary || "Not mapped"}{assessment.unreviewed > 0 && <em className="tagger-review"> · {assessment.unreviewed} AI link{assessment.unreviewed === 1 ? "" : "s"} to review</em>}</small></summary>
+    <summary><span><strong>{assessment.title}</strong><small>{assessment.course} · {assessment.mark === null ? "no released mark" : formatOfficialMark(assessment.mark)}</small></span><small className="tagger-summary">{summary || "Not mapped"}{assessment.unreviewed > 0 && <em className="tagger-review"> · {assessment.unreviewed} skill{assessment.unreviewed === 1 ? "" : "s"} suggested by AI, not yet confirmed</em>}</small></summary>
     <div className="tagger-body">
       {byDomain.map(([domain, items]) => <fieldset key={domain}><legend>{domain}</legend>{items.map((item) => {
         const locked = assessment.locked.includes(item.id);

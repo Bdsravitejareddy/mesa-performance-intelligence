@@ -16,13 +16,15 @@ import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cachedRead } from "@/lib/data/cached";
+import { skillHref } from "@/lib/competency/standing";
+import { summarisePortfolio, type PortfolioRow } from "@/lib/portfolio/summary";
 
 export const dynamic = "force-dynamic";
 // The written version is produced after the response, with time for one retry.
 export const maxDuration = 300;
 const SECTIONS: [SwotCategory, string, string, string][] = [
-  ["strength", "Strengths", "What you can build on", "No result is strong enough yet to build on with confidence. That reflects how few marks are in, not a verdict on you."],
-  ["weakness", "Weaknesses", "What needs attention", "Nothing in your marked work shows a clear shortfall. Skills with no evidence are never counted as weaknesses."],
+  ["strength", "Strengths", "What you can build on: skills rated a demonstrated strength on the Competencies page", "No skill has high results in two separate assessments yet, so none is called a strength. That reflects how few marks are in, not a verdict on you."],
+  ["weakness", "Weaknesses", "What needs attention: skills rated a development area on the Competencies page", "No skill has low results in two separate assessments. Skills with no evidence are never counted as weaknesses."],
   ["opportunity", "Opportunities", "Where to focus next", "The evidence doesn't point to a clear next area yet."],
   ["threat", "Threats", "What could get in your way", "Nothing in the evidence points to an outside risk right now."],
 ];
@@ -64,8 +66,10 @@ function StoryCard({ finding, text }: { finding: Finding; text: CardText }) {
   const groups = (Object.keys(CLASS_LABEL) as EvidenceClass[]).map((kind) => [kind, finding.evidence.filter((row) => row.class === kind)] as const).filter(([, rows]) => rows.length);
   return <article className="story-card">
     <h3>{text.headline}</h3>
+    {finding.aiOnly && <p className="story-ai-only">From AI grading only — not yet confirmed by an official mark.</p>}
     <p>{text.body}</p>
     {text.action && <p className="story-next"><b>Next:</b> {nextStep(text.action)}</p>}
+    {finding.competencyId && <a className="text-link story-skill-link" href={skillHref(finding.competencyId)}>See {finding.subject} on the Competencies page</a>}
     {finding.evidence.length > 0 && <details className="story-evidence"><summary>See evidence</summary>
       {finding.relevance && <p className="story-relevance">{finding.relevance}</p>}
       {groups.map(([kind, rows]) => <div key={kind}><h4>{CLASS_LABEL[kind]}</h4><ul>{rows.map((row, index) => <li key={`${row.label}-${index}`}><span>{row.label}</span><small>{row.detail}{row.date ? ` · ${new Date(row.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}` : ""}{row.source ? ` · ${row.source}` : ""}</small></li>)}</ul></div>)}
@@ -94,13 +98,14 @@ async function load() {
 }
 
 async function computeStory(supabase: SupabaseClient) {
-  const [inputs, profClaims, evidence, runs, held, entries] = await Promise.all([
+  const [inputs, profClaims, evidence, runs, held, entries, portfolio] = await Promise.all([
     loadCompetencyInputs(supabase),
     supabase.from("professional_claims").select("claim, competency_id, status, claim_type, evidence_id, supporting_evidence_id").neq("status", "withdrawn"),
     supabase.from("professional_evidence").select("id, kind"),
     supabase.from("sync_runs").select("status, started_at, finished_at, message").eq("source_name", "Mesa Nexus MCP").order("started_at", { ascending: false }).limit(20),
     supabase.from("lms_unassigned_assignments").select("id").is("resolved_course_id", null),
     supabase.from("swot_entries").select("category, title, evidence, source_reference").order("created_at", { ascending: false }),
+    supabase.from("portfolio_items").select("source, account, external_id, name, url, data"),
   ]);
   const domains = buildCompetencyMap(inputs);
   const competencies = domains.flatMap((domain) => domain.competencies.map((entry) => ({ id: entry.id, name: entry.name, domain: domain.name, assessment: entry.assessment, mappedAssessments: entry.mappedAssessments })));
@@ -122,6 +127,7 @@ async function computeStory(supabase: SupabaseClient) {
     criterionGaps,
     coverage: { assessments: inputs.assessments.length, officialMarks: new Set(inputs.submissions.filter((row) => row.official_mark !== null).map((row) => row.assessment_id)).size, finishedTerms: ((await supabase.from("lms_report_cards").select("term")).data ?? []).map((row) => row.term as string) },
     dataQuality: { syncWarning: health.level === "ok" ? null : health.warnings[0] ?? null, heldAssignments: (held.data ?? []).length },
+    projectLanguages: summarisePortfolio((portfolio.data ?? []) as PortfolioRow[]).languages,
   });
   return { findings, entries: entries.data ?? [] };
 }

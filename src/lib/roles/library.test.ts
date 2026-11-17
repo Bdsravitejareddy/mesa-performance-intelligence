@@ -43,7 +43,10 @@ describe("role readiness", async () => {
   it("ranks primary-role requirements above cross-role ones", () => {
     const importance = importanceFromLibrary(library, new Map());
     expect(importance.get("technical.python")?.stage).toBe("primary");
-    expect(importance.get("technical.python")!.weight).toBe(3);
+    expect(importance.get("technical.python")!.weight).toBe(3.5);
+    // Breadth counts: a skill all seven roles ask for outranks one a single role asks for.
+    expect(importance.get("communication.stakeholder_management")!.weight).toBeGreaterThan(importance.get("technical.sql")!.weight);
+    expect(importance.get("communication.stakeholder_management")!.reasons[0]).toMatch(/^Asked for by 7 of your 7 target roles/);
   });
 
   it("needs every competency behind a requirement and keeps self-confirmed claims apart", async () => {

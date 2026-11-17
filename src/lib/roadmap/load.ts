@@ -8,7 +8,10 @@ import { importanceFromLibrary } from "@/lib/roles/readiness";
 
 export function toRoadmapInput(entry: CompetencyMapEntry & { domain: string }): CompetencyInput {
   const evidence = entry.assessment.why.evidence;
-  return { id: entry.id, name: entry.name, domain: entry.domain, state: entry.assessment.state, confidence: entry.assessment.confidence, headline: entry.assessment.headline, mappedAssessments: entry.mappedAssessments, hasLowResult: evidence.some((row) => row.band === "low"), courses: [...new Set(evidence.map((row) => row.course))] };
+  // Only counted results decide the wording, so a set-aside practice or superseded mark cannot suggest a weakness
+  // the Skills page does not show.
+  const counted = entry.assessment.why.counted;
+  return { id: entry.id, name: entry.name, domain: entry.domain, state: entry.assessment.state, confidence: entry.assessment.confidence, headline: entry.assessment.headline, mappedAssessments: entry.mappedAssessments, hasLowResult: counted.some((row) => row.band === "low"), countedResults: counted.length, courses: [...new Set(evidence.map((row) => row.course))] };
 }
 
 export async function loadRoadmap(supabase: SupabaseClient) {

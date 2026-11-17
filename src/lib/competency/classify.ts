@@ -1,7 +1,7 @@
 // Deterministic, criteria-based competency classification. No AI and no cohort comparison.
 
 // Bump when bands or rules change so history can distinguish a rule change from new evidence.
-export const RULES_VERSION = "competency-rules-2026-10-23.2";
+export const RULES_VERSION = "competency-rules-2026-11-17.1";
 
 export const HIGH_RESULT = 85;
 export const LOW_RESULT = 65;
@@ -48,6 +48,9 @@ export type CompetencyAssessment = {
   headline: string;
   why: {
     evidence: EvidenceRow[];
+    // The rows the classification actually counted (latest per assessment, graded over practice); every headline
+    // count comes from this list, and the page shows it first so the two always agree.
+    counted: EvidenceRow[];
     benchmark: string;
     interpretation: string;
     limitations: string[];
@@ -96,7 +99,7 @@ function classifyRaw(input: CompetencyEvidence[], now: Date, bands: Bands): Comp
   const setAside = allScored.length - scored.length;
   if (setAside) limitations.push(`${setAside} practice result${setAside > 1 ? "s are" : " is"} shown but not counted, because graded work on this competency exists and ungraded practice usually gets less effort.`);
   else if (scored.length && scored.every((item) => item.stakes === "practice")) limitations.push("Rests on ungraded practice work only, which usually gets less effort than graded work; read it as a lower bound.");
-  const base = { evidence, benchmark: BENCHMARK, limitations };
+  const base = { evidence, counted: scored, benchmark: BENCHMARK, limitations };
 
   if (!evidence.length) {
     return {
@@ -128,7 +131,7 @@ function classifyRaw(input: CompetencyEvidence[], now: Date, bands: Bands): Comp
     return {
       state: "conflicting",
       confidence,
-      headline: `${high.length} high and ${low.length} low result${low.length > 1 ? "s" : ""}`,
+      headline: `${high.length} high${middle.length ? `, ${middle.length} mid-range` : ""} and ${low.length} low result${low.length > 1 ? "s" : ""}`,
       why: { ...base, interpretation: "Results point in different directions across assessments. The difference may reflect context, difficulty, format, or what each assessment actually tested; it is reported rather than averaged away.", wouldChangeThis: "Criterion-level feedback or rubric scores showing which part of each assessment drove the result." },
     };
   }
@@ -142,10 +145,10 @@ function classifyRaw(input: CompetencyEvidence[], now: Date, bands: Bands): Comp
     return { state: "insufficient_evidence", confidence, headline: "One mid-range result", why: { ...base, interpretation: "One result between the bands does not establish either a strength or a shortfall.", wouldChangeThis: "Further assessed work on this competency." } };
   }
   if (highAssessments >= 2) {
-    return { state: "demonstrated_strength", confidence, headline: `High results in ${highAssessments} assessments`, why: { ...base, interpretation: `${highAssessments} separate assessments mapped to this competency scored ${HIGH_RESULT}/100 or above, with no low results.`, wouldChangeThis: "A low result on a later mapped assessment would make this conflicting." } };
+    return { state: "demonstrated_strength", confidence, headline: `High results in ${highAssessments} assessments${middle.length ? `, ${middle.length} mid-range` : ""}`, why: { ...base, interpretation: `${highAssessments} separate assessments mapped to this competency scored ${HIGH_RESULT}/100 or above, with no low results.`, wouldChangeThis: "A low result on a later mapped assessment would make this conflicting." } };
   }
   if (lowAssessments >= 2) {
-    return { state: "development_area", confidence, headline: `Low results in ${lowAssessments} assessments`, why: { ...base, interpretation: `${lowAssessments} separate assessments mapped to this competency scored below ${LOW_RESULT}/100, with no high results.${allWhole ? " Because these are whole-assessment marks, the shortfall may sit in a specific part of the work; check the feedback." : ""}`, wouldChangeThis: "A high result on a later mapped assessment, or criterion feedback showing the low marks came from a different skill." } };
+    return { state: "development_area", confidence, headline: `Low results in ${lowAssessments} assessments${middle.length ? `, ${middle.length} mid-range` : ""}`, why: { ...base, interpretation: `${lowAssessments} separate assessments mapped to this competency scored below ${LOW_RESULT}/100, with no high results.${allWhole ? " Because these are whole-assessment marks, the shortfall may sit in a specific part of the work; check the feedback." : ""}`, wouldChangeThis: "A high result on a later mapped assessment, or criterion feedback showing the low marks came from a different skill." } };
   }
   if (highAssessments === 1) {
     return { state: "emerging", confidence, headline: "One high result, others mid-range", why: { ...base, interpretation: `One assessment scored ${HIGH_RESULT}/100 or above and ${middle.length + low.length} did not reach that band.`, wouldChangeThis: "Another high result would support a demonstrated strength." } };

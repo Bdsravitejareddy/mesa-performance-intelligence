@@ -1,4 +1,5 @@
 import type { CompetencyState, Confidence } from "@/lib/competency/classify";
+import { skillPhrase } from "@/lib/competency/standing";
 
 // Transparent, deterministic prioritisation. Every factor is shown to the user next to the recommendation.
 export const GAP_WEIGHT: Record<CompetencyState, number> = {
@@ -11,7 +12,7 @@ export const GAP_WEIGHT: Record<CompetencyState, number> = {
 };
 export const CONFIDENCE_FACTOR: Record<Confidence, number> = { high: 1, medium: 0.9, low: 0.75, insufficient: 0.7 };
 
-export type CompetencyInput = { id: string; name: string; domain: string; state: CompetencyState; confidence: Confidence; headline: string; mappedAssessments: number; hasLowResult: boolean; courses: string[] };
+export type CompetencyInput = { id: string; name: string; domain: string; state: CompetencyState; confidence: Confidence; headline: string; mappedAssessments: number; hasLowResult: boolean; courses: string[]; countedResults?: number };
 export type Importance = { weight: number; reasons: string[] };
 export type Activity = { title: string; why: string; effortHours: number; kind: "validate" | "close_gap" | "build_proof" | "broaden" | "resolve_conflict" };
 export type Recommendation = { competencyId: string; competency: string; state: CompetencyState; confidence: Confidence; importance: Importance; gap: number; confidenceFactor: number; priority: number; activity: Activity };
@@ -35,20 +36,23 @@ const PROOF: Record<string, Omit<Activity, "kind">> = {
   "business.strategy": { title: "Write a one-page strategy for a case company and test it against counter-arguments", why: "Evidence of strategic reasoning.", effortHours: 4 },
 };
 
+// Wording follows the Skills page's state for the skill, so the two pages never describe it differently.
 export function chooseActivity(input: CompetencyInput, roleRequired: boolean): Activity {
   const course = input.courses[0] ? ` from ${input.courses[0]}` : "";
+  const skill = skillPhrase(input.name);
   switch (input.state) {
     case "development_area":
-      return { kind: "close_gap", title: `Redo a ${input.name.toLowerCase()} problem${course} under similar conditions, then ask for criterion-level feedback`, why: "Two or more low results establish the gap; a redo shows whether targeted practice closes it.", effortHours: 4 };
+      return { kind: "close_gap", title: `Redo a ${skill} problem${course} under similar conditions, then ask for criterion-level feedback`, why: "Two or more low results establish the gap; a redo shows whether targeted practice closes it.", effortHours: 4 };
     case "conflicting":
-      return { kind: "resolve_conflict", title: `Do a short, targeted exercise on ${input.name.toLowerCase()} to see which result reflects your ability`, why: "Results disagree; one focused piece of evidence resolves the conflict instead of averaging it away.", effortHours: 2 };
+      return { kind: "resolve_conflict", title: `Do a short, targeted exercise on ${skill} to see which result reflects your ability`, why: "Results disagree; one focused piece of evidence resolves the conflict instead of averaging it away.", effortHours: 2 };
     case "insufficient_evidence":
-      if (input.hasLowResult) return { kind: "validate", title: `Validate the suspected ${input.name.toLowerCase()} weakness with a timed exercise`, why: "One low result is a signal, not a conclusion; a second data point confirms or clears it.", effortHours: 2 };
-      return { kind: "build_proof", ...(PROOF[input.id] ?? { title: `Produce one piece of assessed work that demonstrates ${input.name.toLowerCase()}`, why: roleRequired ? "Your target role needs it and nothing shows it yet." : "Nothing demonstrates it yet.", effortHours: 6 }) };
+      if (input.hasLowResult) return { kind: "validate", title: `Check your one low ${skill} result with a second, timed exercise`, why: "One low result is a signal to check, not a weakness; a second result confirms or clears it.", effortHours: 2 };
+      if (input.countedResults) return { kind: "validate", title: `Add a second marked piece of work on ${skill}`, why: "One mid-range result shows neither a strength nor a gap; a second result starts to settle it.", effortHours: 3 };
+      return { kind: "build_proof", ...(PROOF[input.id] ?? { title: `Produce one piece of assessed work that demonstrates ${skill}`, why: roleRequired ? "Your target role needs it and nothing shows it yet." : "Nothing demonstrates it yet.", effortHours: 6 }) };
     case "emerging":
-      return { kind: "broaden", title: `Show ${input.name.toLowerCase()} again in a different course or context`, why: "One high result is early evidence; a second, different context would establish a strength.", effortHours: 3 };
+      return { kind: "broaden", title: `Show ${skill} again in a different course or context`, why: "One high result is early evidence; a second, different context would establish a strength.", effortHours: 3 };
     default:
-      return { kind: "broaden", title: `Apply ${input.name.toLowerCase()} in a project outside coursework`, why: "Extends existing evidence into a professional context.", effortHours: 6 };
+      return { kind: "broaden", title: `Apply ${skill} in a project outside coursework`, why: "Extends existing evidence into a professional context.", effortHours: 6 };
   }
 }
 

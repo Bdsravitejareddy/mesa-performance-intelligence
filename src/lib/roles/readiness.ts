@@ -37,7 +37,13 @@ function statusFor(competencyId: string, competencies: Map<string, CompetencyVie
 }
 
 export type RequirementReadiness = LibraryRequirement & { status: RequirementStatus; matched?: { shown: number; total: number } };
-export type RoleReadiness = { role: LibraryRole; requirements: RequirementReadiness[]; skillRequirements: number; evidenced: number; demonstrated: number; partial: number; claimed: number; selfConfirmed: number; gaps: number; unknown: number; eligibility: RequirementReadiness[] };
+// One row per distinct skill requirement: the same skill asked for in several postings is merged, and askedBy
+// says how many requirement lines it stands for, so the list shown is exactly what the counts count.
+export type SkillRequirement = RequirementReadiness & { askedBy: number };
+export type ReadinessBucket = "shown" | "mixed" | "not_shown";
+export const BUCKET_OF: Record<RequirementStatus, ReadinessBucket | null> = { demonstrated: "shown", partial: "shown", supported_claim: "shown", gap: "mixed", conflicting: "mixed", self_confirmed: "not_shown", unverified_claim: "not_shown", missing_evidence: "not_shown", eligibility: null, unmapped: null };
+export const BUCKET_LABELS: Record<ReadinessBucket, string> = { shown: "Shown in your work (fully or partly)", mixed: "Low or mixed results", not_shown: "Not yet shown" };
+export type RoleReadiness = { role: LibraryRole; requirements: RequirementReadiness[]; skills: SkillRequirement[]; unmapped: RequirementReadiness[]; skillRequirements: number; evidenced: number; demonstrated: number; partial: number; claimed: number; selfConfirmed: number; gaps: number; unknown: number; eligibility: RequirementReadiness[] };
 
 const SHOWN: RequirementStatus[] = ["demonstrated", "partial", "supported_claim"];
 
@@ -66,16 +72,20 @@ export function roleReadiness(role: LibraryRole, competencies: Map<string, Compe
   });
   // The same skill asked for in two postings is one requirement: merge requirements that rest on the same
   // competencies, keeping the first quote, so nothing is counted twice.
-  const seen = new Set<string>();
-  const skill = requirements.filter((item) => item.status !== "eligibility" && item.status !== "unmapped").filter((item) => {
+  const merged = new Map<string, SkillRequirement>();
+  for (const item of requirements) {
+    if (item.status === "eligibility" || item.status === "unmapped") continue;
     const key = [...item.competencyIds].sort().join("|");
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+    const current = merged.get(key);
+    if (current) current.askedBy += 1;
+    else merged.set(key, { ...item, askedBy: 1 });
+  }
+  const skill = [...merged.values()];
   return {
     role,
     requirements,
+    skills: skill,
+    unmapped: requirements.filter((item) => item.status === "unmapped"),
     skillRequirements: skill.length,
     evidenced: skill.filter((item) => item.status === "demonstrated" || item.status === "partial" || item.status === "supported_claim").length,
     demonstrated: skill.filter((item) => item.status === "demonstrated").length,
@@ -91,6 +101,9 @@ export function roleReadiness(role: LibraryRole, competencies: Map<string, Compe
 // Importance for the roadmap: primary-role requirements outrank cross-role ones; course coverage adds a little.
 export function importanceFromLibrary(library: LibraryRole[], mappedAssessments: Map<string, number>): Map<string, Importance & { stage: "primary" | "cross" | "course" }> {
   const result = new Map<string, Importance & { stage: "primary" | "cross" | "course" }>();
+  // A skill many target roles ask for matters more than one only a single role asks for: the strongest single
+  // requirement sets the base and each further role adds a quarter point, up to 1.5.
+  const askers = new Map<string, Set<string>>();
   const bump = (id: string, weight: number, reason: string, stage: "primary" | "cross") => {
     const current = result.get(id);
     if (!current || weight > current.weight) result.set(id, { weight, reasons: [reason, ...(current?.reasons ?? []).filter((item) => item !== reason)].slice(0, 3), stage: current?.stage === "primary" ? "primary" : stage });
@@ -100,7 +113,13 @@ export function importanceFromLibrary(library: LibraryRole[], mappedAssessments:
     if (requirement.eligibility) continue;
     const primary = role.tier === "primary";
     const weight = (requirement.kind === "preferred" ? 2 : 3) * (primary ? 1 : 0.5);
-    for (const id of requirement.competencyIds) bump(id, weight, `${requirement.kind === "preferred" ? "Preferred" : "Required"} by ${role.name}`, primary ? "primary" : "cross");
+    for (const id of requirement.competencyIds) { bump(id, weight, `${requirement.kind === "preferred" ? "Preferred" : "Required"} by ${role.name}`, primary ? "primary" : "cross"); askers.set(id, (askers.get(id) ?? new Set()).add(role.name)); }
+  }
+  for (const [id, roles] of askers) {
+    const current = result.get(id)!;
+    if (roles.size < 2) continue;
+    current.weight += Math.min(1.5, (roles.size - 1) * 0.25);
+    current.reasons = [`Asked for by ${roles.size} of your ${library.length} target roles`, current.reasons[0]];
   }
   for (const [id, count] of mappedAssessments) {
     if (!count) continue;

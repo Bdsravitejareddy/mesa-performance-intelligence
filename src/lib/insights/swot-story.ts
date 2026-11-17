@@ -1,11 +1,15 @@
 import type { CompetencyAssessment, EvidenceRow } from "@/lib/competency/classify";
 import type { RoleReadiness } from "@/lib/roles/readiness";
+import { aiOnly as restsOnAi, projectContext, projectNote, STANDING_OF } from "@/lib/competency/standing";
 
 // The SWOT as a small set of ranked findings, each one a short story: a takeaway, what the evidence suggests and
 // why it matters, and (where useful) one concrete next step. Every finding is built from structured evidence and
 // keeps its sources; the written wording can be replaced by an AI rewrite (swot-narrative.ts), but the facts,
 // ranking and evidence never come from the model. Missing evidence is never a weakness, a CV claim is never
 // independent corroboration, and a qualification is context rather than proof of proficiency.
+// Strengths and weaknesses come from the shared competency standing (standing.ts): a Strength is exactly a skill
+// the Skills page calls a demonstrated strength and a Weakness exactly a demonstrated development area. One high
+// result, mixed results and single-assessment criterion gaps are things to look at next, so they are Opportunities.
 
 export type SwotCategory = "strength" | "weakness" | "opportunity" | "threat";
 export type EvidenceClass = "official" | "ai_estimate" | "self_reported" | "independent_work" | "role_requirement" | "data";
@@ -29,6 +33,10 @@ export type Finding = {
   evidence: FindingEvidence[];
   // Every figure the wording may use; an AI rewrite that states any other number is rejected.
   numbers: number[];
+  // The skill this finding is about, for a link to its row on the Skills page.
+  competencyId?: string;
+  // Every counted result behind it is a blind AI grade: the card must say so whatever the wording.
+  aiOnly?: boolean;
 };
 
 export type StoryCompetency = { id: string; name: string; domain: string; assessment: CompetencyAssessment; mappedAssessments: number };
@@ -41,6 +49,8 @@ export type StoryInputs = {
   // finishedTerms: terms whose official report card is in, so their course results are final.
   coverage: { assessments: number; officialMarks: number; finishedTerms?: string[] };
   dataQuality: { syncWarning: string | null; heldAssignments: number };
+  // Languages across GitHub projects: context beside an unassessed technical skill, never a mark.
+  projectLanguages?: { name: string; projects: number }[];
 };
 
 // Work artefacts someone else can inspect. A resume, a certificate or the member's own confirmation is not.
@@ -87,9 +97,6 @@ const EXERCISES: Record<string, [string, string]> = {
 const exercise = (id: string, name: string): [string, string] => EXERCISES[id] ?? [`complete one short, marked exercise on ${name.toLowerCase()}`, "where you stand on it"];
 
 const round = (value: number) => Math.round(value * 10) / 10;
-const scored = (rows: EvidenceRow[]) => rows.filter((row) => row.mark !== null && row.mappingSource !== "practice_test");
-const official = (rows: EvidenceRow[]) => scored(rows).filter((row) => row.evidenceKind !== "ai_grade");
-const aiRows = (rows: EvidenceRow[]) => scored(rows).filter((row) => row.evidenceKind === "ai_grade");
 const courseName = (course: string) => course.replace(/\s+with\s+.*$/i, "").replace(/^the\s+/i, "").trim();
 const GENERIC = /^(mid[- ]?term|end[- ]?term|final|term)?\s*(assignment|assessment|exam|quiz|test|project|submission)\s*\d*$/i;
 // Criterion rows carry their criterion after " · "; it is named separately, so the title drops it.
@@ -127,58 +134,69 @@ export function buildSwotStory(input: StoryInputs): Finding[] {
   for (const item of input.competencies) {
     const { state, confidence } = item.assessment;
     const rows = item.assessment.why.evidence;
-    const off = official(rows), ai = aiRows(rows);
+    // Facts come from the counted list, the same rows the Skills page counts for this skill.
+    const counted = item.assessment.why.counted.filter((row) => row.mark !== null);
+    const standing = STANDING_OF[state];
+    const onlyAi = restsOnAi(item.assessment);
+    const off = counted.filter((row) => row.evidenceKind !== "ai_grade"), ai = counted.filter((row) => row.evidenceKind === "ai_grade");
     const highs = off.filter((row) => row.band === "high"), lows = off.filter((row) => row.band === "low");
     const aiHighs = ai.filter((row) => row.band === "high"), aiLows = ai.filter((row) => row.band === "low");
     const relevance = relevanceOf(item.id);
     const [task, establishes] = exercise(item.id, item.name);
     const claims = claimsFor(item.id).filter((claim) => claim.claimType !== "credential");
-    const base = { subject: item.name, relevance, evidence: [...evidenceOf(rows), ...claimEvidence(claimsFor(item.id))] };
+    const base = { subject: item.name, relevance, competencyId: item.id, evidence: [...evidenceOf(rows), ...claimEvidence(claimsFor(item.id))] };
     const confidenceBoost = confidence === "high" ? 2 : confidence === "medium" ? 1 : 0;
-    const best = [...off].sort((a, b) => b.mark! - a.mark!)[0];
-    const worst = [...off].sort((a, b) => a.mark! - b.mark!)[0];
     const cvNote = claims.length ? ` Your CV also describes this, though that is your own account rather than separate proof.` : "";
+    const allHighs = counted.filter((row) => row.band === "high").sort((a, b) => b.mark! - a.mark!);
+    const allLows = counted.filter((row) => row.band === "low").sort((a, b) => a.mark! - b.mark!);
 
-    if (state === "demonstrated_strength" && best) {
-      findings.push({ ...base, key: `strength:${item.id}`, category: "strength", kind: "strength", priority: 20 + weight(item.id) * 3 + highs.length + confidenceBoost,
-        keyFact: `${highs.length} high official results, best ${result(best)}`,
-        headline: `${item.name} is one of your clearest strengths.`,
-        body: `${highs.length} of your official results for it are high, the best being ${result(best)}.${relevance ? ` ${relevance}` : ""}`,
-        action: null, numbers: [highs.length, ...off.map((row) => row.mark!)] });
-    } else if (state === "conflicting" && off.length && highs.length >= 2 && highs.length >= lows.length * 3 && worst) {
-      findings.push({ ...base, key: `strength:mostly:${item.id}`, category: "strength", kind: "mostly_strong", priority: 18 + weight(item.id) * 3 + highs.length + confidenceBoost,
+    if (standing === "strength" && allHighs[0]) {
+      const best = allHighs[0];
+      findings.push({ ...base, key: `strength:${item.id}`, category: "strength", kind: "strength", aiOnly: onlyAi, priority: (onlyAi ? 12 : 20) + weight(item.id) * 3 + allHighs.length + confidenceBoost,
+        keyFact: onlyAi ? `${allHighs.length} high AI estimates, best ${result(best)}, no official mark yet` : `${allHighs.length} high results, best ${result(best)}`,
+        headline: onlyAi ? `${item.name} looks strong, from AI grading only.` : `${item.name} is one of your clearest strengths.`,
+        body: onlyAi
+          ? `AI estimates rate ${allHighs.length} pieces of your work high, the best ${result(best)}. No official mark confirms it yet, so hold it as a strength the AI sees rather than one your faculty have marked.${relevance ? ` ${relevance}` : ""}`
+          : `${allHighs.length} of your results for it are high, the best being ${result(best)}.${ai.length ? " Some of these are AI estimates, labelled in the evidence." : ""}${relevance ? ` ${relevance}` : ""}`,
+        action: onlyAi ? `Next: ${task}. A marked result would show ${establishes}.` : null, numbers: [allHighs.length, ...counted.map((row) => row.mark!)] });
+    } else if (standing === "gap" && allLows[0]) {
+      const worst = allLows[0];
+      findings.push({ ...base, key: `weakness:${item.id}`, category: "weakness", kind: "development", aiOnly: onlyAi, priority: (onlyAi ? 14 : 24) + weight(item.id) * 4 + allLows.length + confidenceBoost,
+        keyFact: onlyAi ? `${allLows.length} low AI estimates, lowest ${result(worst)}, no official mark yet` : `${allLows.length} low results, lowest ${result(worst)}`,
+        headline: onlyAi ? `${item.name} looks weak, from AI grading only.` : `${item.name} is holding your marks back.`,
+        body: onlyAi
+          ? `AI estimates rate ${allLows.length} pieces of your work low, the lowest ${result(worst)}. No official mark confirms it, so treat it as a likely gap to check rather than a settled one.`
+          : `${allLows.length} of your results for it are low, the lowest ${result(worst)}.${relevance ? ` ${relevance} That makes it worth fixing before it shows up again.` : " More than one result points the same way, so it is a pattern rather than a bad day."}`,
+        action: `Next: ${task}, then compare it with what you wrote for ${named(worst)}. It would show whether focused practice closes the gap.`, numbers: [allLows.length, ...counted.map((row) => row.mark!)] });
+    } else if (standing === "mixed" && off.length && highs.length >= 2 && highs.length >= lows.length * 3 && lows[0]) {
+      const best = [...highs].sort((a, b) => b.mark! - a.mark!)[0], worst = [...lows].sort((a, b) => a.mark! - b.mark!)[0];
+      findings.push({ ...base, key: `opportunity:mostly:${item.id}`, category: "opportunity", kind: "mostly_strong", priority: 18 + weight(item.id) * 3 + highs.length + confidenceBoost,
         keyFact: `${highs.length} high official results and one low, ${result(worst)}`,
         headline: `${item.name} is mostly strong, with one result that doesn't fit.`,
-        body: `${highs.length} official results are high, including ${result(best)}. The exception is ${result(worst)}, so that one mark may say more about the task than about the skill.`,
+        body: `${highs.length} official results are high, including ${result(best)}. The exception is ${result(worst)}, so it counts as mixed rather than a strength until that is settled; the one mark may say more about the task than the skill.`,
         action: `Next: go back to ${named(worst)}, find the part that cost you marks, and redo just that part.`, numbers: [highs.length, ...off.map((row) => row.mark!)] });
-    } else if (state === "emerging" && highs[0]) {
+    } else if (standing === "emerging" && highs[0]) {
       const top = highs[0];
-      findings.push({ ...base, key: `strength:promising:${item.id}`, category: "strength", kind: "promising", priority: 14 + weight(item.id) * 3 + confidenceBoost,
+      findings.push({ ...base, key: `opportunity:promising:${item.id}`, category: "opportunity", kind: "promising", priority: 14 + weight(item.id) * 3 + confidenceBoost,
         keyFact: `an official ${result(top)}`,
-        headline: `${item.name} looks like a promising strength.`,
+        headline: `${item.name} is a promising sign, not yet a strength.`,
         body: `Your official ${top.granularity === "criterion" ? `score of ${result(top)}` : `mark of ${result(top)}`} is a strong result ${GENERIC.test(short(top.assessmentTitle)) ? "for that course" : `in ${courseName(top.course)}`}. It is one result, so it tells you about that course rather than settling the question.${cvNote}`,
         action: `Next: ${task}. It would show ${establishes}.`, numbers: [top.mark!, ...off.map((row) => row.mark!)] });
-    } else if (state === "development_area" && worst) {
-      findings.push({ ...base, key: `weakness:${item.id}`, category: "weakness", kind: "development", priority: 24 + weight(item.id) * 4 + lows.length + confidenceBoost,
-        keyFact: `${lows.length} low official results, lowest ${result(worst)}`,
-        headline: `${item.name} is holding your marks back.`,
-        body: `${lows.length} official results for it are low, the lowest ${result(worst)}.${relevance ? ` ${relevance} That makes it worth fixing before it shows up again.` : " More than one result points the same way, so it is a pattern rather than a bad day."}`,
-        action: `Next: ${task}, then compare it with what you wrote for ${named(worst)}. It would show whether focused practice closes the gap.`, numbers: [lows.length, ...off.map((row) => row.mark!)] });
-    } else if (state === "conflicting") {
-      const aiOnly = !off.length;
-      const hi = aiOnly ? aiHighs : highs, lo = aiOnly ? aiLows : lows;
+    } else if (standing === "mixed") {
+      const aiOnlyConflict = !off.length;
+      const hi = aiOnlyConflict ? aiHighs : highs, lo = aiOnlyConflict ? aiLows : lows;
       if (!hi.length || !lo.length) continue;
-      if (!aiOnly) conflictAnchors.set(`weakness:conflict:${item.id}`, { low: lo[0], highs: hi });
-      findings.push({ ...base, key: `weakness:conflict:${item.id}`, category: "weakness", kind: "conflict", priority: (aiOnly ? 8 : 16) + weight(item.id) * 3 + confidenceBoost,
-        keyFact: aiOnly ? `AI estimates: ${hi.length} high, ${lo.length} low` : `${result(hi[0])} against ${result(lo[0])}`,
-        headline: aiOnly ? `The AI's read on your ${item.name.toLowerCase()} is split.` : `Your ${item.name.toLowerCase()} results point in different directions.`,
-        body: aiOnly
+      if (!aiOnlyConflict) conflictAnchors.set(`opportunity:conflict:${item.id}`, { low: lo[0], highs: hi });
+      findings.push({ ...base, key: `opportunity:conflict:${item.id}`, category: "opportunity", kind: "conflict", aiOnly: aiOnlyConflict, priority: (aiOnlyConflict ? 8 : 16) + weight(item.id) * 3 + confidenceBoost,
+        keyFact: aiOnlyConflict ? `AI estimates: ${hi.length} high, ${lo.length} low` : `${result(hi[0])} against ${result(lo[0])}`,
+        headline: aiOnlyConflict ? `The AI's read on your ${item.name.toLowerCase()} is split.` : `Your ${item.name.toLowerCase()} results point in different directions.`,
+        body: aiOnlyConflict
           ? `AI estimates of your work rate ${hi.length} pieces high and ${lo.length} low, and there is no official mark yet to settle it. Treat it as an open question, not a weakness.`
           : `You scored ${result(hi[0])} but ${result(lo[0])}. An average would hide that gap, and the two tasks may be testing different things.`,
-        action: `Next: ${task}. It would show ${establishes}.`, numbers: [hi.length, lo.length, ...scored(rows).map((row) => row.mark!)] });
-    } else if (state === "emerging" && aiHighs[0] && !off.length) {
+        action: `Next: ${task}. It would show ${establishes}.`, numbers: [hi.length, lo.length, ...counted.map((row) => row.mark!)] });
+    } else if (standing === "emerging" && aiHighs[0] && !off.length) {
       const top = aiHighs[0];
-      findings.push({ ...base, key: `opportunity:ai:${item.id}`, category: "opportunity", kind: "ai_signal", priority: 6 + weight(item.id) * 3,
+      findings.push({ ...base, key: `opportunity:ai:${item.id}`, category: "opportunity", kind: "ai_signal", aiOnly: true, priority: 6 + weight(item.id) * 3,
         keyFact: `an AI estimate of ${result(top)}`,
         headline: `There's an early, unofficial signal in ${item.name.toLowerCase()}.`,
         body: `An AI estimate rated ${named(top).replace(/^your /, "your ")} work ${top.mark}, but no official mark covers ${item.name.toLowerCase()} yet. It is worth testing, not yet worth claiming.`,
@@ -195,7 +213,7 @@ export function buildSwotStory(input: StoryInputs): Finding[] {
     const low = conflictAnchors.get(group[0].key)!.low;
     const highs = [...new Map(group.flatMap((finding) => conflictAnchors.get(finding.key)!.highs).map((row) => [row.assessmentId, row])).values()].sort((a, b) => b.mark! - a.mark!);
     const skills = group.map((finding) => finding.subject);
-    const merged: Finding = { key: `weakness:outlier:${low.assessmentId}`, category: "weakness", kind: "conflict", subject: courseName(low.course), priority: Math.max(...group.map((finding) => finding.priority)) + 2,
+    const merged: Finding = { key: `opportunity:outlier:${low.assessmentId}`, category: "opportunity", kind: "conflict", subject: courseName(low.course), priority: Math.max(...group.map((finding) => finding.priority)) + 2,
       relevance: group.map((finding) => finding.relevance).find(Boolean) ?? null,
       keyFact: `${result(low)} against ${result(highs[0])} for the same skills`,
       headline: `One assessment sits well below the rest: ${named(low).replace(/^your /, "your ")}.`,
@@ -208,7 +226,7 @@ export function buildSwotStory(input: StoryInputs): Finding[] {
   }
 
   for (const gap of input.criterionGaps) {
-    findings.push({ key: `weakness:criterion:${gap.assessment}:${gap.label}`, category: "weakness", kind: "criterion_gap", subject: gap.label, priority: 15, relevance: null,
+    findings.push({ key: `opportunity:criterion:${gap.assessment}:${gap.label}`, category: "opportunity", kind: "criterion_gap", subject: gap.label, priority: 15, relevance: null,
       keyFact: `${gap.label}: ${gap.score}/${gap.max} inside an overall ${gap.overall}`,
       headline: `${gap.label} cost you marks in ${short(gap.assessment)}.`,
       body: `Your overall mark was ${gap.overall}, but the faculty gave ${gap.label.toLowerCase()} ${gap.score} out of ${gap.max}. It is one assessment, so treat it as a topic to check rather than a settled weakness.`,
@@ -223,13 +241,15 @@ export function buildSwotStory(input: StoryInputs): Finding[] {
     const top = unassessed[0];
     const [task, establishes] = exercise(top.id, top.name);
     const names = unassessed.slice(0, 3).map((item) => item.name);
+    const contexts = unassessed.slice(0, 3).map((item) => projectContext(item.id, input.projectLanguages ?? [])).filter((item) => item !== null);
+    const statusOf = (item: StoryCompetency) => { const counted = item.assessment.why.counted; return counted.some((row) => row.band === "low") ? "one low result so far, not enough to conclude anything" : counted.length ? "one result so far, not enough to conclude anything" : "no marked evidence yet"; };
     findings.push({ key: "opportunity:unassessed", category: "opportunity", kind: "unassessed_role_skills", subject: top.name, priority: 22, relevance: `Your target roles list ${list(names)}${unassessed.length > 3 ? " and others" : ""} as requirements.`,
-      keyFact: `${unassessed.length} required skills with no assessed evidence, starting with ${list(names)}`,
+      keyFact: `${unassessed.length} required skills with too little marked evidence, starting with ${list(names)}`,
       headline: `Several skills your target roles need haven't been tested yet.`,
-      body: `Nothing marked so far covers ${list(names)}${unassessed.length > 3 ? `, or ${unassessed.length - 3} other skills the roles ask for` : ""}. That is a gap in the record, not a weakness — but employers will look for it.`,
+      body: `There is too little marked work on ${list(names)}${unassessed.length > 3 ? `, or ${unassessed.length - 3} other skills the roles ask for,` : ""} to say anything yet.${contexts.length ? ` ${contexts.map((item) => projectNote(item).replace(/^./, (letter) => letter.toUpperCase())).join("; ")}.` : ""} That is a gap in the record, not a weakness — but employers will look for it.`,
       action: `Next: start with ${top.name}: ${task}. It would show ${establishes}.`,
-      evidence: unassessed.map((item) => ({ class: "role_requirement" as const, label: item.name, detail: `Required by ${list(primaryRoles(item.id))}; ${item.assessment.why.evidence.some((row) => row.band === "low") ? "one low result so far, not enough to conclude anything" : "no marked evidence yet"}` })),
-      numbers: [unassessed.length, unassessed.length - 3] });
+      evidence: unassessed.map((item) => { const context = projectContext(item.id, input.projectLanguages ?? []); return { class: "role_requirement" as const, label: item.name, detail: `Required by ${list(primaryRoles(item.id))}; ${statusOf(item)}${context ? `; ${projectNote(context)}` : ""}` }; }),
+      numbers: [unassessed.length, unassessed.length - 3, ...contexts.map((item) => item.projects)] });
     unassessed.forEach((item) => used.add(item.id));
   }
 
@@ -292,8 +312,8 @@ const lower = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
 // Skill names read in lower case mid-sentence; course and assessment names keep their capitals.
 const subjectOf = (finding: Finding) => /:[a-z]+\.[a-z_]+$/.test(finding.key) ? finding.subject.toLowerCase() : finding.subject;
 export function fallbackStandsOut(findings: Finding[]): string {
-  const strength = findings.find((finding) => finding.category === "strength");
-  const tension = findings.find((finding) => finding.category === "weakness");
+  const strength = findings.find((finding) => finding.category === "strength") ?? findings.find((finding) => finding.kind === "promising" || finding.kind === "mostly_strong");
+  const tension = findings.find((finding) => finding.category === "weakness") ?? findings.find((finding) => finding.kind === "conflict");
   const coverage = findings.find((finding) => finding.kind === "coverage");
   const next = startHere(findings);
   const parts = [
