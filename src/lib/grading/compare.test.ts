@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compareWithFeedback, splitPoints } from "./compare";
+import { compareWithFeedback, overlapVerdict, splitPoints } from "./compare";
 
 describe("feedback comparison", () => {
   it("splits faculty feedback into points", () => {
@@ -19,6 +19,13 @@ describe("feedback comparison", () => {
     expect(result.gaps).toEqual({ aiMinusOfficial: -8, codeMinusOfficial: 5, aiMinusCode: -13 });
     expect(result.agreement).toBe("moderate");
     expect(result.note).toMatch(/not evidence that either is wrong/);
+  });
+
+  it("gives an overlap verdict that follows the share", () => {
+    expect(overlapVerdict(2, 13)).toMatchObject({ percent: 15, level: "low" });
+    expect(overlapVerdict(4, 10)?.level).toBe("partial");
+    expect(overlapVerdict(6, 10)?.text).toMatch(/broadly similar/);
+    expect(overlapVerdict(0, 0)).toBeNull();
   });
 
   it("reports when there is no official mark to compare with", () => {

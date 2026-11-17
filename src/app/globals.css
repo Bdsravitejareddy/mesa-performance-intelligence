@@ -923,3 +923,14 @@ html[data-story-enter="from-below"] .main-content{animation:storyDrop .28s cubic
 .radar-values{width:100%;max-width:340px;border-collapse:collapse;font-size:12.5px;color:var(--ink-2);font-variant-numeric:tabular-nums}
 .radar-values th,.radar-values td{padding:3px 6px;border-bottom:1px solid var(--line);text-align:right;font-weight:400}.radar-values th[scope=row],.radar-values thead th:first-child{text-align:left;color:var(--ink)}
 .radar-values thead th{font-size:11.5px;color:var(--muted);white-space:nowrap}.radar-values thead th:first-child{font-weight:700}.radar-values i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px}
+
+/* grading and course pages */
+.loss-bars .loss-unattributed b{background:repeating-linear-gradient(45deg,#c77970 0 4px,rgba(199,121,112,.35) 4px 8px)}.loss-bars .loss-unattributed em{color:#3c403a}
+.graded-files{margin:0 0 4px;font-size:12.5px;color:#3c403a}.graded-files p{margin:0;overflow-wrap:anywhere}
+.criteria-named td strong{display:block;font-size:13px}.criteria-named td small{display:block;margin-top:2px}
+.course-summary{display:grid;gap:10px;margin-bottom:16px}.course-summary h2,.course-summary p{margin:0}
+.course-summary-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}.course-summary-tiles>div{display:flex;flex-direction:column;gap:3px;padding:12px 14px;border:1px solid #d6d5ce;border-radius:12px;min-width:0}
+.course-summary-tiles span{font-size:11.5px;color:#586a6d;text-transform:uppercase;letter-spacing:.04em}.course-summary-tiles strong{font-size:24px;color:#121412}.course-summary-tiles strong small{font-size:13px;color:#586a6d}.course-summary-tiles>div>small{font-size:12px;color:#3c403a;overflow-wrap:anywhere}
+.material-row>span>span{display:flex;flex-direction:column;gap:4px}.material-copies summary{cursor:pointer;font-size:11px;color:#258576}.material-copies small{display:block}
+.material-subhead{margin:18px 0 4px;font-size:14px}
+.assessment-edit{padding:0 0 10px}.assessment-edit>summary{cursor:pointer;color:#258576;font-size:11.5px;font-weight:700;padding:4px 0 8px;display:flex;align-items:center;gap:4px}.assessment-edit[open]{padding:4px 0 12px}

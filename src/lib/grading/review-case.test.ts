@@ -23,4 +23,10 @@ describe("case for a higher mark", () => {
     expect(result.strength).toBe("moderate");
     expect(result.counterpoints.join(" ")).toMatch(/inferred from the brief[\s\S]*late/);
   });
+  it("calls 2 of 13 shared points low overlap, as a caveat rather than support", () => {
+    const comparison = { agreed: [{ feedback: "a", ai: "b", shared: [] }, { feedback: "c", ai: "d", shared: [] }], facultyOnly: Array.from({ length: 11 }, (_, index) => `point ${index}`), aiOnly: [], gaps: { aiMinusOfficial: 15, codeMinusOfficial: 20, aiMinusCode: -5 }, agreement: "far" as const, note: "" };
+    const result = reviewCase({ ...base, comparison, report: report([dim("A", 9), dim("B", 8), dim("C", 8)]) })!;
+    expect(result.corroboration.join(" ")).not.toMatch(/comparable|similar/);
+    expect(result.counterpoints[0]).toBe("The AI independently raised 2 of the faculty's 13 points (15%) — low overlap: the AI missed most of what the faculty raised.");
+  });
 });

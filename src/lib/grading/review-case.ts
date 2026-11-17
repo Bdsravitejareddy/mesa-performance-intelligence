@@ -1,6 +1,6 @@
 import type { BlindReport } from "@/lib/quality/engine";
 import type { CodeReport } from "./code-score";
-import type { Comparison } from "./compare";
+import { overlapVerdict, type Comparison } from "./compare";
 
 // When a blind grade sits well above the official mark, this sets out whether the gap rests on verifiable
 // evidence. It never says the official mark is wrong: it lists the criteria, the exact quotes from the work,
@@ -38,10 +38,12 @@ export function reviewCase(input: {
   const parts = input.codeReport?.parts ?? [];
   const corroboration: string[] = [];
   if (completeness !== null && parts.length) corroboration.push(`The completeness check found ${parts.filter((part) => part.answered).length} of ${parts.length} parts of the brief answered (${completeness}%).`);
-  const agreed = input.comparison?.agreed.length ?? 0;
-  if (agreed) corroboration.push(`The AI independently raised ${agreed} of the same point${agreed === 1 ? "" : "s"} as the faculty, so it read the work in a comparable way.`);
+  const overlap = overlapVerdict(input.comparison?.agreed.length ?? 0, (input.comparison?.agreed.length ?? 0) + (input.comparison?.facultyOnly.length ?? 0));
+  if (overlap?.level === "high") corroboration.push(overlap.text);
 
   const counterpoints: string[] = [];
+  // Little shared ground with the faculty weakens the case, so it is said here rather than offered as support.
+  if (overlap && overlap.level !== "high") counterpoints.push(overlap.text);
   if (!OFFICIAL_SOURCES.has(input.standardSource)) counterpoints.push("The AI graded against criteria inferred from the brief, not the official rubric; official criteria or weights may differ.");
   if (input.late) counterpoints.push("The work was submitted late; a late penalty, if applied, is part of the official mark and invisible to the AI.");
   if (completeness !== null && completeness < 70) counterpoints.push(`The completeness check could locate only ${completeness}% of the brief's parts; if parts are missing, the official mark may reflect that.`);

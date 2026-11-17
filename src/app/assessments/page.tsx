@@ -38,7 +38,7 @@ export default async function AssessmentsPage() {
     {byCourse.map((course) => <section key={course} className="content-panel register-course">
       <h2>{shortCourse(course)} <span className="panel-count">{rows.filter((row) => row.course === course).length}</span></h2>
       <div className="register-table" role="table">
-        <div className="register-head" role="row"><span>Assessment</span><span>Status</span><span><Cue label="Official" /></span><span><Cue label="AI" /></span><span><Cue label="Completeness" /></span></div>
+        <div className="register-head" role="row"><span>Assessment</span><span>Status</span><span><Cue label="Official" /></span><span><Cue label="AI" /></span><span><Cue label="Completeness">Completeness check</Cue></span></div>
         {rows.filter((row) => row.course === course).map((row) => <Link key={row.id} href={row.ai !== null || row.code !== null ? "/grading" : "/marks"} className={`register-row status-${row.status}`} role="row">
           <span className="register-title"><strong>{row.title}</strong><small>{[row.submittedAt && `submitted ${row.submittedAt}${row.timing === "late" ? " (late)" : ""}`, row.group && "group", row.files && `${row.files} file${row.files === 1 ? "" : "s"}`, row.links && `${row.links} link${row.links === 1 ? "" : "s"}${row.linksImported < row.links ? ` (${row.links - row.linksImported} importing)` : ""}`, row.feedback && "feedback"].filter(Boolean).join(" · ") || (row.status === "not_submitted" ? "no submission recorded" : row.status === "marked" ? "marked on the LMS" : "submitted on the LMS — no file or link to import")}</small></span>
           <span><em className={`status-chip chip-${row.status}`}>{STATUS[row.status]}</em></span>
@@ -48,7 +48,7 @@ export default async function AssessmentsPage() {
         </Link>)}
       </div>
     </section>)}
-    {rows.length > 0 && <Why label="How these are worked out">Official marks come from the LMS. “AI” is a blind grade against the assignment brief and course material, and never sees the official mark. “Code” is a deterministic completeness check: the share of the brief&apos;s questions and parts your work answers. Submissions arrive from Nexus pages and your Drive (linked Sheets and Docs are fetched by the Drive connector), then are graded nightly.</Why>}
+    {rows.length > 0 && <Why label="How these are worked out">Official marks come from the LMS. “AI” is a blind grade against the assignment brief and course material, and never sees the official mark. “Completeness check” is deterministic: the share of the brief&apos;s questions and parts your work answers. Submissions arrive from Nexus pages and your Drive (linked Sheets and Docs are fetched by the Drive connector), then are graded nightly.</Why>}
   </div></AppShell>;
 }
 
@@ -56,7 +56,7 @@ const SOURCE_NOTE = { faculty_breakdown: "Split by the faculty's own criterion s
 
 function LossCard({ row }: { row: Row }) {
   const loss = row.loss!;
-  const top = Math.max(...loss.items.map((item) => item.lost), 1);
+  const top = Math.max(...loss.items.map((item) => item.lost), loss.unattributed, 1);
   return <article className="loss-card">
     <header><div><h3>{shortCourse(row.course)}</h3><small>{row.title}</small></div><div className="loss-figure"><strong>−{fmt(loss.lost)}</strong><small>{fmt(loss.official)}/100</small></div></header>
     <p className="loss-reading">{loss.interpretation}</p>
@@ -64,7 +64,7 @@ function LossCard({ row }: { row: Row }) {
       <span className="loss-name">{item.criterion}{item.max !== undefined && <small> {item.got !== undefined ? `${fmt(item.got)}/${fmt(item.max)}` : `of ${fmt(item.max)} marks`}</small>}</span>
       <i><b style={{ width: `${(item.lost / top) * 100}%` }} /></i><em>−{fmt(item.lost)}</em>
       {item.detail && <small className="loss-detail">{item.detail}</small>}
-    </li>)}</ul>}
+    </li>)}{loss.unattributed >= 0.1 && <li className="loss-unattributed"><span className="loss-name">Not tied to a criterion<small> {loss.late ? "possibly the late penalty" : "the criteria above do not account for it"}</small></span><i><b style={{ width: `${(loss.unattributed / top) * 100}%` }} /></i><em>−{fmt(loss.unattributed)}</em></li>}</ul>}
     <small className="scope-note">{loss.items.length ? `${SOURCE_NOTE[loss.source]}.` : row.files ? "No faculty breakdown yet; the blind grade of your submitted file will add an estimate once it is graded." : "No faculty breakdown, and no submitted file to estimate from — this exam was marked on the platform only."}</small>
     {(loss.facultyComments.length > 0 || loss.missingParts.length > 0 || loss.aiView) && <Why label="Faculty comments and other evidence">
       {loss.aiView && <p>{loss.aiView}</p>}

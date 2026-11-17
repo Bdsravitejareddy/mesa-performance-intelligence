@@ -10,5 +10,5 @@ export function MaterialProvenance({ name, version, sourceKind, extractionStatus
     available?: boolean;
 }) {
     const href = driveFileId && sourceUrl ? safeDriveSourceUrl(driveFileId, sourceUrl) : null;
-    return <span><strong>{name}</strong><small>v{version} · {sourceKind.replaceAll('_', ' ')} · {extractionStatus.replaceAll('_', ' ')}{current === false ? ' · Historical version' : ''}{available === false ? ' · Source unavailable' : ''}</small>{href ? <a href={href} target="_blank" rel="noreferrer" referrerPolicy="no-referrer">Original Drive source</a> : null}</span>;
+    return <span><strong>{name}</strong><small>v{version} · {sourceKind.replaceAll('_', ' ')} · {extractionStatus.replaceAll('_', ' ')}{current === false ? ' · Historical version' : ''}{available === false ? ' · Source unavailable: the latest Drive scan did not find this file (moved, deleted or no longer shared). The copy read earlier is kept and still used.' : ''}</small>{href ? <a href={href} target="_blank" rel="noreferrer" referrerPolicy="no-referrer">Original Drive source</a> : null}</span>;
 }
