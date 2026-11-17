@@ -5,12 +5,15 @@ import { splitPoints } from "./compare";
 // Where the marks went on an officially marked assessment. The lost marks (100 − official) are allocated to
 // criteria from the faculty's own breakdown when the feedback gives one ("Market 2/5"); otherwise they are
 // estimated from where the blind AI found the work weakest, and labelled as an estimate. Deterministic.
+// The criteria plus any unattributed remainder always add up to the marks lost.
 
 export type LossSource = "faculty_breakdown" | "faculty_questions" | "ai_estimate";
 export type LossItem = { criterion: string; lost: number; detail: string; theme: Theme; got?: number; max?: number };
 export type MarkLoss = {
   official: number; lost: number; source: LossSource;
   items: LossItem[];
+  // Lost marks no criterion accounts for (e.g. a late penalty); with the items it adds up to `lost`.
+  unattributed: number;
   facultyComments: string[];
   missingParts: string[];
   late: boolean;
@@ -107,48 +110,88 @@ export function sectionBreakdown(feedback: string): Section[] {
   return sections.length >= 2 ? sections : [];
 }
 
+// Shares `total` out in proportion to `weights`, in tenths, so the parts always add up to the total exactly.
+export function apportion(total: number, weights: number[]): number[] {
+  const sum = weights.reduce((acc, weight) => acc + Math.max(0, weight), 0);
+  if (!sum || total <= 0) return weights.map(() => 0);
+  const tenths = Math.round(total * 10);
+  const raw = weights.map((weight) => (Math.max(0, weight) / sum) * tenths);
+  const parts = raw.map(Math.floor);
+  const order = raw.map((value, index) => [value - Math.floor(value), index] as const).sort((a, b) => b[0] - a[0]);
+  for (let left = tenths - parts.reduce((acc, part) => acc + part, 0), i = 0; left > 0; left -= 1, i += 1) parts[order[i % order.length][1]] += 1;
+  return parts.map((part) => part / 10);
+}
+
+// Feedback often repeats a criterion line (a summary row, then the same score beside its comment): keep the first.
+const nameKey = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, "");
+export function dedupeCriteria<T extends { criterion: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => { const key = nameKey(item.criterion); if (seen.has(key)) return false; seen.add(key); return true; });
+}
+
+const fmtMarks = (value: number) => (Number.isInteger(value) ? String(value) : value.toFixed(1));
+const scoreOf = (item: LossItem) => (item.got !== undefined && item.max !== undefined ? ` (${fmtMarks(round1(item.got))}/${fmtMarks(round1(item.max))})` : "");
+const NAMED = 3;
+
 export function markLoss(input: { official: number | null; feedback: string; report: BlindReport | null; codeReport: CodeReport | null; late: boolean | null }): MarkLoss | null {
   const { official } = input;
   if (official === null || official >= 100) return null;
   const lost = round1(100 - official);
-  const sections = sectionBreakdown(input.feedback);
-  const breakdown = sections.length ? [] : facultyBreakdown(input.feedback);
+  const sections = dedupeCriteria(sectionBreakdown(input.feedback).map((section) => ({ ...section, criterion: section.name })));
+  const breakdown = sections.length ? [] : dedupeCriteria(facultyBreakdown(input.feedback));
   // Comments are the faculty's sentences; the score line itself ("Market 2/5 | GTM 2/5") is not a comment.
-  const comments = splitPoints(input.feedback).filter((point) => (point.match(/\d+(?:\.\d+)?\s*\/\s*\d+/g) ?? []).length < 2 && facultyBreakdown(point).length < 2).slice(0, 6);
+  const comments = [...new Set(splitPoints(input.feedback).filter((point) => (point.match(/\d+(?:\.\d+)?\s*\/\s*\d+/g) ?? []).length < 2 && facultyBreakdown(point).length < 2))].slice(0, 6);
   let items: LossItem[] = [];
   let source: LossSource = "ai_estimate";
+  let scale = "";
   if (sections.length) {
     source = "faculty_questions";
     // Exact section scores stand; estimated sections share the rest of the lost marks in proportion.
-    const exact = sections.filter((section) => section.exact).reduce((sum, section) => sum + section.lost, 0);
-    const estimated = sections.filter((section) => !section.exact).reduce((sum, section) => sum + section.lost, 0);
-    const scale = estimated ? Math.max(0, lost - exact) / estimated : 0;
-    items = sections.filter((section) => section.lost > 0).map((section) => ({ criterion: section.name, lost: round1(section.exact ? section.lost : section.lost * scale), max: section.marks, got: section.exact ? section.marks - section.lost : undefined, detail: section.detail, theme: themeOf(section.name, section.detail) }));
+    const exact = sections.filter((section) => section.exact && section.lost > 0);
+    const estimated = sections.filter((section) => !section.exact && section.lost > 0);
+    const shares = apportion(Math.max(0, lost - exact.reduce((sum, section) => sum + section.lost, 0)), estimated.map((section) => section.lost));
+    items = [
+      ...exact.map((section) => ({ criterion: section.name, lost: round1(section.lost), max: section.marks, got: section.marks - section.lost, detail: section.detail, theme: themeOf(section.name, section.detail) })),
+      ...estimated.map((section, index) => ({ criterion: section.name, lost: shares[index], max: section.marks, detail: section.detail, theme: themeOf(section.name, section.detail) })),
+    ].filter((item) => item.lost > 0);
   } else if (breakdown.length) {
     source = "faculty_breakdown";
-    const shortfall = breakdown.reduce((sum, item) => sum + (item.max - item.got), 0);
-    items = breakdown.filter((item) => item.got < item.max).map((item) => {
+    const short = breakdown.filter((item) => item.got < item.max);
+    const maxTotal = breakdown.reduce((sum, item) => sum + item.max, 0);
+    // A breakdown out of 100 is on the official scale, so each criterion's shortfall is what it lost. On any other
+    // total the official criteria and maxima are kept as given and the lost marks are shared in proportion.
+    const onScale = Math.abs(maxTotal - 100) < 0.5;
+    const shares = onScale ? short.map((item) => round1(item.max - item.got)) : apportion(lost, short.map((item) => item.max - item.got));
+    if (!onScale) scale = ` The faculty's criteria add up to ${fmtMarks(round1(maxTotal))} marks, not 100, so each criterion's shortfall is shared across the ${lost} in proportion; the criterion scores are shown as given.`;
+    items = short.map((item, index) => {
       const related = comments.find((comment) => item.criterion.toLowerCase().split(/[^a-z]+/).filter((word) => word.length >= 3).some((word) => comment.toLowerCase().includes(word)));
-      return { criterion: item.criterion, got: item.got, max: item.max, lost: shortfall ? round1((lost * (item.max - item.got)) / shortfall) : 0, detail: related ?? "", theme: themeOf(item.criterion, related ?? "") };
+      return { criterion: item.criterion, got: item.got, max: item.max, lost: shares[index], detail: related ?? "", theme: themeOf(item.criterion, related ?? "") };
     });
   } else if (input.report?.dimensions.length) {
-    const scored = input.report.dimensions.filter((dimension) => dimension.score !== null);
-    const shortfall = scored.reduce((sum, dimension) => sum + (10 - dimension.score!), 0);
-    items = scored.filter((dimension) => dimension.score! < 10).map((dimension) => ({
-      criterion: dimension.name, lost: shortfall ? round1((lost * (10 - dimension.score!)) / shortfall) : 0,
+    const scored = dedupeCriteria(input.report.dimensions.filter((dimension) => dimension.score !== null && dimension.score < 10).map((dimension) => ({ ...dimension, criterion: dimension.name })));
+    const shares = apportion(lost, scored.map((dimension) => 10 - dimension.score!));
+    items = scored.map((dimension, index) => ({
+      criterion: dimension.name, lost: shares[index],
       detail: [dimension.issue, dimension.improvement && `To improve: ${dimension.improvement}`].filter(Boolean).join(" "), theme: themeOf(dimension.name, dimension.issue),
     }));
   }
   items.sort((a, b) => b.lost - a.lost);
+  const attributed = round1(items.reduce((sum, item) => sum + item.lost, 0));
+  // What the criteria do not account for (a late penalty, an unstated adjustment) is said, not spread around.
+  const unattributed = items.length ? round1(lost - attributed) : 0;
   const missingParts = (input.codeReport?.parts ?? []).filter((part) => !part.answered).map((part) => `${part.label} ${part.text}`.slice(0, 140));
 
-  // Interpretation: which kinds of criteria the lost marks sit in.
-  const byTheme = new Map<Theme, number>();
-  for (const item of items) byTheme.set(item.theme, (byTheme.get(item.theme) ?? 0) + item.lost);
-  const ranked = [...byTheme.entries()].sort((a, b) => b[1] - a[1]);
-  const basis = source === "faculty_breakdown" ? "the faculty's own breakdown" : source === "faculty_questions" ? "the faculty's question-by-question feedback" : "where the blind AI found the work weakest (an estimate — no faculty breakdown was given)";
-  const interpretation = ranked.length
-    ? `Of the ${lost} marks lost, about ${round1(ranked[0][1])} sit in ${THEME_LABEL[ranked[0][0]]}${ranked[1] ? ` and ${round1(ranked[1][1])} in ${THEME_LABEL[ranked[1][0]]}` : ""}, going by ${basis}. In short: ${MEANING[ranked[0][0]]}.${input.late ? " It was also submitted late; any late penalty is inside the official mark." : ""}`
+  // Interpretation: every lost mark is placed — the largest criteria by their official names, the rest together.
+  const basis = source === "faculty_breakdown" ? "the faculty's own criterion scores" : source === "faculty_questions" ? "the faculty's question-by-question feedback" : "where the blind AI found the work weakest (an estimate — no faculty breakdown was given)";
+  const shown = items.length <= NAMED + 1 ? items.length : NAMED;
+  const named = items.slice(0, shown).map((item) => `${fmtMarks(item.lost)} on ${item.criterion}${scoreOf(item)}`);
+  const rest = items.slice(shown);
+  if (rest.length) named.push(`${fmtMarks(round1(rest.reduce((sum, item) => sum + item.lost, 0)))} across ${rest.length} other criteri${rest.length === 1 ? "on" : "a"}`);
+  if (unattributed >= 0.1) named.push(`${fmtMarks(unattributed)} that no criterion accounts for${input.late ? " (possibly the late penalty)" : ""}`);
+  const listed = named.length > 1 ? `${named.slice(0, -1).join(", ")} and ${named[named.length - 1]}` : named[0];
+  const over = unattributed <= -0.1 ? ` The criterion scores add up to ${fmtMarks(attributed)} lost, more than the ${lost} lost overall, so the official total may include an adjustment; both are shown as given.` : "";
+  const interpretation = items.length
+    ? `Of the ${lost} marks lost: ${listed} — going by ${basis}.${scale}${over} In short: ${MEANING[items[0].theme]}.${input.late && unattributed < 0.1 ? " It was also submitted late; any late penalty is inside the official mark." : ""}`
     : `${lost} marks were lost, but there is no faculty breakdown and no AI grade to show where.${input.late ? " It was submitted late, so part of the loss may be a late penalty." : ""}`;
 
   // How the blind AI's weakest criteria line up with the faculty's breakdown.
@@ -159,5 +202,5 @@ export function markLoss(input: { official: number | null; feedback: string; rep
     const overlap = weakest.filter((dimension) => facultyThemes.has(themeOf(dimension.name, dimension.issue)));
     aiView = weakest.length ? `The blind AI's weakest criteria were ${weakest.map((dimension) => `${dimension.name} (${dimension.score}/10)`).join(" and ")} — ${overlap.length ? "the same area the faculty marked down" : "a different area from the faculty's, so the two read the work differently there"}.` : null;
   }
-  return { official, lost, source, items: items.slice(0, 6), facultyComments: comments, missingParts, late: input.late === true, interpretation, aiView };
+  return { official, lost, source, items, unattributed: Math.max(0, unattributed), facultyComments: comments, missingParts, late: input.late === true, interpretation, aiView };
 }

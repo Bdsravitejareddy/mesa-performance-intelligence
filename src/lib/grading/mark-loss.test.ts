@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { facultyBreakdown, markLoss } from "./mark-loss";
+import { apportion, facultyBreakdown, markLoss } from "./mark-loss";
 import type { BlindReport } from "@/lib/quality/engine";
 
 const dim = (name: string, score: number, issue = "") => ({ name, score, evidence: "", evidenceVerified: false, strength: "", issue, improvement: "", exampleRevision: "" });
@@ -17,7 +17,8 @@ describe("where the marks went", () => {
     expect(result.lost).toBe(49);
     expect(result.items.reduce((sum, item) => sum + item.lost, 0)).toBeCloseTo(49, 0);
     expect(result.items[0].criterion).toBe("Customer, market & competition");
-    expect(result.interpretation).toMatch(/market and customer analysis/);
+    expect(result.interpretation).toMatch(/^Of the 49 marks lost: 14\.7 on Customer, market & competition \(2\/5\)/);
+    expect(result.interpretation).toMatch(/add up to 20 marks, not 100/);
     expect(result.facultyComments.join(" ")).not.toMatch(/3\/5/);
     expect(result.items.find((item) => /market/i.test(item.criterion))?.detail).toMatch(/no market size/);
   });
@@ -49,5 +50,32 @@ describe("question-by-question feedback", () => {
     expect(table.detail).toMatch(/same error in 3 places[\s\S]*Reminder|reminder/);
     expect(result.items.find((item) => item.criterion.startsWith("B"))!.detail).toMatch(/returns in Pune/);
     expect(result.items.some((item) => item.criterion.startsWith("A"))).toBe(false);
+  });
+});
+
+describe("every breakdown adds up to its total", () => {
+  const sum = (values: number[]) => Math.round(values.reduce((total, value) => total + value, 0) * 10) / 10;
+  it("apportions in tenths that sum exactly", () => {
+    expect(sum(apportion(31.9, [1, 1, 1]))).toBe(31.9);
+    expect(sum(apportion(17.3, [3, 2, 2, 0.5, 7]))).toBe(17.3);
+  });
+  it("uses official criterion names once, and names the share no criterion accounts for", () => {
+    const feedback = "Problem breakdown & assumptions: 15/20 | MVP testing: 5.5/10 | Market sizing: 18/20 | Pitch: 30/30 | Research: 18/20\nProblem breakdown & assumptions: 15/20 — assumptions were not tested.";
+    const result = markLoss({ official: 68.1, feedback, report: null, codeReport: null, late: true })!;
+    expect(result.items.filter((item) => item.criterion === "Problem breakdown & assumptions")).toHaveLength(1);
+    expect(result.items.map((item) => item.lost)).toEqual([5, 4.5, 2, 2]);
+    expect(sum([...result.items.map((item) => item.lost), result.unattributed])).toBe(31.9);
+    expect(result.unattributed).toBe(18.4);
+    expect(result.interpretation).toMatch(/^Of the 31\.9 marks lost: 5 on Problem breakdown & assumptions \(15\/20\), 4\.5 on MVP testing \(5\.5\/10\)/);
+    expect(result.interpretation).toMatch(/18\.4 that no criterion accounts for \(possibly the late penalty\)/);
+    expect(result.interpretation).not.toMatch(/analysis and interpretation/);
+  });
+  it("groups the smaller criteria so the named parts and the rest add up", () => {
+    const result = markLoss({ official: 68.1, feedback: "", report: report([dim("A", 4), dim("B", 6), dim("C", 7), dim("D", 8), dim("E", 9)]), codeReport: null, late: false })!;
+    expect(sum(result.items.map((item) => item.lost))).toBe(31.9);
+    expect(result.unattributed).toBe(0);
+    const figures = [...result.interpretation.matchAll(/(\d+(?:\.\d)?) (?:on|across)/g)].map((match) => Number(match[1]));
+    expect(sum(figures)).toBe(31.9);
+    expect(result.interpretation).toMatch(/across 2 other criteria/);
   });
 });

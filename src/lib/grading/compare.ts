@@ -16,6 +16,17 @@ export type Comparison = {
   mismatch?: string | null;
 };
 
+// How much of the faculty's feedback the blind AI also raised, with a verdict that follows the share: 2 of 13 is
+// low overlap, never "a comparable reading".
+export type Overlap = { agreed: number; total: number; percent: number; level: "high" | "partial" | "low"; text: string };
+export function overlapVerdict(agreed: number, total: number): Overlap | null {
+  if (total <= 0) return null;
+  const percent = Math.round((agreed / total) * 100);
+  const level = percent >= 50 ? "high" : percent >= 25 ? "partial" : "low";
+  const verdict = level === "high" ? "a broadly similar reading of the work" : level === "partial" ? "partial overlap: the faculty raised several things the AI did not" : `low overlap: the AI missed most of what the faculty raised`;
+  return { agreed, total, percent, level, text: `The AI independently raised ${agreed} of the faculty's ${total} point${total === 1 ? "" : "s"} (${percent}%) — ${verdict}.` };
+}
+
 export function splitPoints(text: string): string[] {
   return text.split(/\n+|(?<=[.!?])\s+(?=[A-Z0-9"“(])|\s+[-•*]\s+/).map((part) => part.replace(/^[-•*\d.)\s]+/, "").trim()).filter((part) => (part.match(/\S+/g) ?? []).length >= 4).slice(0, 30);
 }

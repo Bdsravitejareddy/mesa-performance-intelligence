@@ -10,7 +10,8 @@ import { cachedRead } from "@/lib/data/cached";
 import { inTerm, selectedTerm, type TermChoice } from "@/lib/term";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import type { CodeReport } from "@/lib/grading/code-score";
-import type { Comparison } from "@/lib/grading/compare";
+import { overlapVerdict, type Comparison } from "@/lib/grading/compare";
+import { GIVEN_MATERIAL } from "@/lib/materials/submission-matching";
 import type { BlindReport } from "@/lib/quality/engine";
 import { reviewCase, REVIEW_GAP, type ReviewCase } from "@/lib/grading/review-case";
 
@@ -79,24 +80,22 @@ export default async function GradingPage() {
         </header>
         {!row.comparison?.mismatch && row.ai_report?.taskMatch === "partly" && <div className="mismatch-callout"><p><b>The AI found only part of what this assessment asks for.</b> {row.ai_report.taskMatchReason} This may be a draft or the wrong file, so its grade is left out of the AI-versus-faculty comparison.</p>{row.files.map((file) => <DetachFile key={file.id} submissionId={row.submission_id} documentId={file.id} name={file.name} />)}</div>}
         {row.comparison?.mismatch && <div className="mismatch-callout"><p><b>This file may not be the submission for this assessment.</b> {row.comparison.mismatch} It was not scored.</p>{row.files.map((file) => <DetachFile key={file.id} submissionId={row.submission_id} documentId={file.id} name={file.name} />)}</div>}
+        <GradedFiles row={row} />
         <ScoreTrack official={row.official_mark} ai={row.ai_score} code={row.code_score} />
         <div className="grade-figures">
           <Figure label="Official" value={row.official_mark} />
           <Figure label="AI" value={row.ai_score} note={row.ai_status !== "complete" ? (row.ai_status === "skipped" ? "not run" : "retrying") : (() => { const estimate = row.official_mark === null ? corrected(row.ai_score, calibration) : null; const provisional = !["official_rubric", "approved_rubric"].includes(row.standard_source); return [estimate ? `corrected ${estimate.low}–${estimate.high}` : "/100", provisional ? "provisional: criteria inferred" : ""].filter(Boolean).join(" · "); })()} />
-          <Figure label="Completeness" value={row.code_score} note={row.code_report?.completeness !== undefined && row.code_report?.completeness !== null ? `${row.code_report.parts?.filter((part) => part.answered).length}/${row.code_report.parts?.length} parts` : row.code_score === null ? "nothing to tick off" : undefined} />
+          <Figure label="Completeness" title="Completeness check" value={row.code_score} note={row.code_report?.completeness !== undefined && row.code_report?.completeness !== null ? `${row.code_report.parts?.filter((part) => part.answered).length}/${row.code_report.parts?.length} parts` : row.code_score === null ? "nothing to tick off" : undefined} />
         </div>
         {row.comparison && (row.comparison.agreed.length > 0 || row.comparison.facultyOnly.length > 0) && <p className="grade-insight">{insightLine(row.comparison)}</p>}
-        {row.comparison?.documents && row.comparison.documents.length > 1 && <div className="doc-scores">{row.comparison.documents.map((doc) => <span key={doc.name}><strong>{doc.name}</strong> code {fmt(doc.code)}{doc.ai !== null ? ` · AI ${fmt(doc.ai)}` : ""}</span>)}</div>}
+        {row.comparison?.documents && row.comparison.documents.length > 1 && <div className="doc-scores">{row.comparison.documents.map((doc) => <span key={doc.name}><strong>{doc.name}</strong> completeness check {fmt(doc.code)}{doc.ai !== null ? ` · AI ${fmt(doc.ai)}` : ""}</span>)}</div>}
         {row.comparison?.reasons && row.comparison.reasons.length > 0 && <Why label="Why the scores differ"><ul className="reason-list">{row.comparison.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul></Why>}
         <Why label="See the reasoning">
           <p className="scope-note">{SOURCE_LABEL[row.standard_source] ?? row.standard_source}. {row.comparison?.note}</p>
           {row.code_report?.parts && row.code_report.parts.length > 0 && <table className="criteria-table"><thead><tr><th>Part of the brief</th><th>Answered?</th></tr></thead><tbody>{row.code_report.parts.map((part) => <tr key={part.label}><td><b>{part.label}</b> {part.text.slice(0, 120)}</td><td>{part.how === "label" ? "Yes — labelled" : part.how === "formula" ? "Yes — formulas used" : part.how === "keywords" ? "Yes — by content" : "Not found"}</td></tr>)}</tbody></table>}
-          <table className="criteria-table"><thead><tr><th>Criterion</th><th>AI /10</th><th>Coverage /10</th><th>Terms found</th></tr></thead><tbody>
-            {(row.code_report?.criteria ?? []).map((criterion) => {
-              const dimension = row.ai_report?.dimensions.find((item) => item.name === criterion.name);
-              return <tr key={criterion.name}><td>{criterion.name}{dimension?.issue && <small>{dimension.issue}</small>}</td><td>{fmt(dimension?.score ?? null)}</td><td>{fmt(criterion.score)}</td><td><small>{criterion.matched.length} of {criterion.expected.length}{criterion.expected.length - criterion.matched.length > 0 && ` · missing ${criterion.expected.filter((term) => !criterion.matched.includes(term)).slice(0, 4).join(", ")}`}</small></td></tr>;
-            })}
-          </tbody></table>
+          {criterionRows(row).length > 0 && <table className="criteria-table criteria-named"><thead><tr><th>Criterion</th><th>AI /10</th><th>Completeness check /10</th><th>Key terms found</th></tr></thead><tbody>
+            {criterionRows(row).map((item) => <tr key={item.name}><td><strong>{item.name}</strong>{item.issue && <small>{item.issue}</small>}</td><td>{fmt(item.ai)}</td><td>{fmt(item.code)}</td><td>{item.expected ? `${item.matched} of ${item.expected}` : "—"}</td></tr>)}
+          </tbody></table>}
           <div className="grade-compare">
             <div><h3>Faculty and AI agree</h3>{row.comparison?.agreed.length ? <ul>{row.comparison.agreed.map((item) => <li key={item.feedback}><q>{item.feedback}</q><small>AI: {item.ai}</small></li>)}</ul> : <p className="empty-hint">{row.feedback ? "No shared points." : "No faculty feedback recorded."}</p>}</div>
             <div><h3>Only the faculty raised</h3>{row.comparison?.facultyOnly.length ? <ul>{row.comparison.facultyOnly.map((item) => <li key={item}>{item}</li>)}</ul> : <p className="empty-hint">—</p>}</div>
@@ -131,20 +130,44 @@ function agreementLabel(value: Comparison["agreement"] | undefined) {
 }
 
 function insightLine(comparison: Comparison) {
-  const total = comparison.agreed.length + comparison.facultyOnly.length;
-  return `The AI independently raised ${comparison.agreed.length} of the faculty's ${total} point${total === 1 ? "" : "s"}${comparison.aiOnly.length ? `, and ${comparison.aiOnly.length} the faculty did not mention` : ""}.`;
+  const overlap = overlapVerdict(comparison.agreed.length, comparison.agreed.length + comparison.facultyOnly.length);
+  return `${overlap?.text ?? ""}${comparison.aiOnly.length ? ` It also raised ${comparison.aiOnly.length} point${comparison.aiOnly.length === 1 ? "" : "s"} the faculty did not mention.` : ""}`.trim();
+}
+
+// One row per criterion, named, joining the completeness check and the AI by criterion name; nothing unnamed.
+function criterionRows(row: Pick<Row, "code_report" | "ai_report">) {
+  const key = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const rows = new Map<string, { name: string; ai: number | null; code: number | null; issue: string; matched: number; expected: number }>();
+  (row.code_report?.criteria ?? []).forEach((criterion, index) => { const name = criterion.name?.trim() || `Criterion ${index + 1}`; if (!rows.has(key(name))) rows.set(key(name), { name, ai: null, code: criterion.score, issue: "", matched: criterion.matched.length, expected: criterion.expected.length }); });
+  for (const dimension of row.ai_report?.dimensions ?? []) {
+    const name = dimension.name?.trim(); if (!name) continue;
+    const existing = rows.get(key(name));
+    if (existing) Object.assign(existing, { ai: dimension.score, issue: dimension.issue ?? "" });
+    else rows.set(key(name), { name, ai: dimension.score, code: null, issue: dimension.issue ?? "", matched: 0, expected: 0 });
+  }
+  return [...rows.values()];
+}
+
+// Which files the grade read, so a wrong file (the brief, a template) is easy to spot. Detaching stays a click.
+function GradedFiles({ row }: { row: Row }) {
+  if (!row.files.length || row.comparison?.mismatch || (row.ai_report?.taskMatch === "partly")) return null;
+  const given = row.files.filter((file) => GIVEN_MATERIAL.test(file.name));
+  return <div className={given.length ? "graded-files mismatch-callout" : "graded-files"}>
+    <p><b>Graded on {row.files.length === 1 ? "this file" : `these ${row.files.length} files`}:</b> {row.files.map((file) => file.name).join(" · ")}</p>
+    {given.length > 0 && <><p>{given.length === 1 ? "Its name" : "Some names"} suggest{given.length === 1 ? "s" : ""} material you were given (a brief, guidelines or template) rather than your own work. If so, this grade is not about your work — detach it so the right file can be found.</p>{given.map((file) => <DetachFile key={file.id} submissionId={row.submission_id} documentId={file.id} name={file.name} />)}</>}
+  </div>;
 }
 
 function Stat({ value, unit, label }: { value: string; unit: string; label: string }) {
   return <div className="stat"><strong>{value}<small>{unit}</small></strong><span>{label}</span></div>;
 }
 
-function Figure({ label, value, note }: { label: string; value: number | null; note?: string }) {
-  return <div className={`grade-figure figure-${label.toLowerCase()}`}><span><Cue label={label} /></span><strong>{fmt(value)}</strong><small>{note ?? (value === null ? "none" : "/100")}</small></div>;
+function Figure({ label, title, value, note }: { label: string; title?: string; value: number | null; note?: string }) {
+  return <div className={`grade-figure figure-${label.toLowerCase()}`}><span><Cue label={label}>{title}</Cue></span><strong>{fmt(value)}</strong><small>{note ?? (value === null ? "none" : "/100")}</small></div>;
 }
 
 function ScoreTrack({ official, ai, code }: { official: number | null; ai: number | null; code: number | null }) {
-  const marker = (value: number | null, kind: string) => value === null ? null : <i className={`track-mark mark-${kind}`} style={{ left: `${Math.max(0, Math.min(100, value))}%` }} title={`${kind}: ${fmt(value)}`} />;
+  const marker = (value: number | null, kind: string) => value === null ? null : <i className={`track-mark mark-${kind}`} style={{ left: `${Math.max(0, Math.min(100, value))}%` }} title={`${kind === "code" ? "Completeness check" : kind === "ai" ? "AI" : "Official"}: ${fmt(value)}`} />;
   const values = [official, ai, code].filter((value): value is number => value !== null);
   const span = values.length > 1 ? { left: `${Math.min(...values)}%`, width: `${Math.max(...values) - Math.min(...values)}%` } : null;
   return <div className="score-track" aria-hidden="true">{span && <span className="track-span" style={span} />}{marker(code, "code")}{marker(ai, "ai")}{marker(official, "official")}</div>;
