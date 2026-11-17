@@ -12,8 +12,11 @@ export type Polarity = "strength" | "improve" | "note";
 export type FeedbackPoint = { key: string; source: Source; authority: "faculty" | "ai"; submissionId: string | null; assessmentId: string | null; courseId: string | null; assessmentTitle: string; courseTitle: string; text: string; polarity: Polarity; themes: string[]; direction: string | null; givenOn: string | null };
 export type StoredPoint = FeedbackPoint & { id: string; addressedAt: string | null };
 
-// Themes, the words that signal them, and the competencies they are evidence for.
+// Themes, the words that signal them, and the competencies they are evidence for. Order is priority: a point's
+// first theme is its main one, so the specific themes (instructions, query style) come before the broad ones.
 export const THEMES: Record<string, { pattern: RegExp; competencies: string[]; label: string }> = {
+  instructions: { pattern: /\binstruct|\bdespite\b|as (asked|instructed|required)|the brief\b|extra (sheets?|tabs?|columns?|files?)\b|\b(one|single|same) (sheet|tab|file)\b|not (what was )?asked|(follow|read) the (question|task|brief|template)|\btemplate\b/i, competencies: ["analytical.structured_problem_solving"], label: "Following the task instructions" },
+  code: { pattern: /\bsql\b|\bquer(y|ies)\b|\bwhere clause|\bboolean\b|= ?true\b|\bjoins?\b|\bsyntax\b|\balias|\bcolumn names?\b|\bgroup by\b|\bsubquer/i, competencies: ["technical.analytics"], label: "Query and code style" },
   formatting: { pattern: /\bformat|decimal|currency|₹ ?not|rounded?\b/i, competencies: ["technical.analytics"], label: "Formatting and presentation of numbers" },
   formulas: { pattern: /\bformulas?\b|typed, not|hard-?coded/i, competencies: ["technical.analytics"], label: "Formulas and spreadsheet method" },
   accuracy: { pattern: /not quite right|wrong values?|numbers? (are )?wrong|numbers differ|incorrect|double-check|you got \S+ —/i, competencies: ["analytical.numerical_analysis"], label: "Accuracy of answers" },
@@ -175,7 +178,7 @@ export async function rebuildFeedbackItems(client: SupabaseClient): Promise<{ in
     client.from("submission_gradings").select("submission_id, assessment_id, ai_report, ai_status, created_at").not("ai_report", "is", null),
     client.from("assessments").select("id, title, course_id"),
     client.from("courses").select("id, title, user_id"),
-    client.from("feedback_items").select("id, item_key, polarity"),
+    client.from("feedback_items").select("id, item_key, polarity, themes"),
   ]);
   const assessmentMap = new Map((assessments.data ?? []).map((row) => [row.id as string, { title: row.title as string, courseId: row.course_id as string }]));
   const courseMap = new Map((courses.data ?? []).map((row) => [row.id as string, row.title as string]));
@@ -192,11 +195,11 @@ export async function rebuildFeedbackItems(client: SupabaseClient): Promise<{ in
   })));
   if (stale.length) await client.from("feedback_items").delete().in("id", stale);
   // A point whose wording is unchanged but whose reading changed (e.g. a "Note:" that gives advice) is relabelled in
-  // place, so the member's "addressed" mark survives.
-  const polarityOf = new Map((existing.data ?? []).map((row) => [row.item_key as string, row.polarity as string]));
+  // place, so the member's "addressed" mark survives. Themes are re-read the same way when the theme rules change.
+  const before = new Map((existing.data ?? []).map((row) => [row.item_key as string, { polarity: row.polarity as string, themes: ((row.themes ?? []) as string[]).join(",") }]));
   for (const point of points) {
-    const id = have.get(point.key);
-    if (id && polarityOf.get(point.key) !== point.polarity) await client.from("feedback_items").update({ polarity: point.polarity }).eq("id", id);
+    const id = have.get(point.key), was = before.get(point.key);
+    if (id && was && (was.polarity !== point.polarity || was.themes !== point.themes.join(","))) await client.from("feedback_items").update({ polarity: point.polarity, themes: point.themes }).eq("id", id);
   }
   return { inserted: fresh.length, removed: stale.length, total: points.length };
 }

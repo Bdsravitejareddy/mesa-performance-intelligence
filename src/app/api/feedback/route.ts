@@ -22,8 +22,10 @@ export async function POST() {
 export async function PATCH(request: NextRequest) {
   const auth = await member();
   if ("error" in auth) return auth.error;
-  const body = await request.json().catch(() => null) as { id?: unknown; addressed?: unknown } | null;
-  if (typeof body?.id !== "string" || typeof body.addressed !== "boolean") return NextResponse.json({ error: "Give the point and whether it is addressed." }, { status: 400 });
-  const { error } = await auth.supabase.from("feedback_items").update({ addressed_at: body.addressed ? new Date().toISOString() : null }).eq("id", body.id);
+  const body = await request.json().catch(() => null) as { id?: unknown; ids?: unknown; addressed?: unknown } | null;
+  // One row on the page can be the same comment from several sources; all of them are marked together.
+  const ids = Array.isArray(body?.ids) ? body.ids : [body?.id];
+  if (!ids.length || ids.length > 50 || !ids.every((id) => typeof id === "string") || typeof body?.addressed !== "boolean") return NextResponse.json({ error: "Give the point and whether it is addressed." }, { status: 400 });
+  const { error } = await auth.supabase.from("feedback_items").update({ addressed_at: body.addressed ? new Date().toISOString() : null }).in("id", ids as string[]);
   return error ? NextResponse.json({ error: "Could not save." }, { status: 500 }) : NextResponse.json({ ok: true });
 }

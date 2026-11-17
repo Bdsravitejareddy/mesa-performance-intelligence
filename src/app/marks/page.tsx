@@ -27,7 +27,7 @@ export default async function MarksPage() {
     {syncHealth && <SyncHealthNotice health={syncHealth} />}
     <ReportCards cards={reportCards} />
     {messages.length > 0 && <section className="content-panel nexus-messages"><h2>Links from Nexus <span className="panel-count">{messages.length}</span></h2>
-      <p>From your Nexus notifications and announcements. Pages behind your Google sign-in can’t be read by the daily sync; ask Claude to read them in your browser, and they are imported from there.</p>
+      <p>From your Nexus notifications and announcements. Some of these pages need your Google sign-in, so the nightly update can’t open them. They are added only when they are read, view-only, through your own signed-in browser.</p>
       <ul>{messages.map((message) => <li key={message.id}><strong>{message.title || "Notification"}</strong><small>{message.kind === "announcement" ? "Announcement" : "Notification"}{message.course ? ` · ${message.course}` : ""}{message.posted_at ? ` · ${new Date(message.posted_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}` : ""}</small>
         {message.links.map((link) => <span key={link.url} className="nexus-link"><a href={link.url} target="_blank" rel="noreferrer">{link.label}</a>{NEEDS_BROWSER.includes(link.kind) ? " — needs a read in your browser" : ""}</span>)}</li>)}</ul>
     </section>}
