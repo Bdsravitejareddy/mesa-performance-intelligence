@@ -2,6 +2,7 @@ import { AppShell } from "@/components/app-shell";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { DUE_ZONE, dayOf, groupDue, isSubmitted, kindOf, type DueItem } from "@/lib/due";
+import { inTerm, selectedTerm } from "@/lib/term";
 import { datedEvents, type MessageRow } from "@/lib/message-dates";
 import { titleScore } from "@/lib/materials/submission-matching";
 
@@ -16,13 +17,21 @@ export default async function DuePage() {
   const supabase = hasSupabaseConfig() && !demoMode ? await createClient() : null;
   const [assessments, courses, submissions, messages] = supabase ? await Promise.all([
     supabase.from("assessments").select("id, title, course_id, due_at"),
-    supabase.from("courses").select("id, title"),
+    supabase.from("courses").select("id, title, term"),
     supabase.from("submissions").select("assessment_id, submitted_at, official_mark, lms_submission_status"),
     supabase.from("lms_messages").select("id, kind, title, body, course, posted_at").order("posted_at", { ascending: false, nullsFirst: false }).limit(300),
   ]) : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }];
   const courseTitle = new Map((courses.data ?? []).map((row) => [row.id as string, row.title as string]));
+  // The term filter applies here as on every page; and a term closed by its report card has nothing left to submit,
+  // so its unsubmitted work is not listed as overdue.
+  const term = await selectedTerm();
+  const { data: cards } = supabase ? await supabase.from("lms_report_cards").select("term") : { data: [] };
+  const closed = new Set((cards ?? []).map((row) => row.term as string));
+  const courseTerm = new Map((courses.data ?? []).map((row) => [row.id as string, (row.term as string | null) ?? ""]));
+  const shown = (assessments.data ?? []).filter((row) => inTerm(term, courseTerm.get(row.course_id as string)));
+  const fromClosed = shown.filter((row) => closed.has(courseTerm.get(row.course_id as string) ?? ""));
   const submitted = new Set((submissions.data ?? []).filter((row) => isSubmitted(row)).map((row) => row.assessment_id as string));
-  const items: DueItem[] = (assessments.data ?? []).map((row) => ({
+  const items: DueItem[] = shown.filter((row) => !closed.has(courseTerm.get(row.course_id as string) ?? "")).map((row) => ({
     id: row.id as string, title: row.title as string, course: (courseTitle.get(row.course_id as string) ?? "").replace(/\s+with\s+.*$/i, ""),
     dueAt: (row.due_at as string | null) ?? null, submitted: submitted.has(row.id as string), kind: kindOf(row.title as string),
   }));
@@ -44,6 +53,7 @@ export default async function DuePage() {
       {groups.unscheduled.length > 0 && <section className="content-panel due-section"><h2>No deadline on Nexus <span className="panel-count">{groups.unscheduled.length}</span></h2>
         <p className="scope-note">Nexus has not given a deadline for these, so they cannot be placed in a day. Check the brief on the assessment.</p>
         <ul>{groups.unscheduled.map((item) => <li key={item.id}>{item.title}{item.course ? <small> · {item.course}</small> : null}</li>)}</ul></section>}
+      {fromClosed.length > 0 && <p className="scope-note">{fromClosed.length} assessment{fromClosed.length === 1 ? "" : "s"} from {[...new Set(fromClosed.map((row) => courseTerm.get(row.course_id as string)))].join(" and ")} {fromClosed.length === 1 ? "is" : "are"} not listed: that term is finished and its results are on your report card.</p>}
       {scheduled === 0 && <p className="scope-note">No deadlines have been read from Nexus yet. They are read at the next daily sync.</p>}
     </>}
   </div></AppShell>;

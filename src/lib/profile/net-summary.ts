@@ -47,7 +47,7 @@ export function netSummary(glance: Glance): NetSummary {
     const neo = glance.external.neo;
     if (neo && NEO_TRAITS.every(({ key }) => neo.traits[key].percentile !== null)) {
       const byPercentile = NEO_TRAITS.map(({ key }) => [key, neo.traits[key].percentile!] as const).sort((a, b) => Math.abs(b[1] - 50) - Math.abs(a[1] - 50));
-      headline = `On the ${neo.form}, you describe yourself as ${byPercentile.slice(0, 3).map(([trait, percentile]) => neoPhrase(trait, percentile)).join(", ")}.`;
+      headline = `On the ${neo.form}, your most distinctive traits: you describe yourself as ${byPercentile.slice(0, 3).map(([trait, percentile]) => neoPhrase(trait, percentile)).join(", ")}.`;
     }
     // What the research links your most pronounced traits to.
     const notable = ranked.filter(([factor, score]) => (factor === "neuroticism" ? score <= 2.5 : score >= 3.5)).slice(0, 2);
@@ -64,7 +64,7 @@ export function netSummary(glance: Glance): NetSummary {
       points.push({
         title: "Self-report against your written context",
         text: compared.length
-          ? `Your note and assistant profiles agree with how you answered on ${agree} of ${compared.length} traits.${biggest && Math.abs(biggest.gap) >= 0.75 ? ` The largest difference is ${FACTOR_LABELS[biggest.factor].split(" (")[0].toLowerCase()}: you rated ${glance.self[biggest.factor].toFixed(1)}, your context reads ${glance.context.factors[biggest.factor].score!.toFixed(1)} — ${glance.context.factors[biggest.factor].reason}` : ""}`
+          ? `Of the ${compared.length} traits your writing says something about, your note and assistant profiles agree with how you answered on ${agree}.${biggest && Math.abs(biggest.gap) >= 0.75 ? ` The largest difference is ${FACTOR_LABELS[biggest.factor].split(" (")[0].toLowerCase()}: you rated ${glance.self[biggest.factor].toFixed(1)}, your context reads ${glance.context.factors[biggest.factor].score!.toFixed(1)} — ${glance.context.factors[biggest.factor].reason}` : ""}`
           : "Your written context says too little about specific traits to compare yet.",
       });
       const split = biggest && Math.abs(biggest.gap) >= 0.75 && glance.external.neo ? facetSplit(glance.external.neo, NEO_OF[biggest.factor]) : null;

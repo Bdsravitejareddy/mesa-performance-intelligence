@@ -911,3 +911,4 @@ html[data-story-enter="from-below"] .main-content{animation:storyDrop .28s cubic
 .neo-trait ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px}.neo-trait li{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(50px,1fr) 38px;gap:8px;align-items:center;font-size:12.5px;color:var(--ink-2);font-variant-numeric:tabular-nums}
 .neo-standout span:first-child{font-weight:700;color:var(--ink)}.neo-anomalies{margin:6px 0;padding-left:18px;font-size:12.5px;color:var(--rose)}
 .has-neo .trait-head,.has-neo .trait-row{grid-template-columns:minmax(0,1.2fr) 100px 150px 140px minmax(0,1.8fr)}@media (max-width:720px){.has-neo .trait-row{grid-template-columns:1fr 1fr 1fr}}
+.term-scope-note{margin:6px 0 12px;padding:8px 12px;border-radius:10px;border:1px dashed var(--line);font-size:13px;color:var(--ink-2);background:rgba(255,255,255,.4)}

@@ -27,7 +27,9 @@ export function personalityTips(glance: Pick<Glance, "self" | "context"> & { ext
     const percentile = neo?.traits[NEO_OF[rule.factor]]?.percentile ?? null;
     if (percentile !== null) {
       const pole = percentile >= 75 ? "high" : percentile <= 25 ? "low" : "middle";
-      return pole === rule.pole ? [{ ...pick(rule), basis: `${neo!.form}: ${ordinal(percentile)} percentile` }] : [];
+      // Neuroticism is described by its steady pole, as on the rest of the page: the 1st percentile is steadier than 99%.
+      const basis = rule.factor === "neuroticism" ? `${neo!.form}: steadier under stress than ${100 - percentile}% of the comparison group` : `${neo!.form}: ${ordinal(percentile)} percentile`;
+      return pole === rule.pole ? [{ ...pick(rule), basis }] : [];
     }
     if (!glance.self || !glance.context) return [];
     const self = glance.self[rule.factor];

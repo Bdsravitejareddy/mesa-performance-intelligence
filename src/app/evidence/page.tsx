@@ -71,7 +71,7 @@ function EvidenceContent({ data }: { data: Awaited<ReturnType<typeof loadData>> 
             <span role="cell"><strong>{assessment.title}</strong><small>{courseTitle.get(assessment.course_id) ?? "Course"} · {assessment.assessment_format}</small></span>
             <span role="cell">{mark === null ? <em>No released mark</em> : <><strong>{formatOfficialMark(mark)}</strong>{latest.source_original_mark !== null && latest.source_original_max_mark !== null && <small>LMS: {Number(latest.source_original_mark)}/{Number(latest.source_original_max_mark)}</small>}</>}{rows.length > 1 && <small>{rows.length} submission records</small>}</span>
             <span role="cell">{latest?.official_feedback.trim() ? <><small>{latest.official_feedback.trim().slice(0, 160)}{latest.official_feedback.trim().length > 160 ? "…" : ""}</small><CriterionBreakdown feedback={latest.official_feedback} overall={mark} /></> : <small>None recorded</small>}</span>
-            <span role="cell"><small>{assessment.source_record_id ? "Mesa LMS" : "Manual entry"}{latest?.official_mark_source ? ` · ${latest.official_mark_source}` : ""}</small><small>{latest?.source_updated_at ? `LMS updated ${new Date(latest.source_updated_at).toLocaleDateString()}` : `Recorded ${new Date((latest ?? assessment).created_at).toLocaleDateString()}`}</small>{latest?.lms_submission_status && <small>Status: {latest.lms_submission_status}</small>}</span>
+            <span role="cell"><small>{assessment.source_record_id ? "Mesa LMS" : "Manual entry"}{latest?.official_mark_source ? ` · ${latest.official_mark_source}` : ""}</small><small>{latest?.source_updated_at ? `LMS updated ${new Date(latest.source_updated_at).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric" })}` : `Recorded ${new Date((latest ?? assessment).created_at).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric" })}`}</small>{latest?.lms_submission_status && <small>Status: {latest.lms_submission_status}</small>}</span>
           </div>;
         })}
       </div>
@@ -99,7 +99,7 @@ function EvidenceContent({ data }: { data: Awaited<ReturnType<typeof loadData>> 
     </section>
 
     <section className="content-panel"><h2>Sync history <span className="panel-count">{data.runs.length}</span></h2>
-      {data.runs.length ? <ul className="evidence-runs">{data.runs.map((run, index) => <li key={`${run.started_at}-${index}`}><strong>{run.status}</strong> <small>{new Date(run.started_at).toLocaleString()}</small><p>{run.message}</p></li>)}</ul> : <p className="empty-hint">No LMS sync has run.</p>}
+      {data.runs.length ? <ul className="evidence-runs">{data.runs.map((run, index) => <li key={`${run.started_at}-${index}`}><strong>{run.status}</strong> <small>{new Date(run.started_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" })}</small><p>{run.message}</p></li>)}</ul> : <p className="empty-hint">No LMS sync has run.</p>}
     </section>
 
     <section className="content-panel"><h2>Not yet connected</h2><p className="empty-hint">These evidence types are part of the plan but have no imported records. Their absence is not counted against any competency.</p>

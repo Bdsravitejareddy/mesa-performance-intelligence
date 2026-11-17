@@ -86,7 +86,7 @@ export function AppShell({ children, demoMode }: { children: React.ReactNode; de
             <TermSwitch />
             <button className="search-trigger" data-tour="search" type="button" aria-label="Open command palette" onClick={() => setPaletteOpen(true)}><Search size={16} /><span>Search or run…</span><kbd>⌘ K</kbd></button>
             <button className="icon-button tour-trigger" data-tour="tour" title="Guided tour" aria-label="Replay the guided tour" type="button" onClick={() => setTourOpen(true)}><Compass size={17} /></button>
-            <div className="topbar-date"><span className="date-dot" /> October 2026</div>
+            <TodayBadge />
           </div>
         </header>
         {demoMode && <div className="demo-banner"><span className="demo-banner-icon"><Sparkles size={14} /></span><strong>Illustrative preview</strong><span>Sample figures are synthetic and are not actual Mesa student records.</span><Link href="/setup">Connect your workspace <ArrowUpRight size={13} /></Link></div>}
@@ -106,4 +106,11 @@ function pageTitle(pathname: string) {
   // Record pages end in an ID; name them after their section instead (e.g. /materials/<id> → "Materials").
   const last = parts.at(-1) && /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(parts.at(-1)!) ? parts.at(-2) : parts.at(-1);
   return last?.replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) ?? "Overview";
+}
+
+// Today's date in India, set after the page loads so the server and the browser never disagree about it.
+function TodayBadge() {
+  const [today, setToday] = useState("");
+  useEffect(() => { setToday(new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", weekday: "short", day: "numeric", month: "short", year: "numeric" })); }, []);
+  return <div className="topbar-date" suppressHydrationWarning><span className="date-dot" /> {today}</div>;
 }

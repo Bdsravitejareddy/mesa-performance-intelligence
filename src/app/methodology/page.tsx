@@ -22,7 +22,7 @@ export default async function MethodologyPage() {
         <li><strong>AI grades are blind.</strong> The grader never sees your official mark, feedback or identity, so it cannot simply agree with your faculty.</li>
         <li><strong>Missing evidence is never a weakness.</strong> Anything without evidence is shown as “no evidence yet”, never as zero.</li>
         <li><strong>Benchmarks are conventions, not truths.</strong> No external body sets “75 for a core course”; these are starting points you can change. Research-backed parts are labelled and linked on <Link href="/tests" className="text-link">Reasoning &amp; personality</Link>.</li>
-        <li><strong>Known limits are stated.</strong> Few official marks are released yet, so most figures rest partly on AI grades and are labelled provisional; images and charts in files are not read; projects are judged from their documentation and structure, not by running the code.</li>
+        <li><strong>Known limits are stated.</strong> Many individual assessments have no released mark of their own (a finished term&apos;s course results come from its report card), so skill-level figures rest partly on AI grades and are labelled provisional; images and charts in files are not read; projects are judged from their documentation and structure, not by running the code.</li>
       </ul>
     </section>
     <div className="method-grid">

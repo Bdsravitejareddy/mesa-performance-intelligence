@@ -134,3 +134,14 @@ describe("attaching a Drive file to a submission at most once", () => {
     expect(documents[0]).toMatchObject({ course_material_id: "m3", source_version: "3" });
   });
 });
+
+describe("files given to students", () => {
+  it("are recognised by name, however closely they match the assessment", async () => {
+    const { GIVEN_MATERIAL } = await import("./submission-matching");
+    expect(GIVEN_MATERIAL.test("AI x Ops Hackathon_Guidelines")).toBe(true);
+    expect(GIVEN_MATERIAL.test("Case brief - Zepto.pdf")).toBe(true);
+    expect(GIVEN_MATERIAL.test("Workbook Template.xlsx")).toBe(true);
+    expect(GIVEN_MATERIAL.test("AI x Ops Hackathon _ Team Ritika and Ravi _ Case 1.pptx")).toBe(false);
+    expect(GIVEN_MATERIAL.test("Zepto Async Assignment - Ravi.docx")).toBe(false);
+  });
+});

@@ -20,6 +20,6 @@ describe("personality tips", () => {
     const tips = personalityTips({ self: null, context: null, external: { neo } });
     expect(tips.map((tip) => tip.trait)).toEqual(["Highly conscientious", "High in intellect", "Emotionally steady", "Extraverted"]);
     expect(tips[0].basis).toBe("IPIP-NEO-300: 99th percentile");
-    expect(tips[2].basis).toBe("IPIP-NEO-300: 1st percentile");
+    expect(tips[2].basis).toBe("IPIP-NEO-300: steadier under stress than 99% of the comparison group");
   });
 });

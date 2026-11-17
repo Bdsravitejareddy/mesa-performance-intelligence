@@ -29,6 +29,12 @@ export function projectStandard(hasStatement: boolean, hasOwnWords: boolean, use
   return { source: "model_general", label: `${hasStatement ? "Project criteria (dashboard default) judged against the problem statement you were given" : "Project criteria (dashboard default); no problem statement added"} — academic case study: deployment and real-world utility are not assessed`, criteria };
 }
 
+// A repository with next to nothing in it (a placeholder README, a file or two) cannot be judged: it is marked not
+// assessable rather than scored, since missing evidence is never a zero.
+export function isPlaceholder(project: Pick<Project, "structure" | "readme" | "description">): boolean {
+  return (project.structure?.files ?? 0) <= 2 && (project.readme ?? "").trim().length < 300 && (project.description ?? "").trim().length < 120;
+}
+
 export function projectWork(project: Project, ownWords: ProjectContext[]): { work: string; ownText: string } {
   const facts = [
     `Project: ${project.name}`,
@@ -75,6 +81,7 @@ export async function evaluateProjects(client: SupabaseClient, userId: string, b
   const current = new Set(((previous.data ?? []) as { project_key: string; input_hash: string; report?: { rulesVersion?: string } }[]).filter((row) => row.report?.rulesVersion === PROJECT_RULES_VERSION).map((row) => row.project_key));
   for (const project of [...projects].sort((a, b) => Number(current.has(a.key)) - Number(current.has(b.key)))) {
     if (Date.now() > deadline - 60_000) { result.skipped += 1; continue; }
+    if (isPlaceholder(project)) { result.unchanged += 1; continue; }
     const mine = ((contexts.data ?? []) as ProjectContext[]).filter((item) => item.project_key === project.key);
     const statement = mine.filter((item) => item.kind === "problem_statement").map((item) => item.body).join("\n\n").slice(0, 6000);
     const ownWords = mine.filter((item) => item.kind === "own_words");

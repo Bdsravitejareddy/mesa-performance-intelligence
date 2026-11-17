@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { isSubmitted } from "@/lib/due";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { AppShell } from "@/components/app-shell";
 import { Why } from "@/components/why";
@@ -96,7 +97,8 @@ async function load(supabase: SupabaseClient, term: TermChoice): Promise<Row[]> 
     const linkRows = (links.data ?? []).filter((row) => ids.has(row.submission_id as string));
     const grade = latest.get(assessment.id as string) ?? { ai: null, code: null, report: null, codeReport: null };
     const feedbackText = subs.map((row) => String(row.official_feedback ?? "")).find((text) => text.trim()) ?? "";
-    const submittedStatus = subs.some((row) => /submit|graded/i.test(String(row.lms_submission_status ?? ""))) || /submitted/i.test(capture?.status ?? "");
+    // The same reading as the Due page and the overview: "not_submitted" is not a submission, "late" is.
+    const submittedStatus = subs.some((row) => isSubmitted(row as { lms_submission_status?: string | null; submitted_at?: string | null })) || /submitted/i.test(capture?.status ?? "");
     const status: Status = official !== undefined ? "marked" : grade.ai !== null ? "graded" : /external form/i.test(capture?.status ?? "") ? "external" : submittedStatus || files || linkRows.length ? "submitted" : "not_submitted";
     return {
       id: assessment.id as string, title: assessment.title as string, course: course.get(assessment.course_id as string)!, status,

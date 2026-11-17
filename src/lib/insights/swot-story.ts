@@ -38,7 +38,8 @@ export type StoryInputs = {
   readiness: RoleReadiness[];
   claims: StoryClaim[];
   criterionGaps: { assessment: string; course: string; label: string; score: number; max: number; overall: number }[];
-  coverage: { assessments: number; officialMarks: number };
+  // finishedTerms: terms whose official report card is in, so their course results are final.
+  coverage: { assessments: number; officialMarks: number; finishedTerms?: string[] };
   dataQuality: { syncWarning: string | null; heldAssignments: number };
 };
 
@@ -251,8 +252,10 @@ export function buildSwotStory(input: StoryInputs): Finding[] {
   const { assessments, officialMarks } = input.coverage;
   if (assessments >= 5 && officialMarks / assessments < 0.5) findings.push({ key: "threat:coverage", category: "threat", kind: "coverage", subject: "Released marks", priority: 19, relevance: null,
     keyFact: `${officialMarks} of ${assessments} assessments have an official mark`,
-    headline: "Most of your work hasn't been officially marked yet.",
-    body: `Only ${officialMarks} of your ${assessments} assessments have a released mark, so much of this page rests on a few results and on AI estimates. Expect it to shift as marks arrive.`,
+    headline: input.coverage.finishedTerms?.length ? "Most individual assessments have no mark of their own." : "Most of your work hasn't been officially marked yet.",
+    body: input.coverage.finishedTerms?.length
+      ? `${input.coverage.finishedTerms.join(" and ")} ${input.coverage.finishedTerms.length === 1 ? "is" : "are"} finished and ${input.coverage.finishedTerms.length === 1 ? "its" : "their"} course results are final on your report card, but only ${officialMarks} of your ${assessments} individual assessments carry their own mark, so skill-level findings here rest partly on AI estimates. They will firm up as more marks are released.`
+      : `Only ${officialMarks} of your ${assessments} assessments have a released mark, so much of this page rests on a few results and on AI estimates. Expect it to shift as marks arrive.`,
     action: null, evidence: [{ class: "data", label: "Released marks", detail: `${officialMarks} of ${assessments} assessments have an official earned score` }], numbers: [officialMarks, assessments] });
 
   const thresholds = input.readiness.filter((item) => item.role.tier === "primary").flatMap((role) => role.eligibility.filter((item) => /\d+\+?\s*years/i.test(item.quote)).map((item) => ({ role: role.role.name, quote: item.quote })));

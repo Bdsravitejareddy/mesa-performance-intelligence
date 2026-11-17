@@ -12,14 +12,18 @@ export function WeeklyPractice() {
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
   const [answers, setAnswers] = useState<Record<string, number | string>>({});
   const [state, setState] = useState("");
-  const load = () => fetch("/api/practice").then((response) => response.json()).then((body) => { if (body.items) { setData(body); setAnswers(body.answers ?? {}); } else setState(body.error ?? "Could not load."); });
+  // A first visit each week writes the questions, which can take a minute or two; a failed or timed-out request says
+  // so and offers a retry instead of leaving the page on its loading message.
+  const load = () => fetch("/api/practice").then((response) => response.json()).then((body) => { if (body.items) { setData(body); setAnswers(body.answers ?? {}); } else setState(body.error ?? "This week's practice could not be prepared."); })
+    .catch(() => setState("This week's practice could not be prepared in time."));
   useEffect(() => { void load(); }, []);
   async function start() { setState("Starting…"); await fetch("/api/practice", { method: "POST" }); setState(""); await load(); }
   const deadline = data?.startedAt && data.timeLimit ? new Date(data.startedAt).getTime() + data.timeLimit * 1000 : null;
   const remaining = deadline ? Math.max(0, Math.round((deadline - now) / 1000)) : null;
   // When time runs out, the answers so far are submitted (time over the limit is recorded on the server too).
   useEffect(() => { if (data && !data.submitted && remaining === 0 && !state) void submit(); });
-  if (!data) return <p className="empty-hint">{state || "Preparing this week's practice from your course material — this can take a minute the first time…"}</p>;
+  if (!data) return state ? <p className="empty-hint">{state} <button type="button" className="button button-secondary" onClick={() => { setState(""); void load(); }}>Try again</button></p>
+    : <p className="empty-hint">Preparing this week&apos;s practice from your course material — the first visit of the week can take a minute or two…</p>;
   if (!data.started && !data.submitted) return <div className="content-panel practice-start">
     <h2>Ready when you are</h2>
     {data.focusReason && <p className="practice-why"><b>Why this week:</b> {data.focusReason}</p>}
@@ -36,7 +40,7 @@ export function WeeklyPractice() {
   }
   const label = { quiz: "Quiz", trick: "Trick question", case: `Case task · ${data.focus}`, conversation: "Conversation" } as const;
   return <div className="practice">
-    <div className="practice-head"><p className="empty-hint">Week of {new Date(data.week).toLocaleDateString(undefined, { day: "numeric", month: "long" })} · {data.course ? <>questions from <b>{data.course.replace(/\s+with\s+.*$/i, "")}</b>, chosen for {data.focus}</> : <>extreme reasoning questions (course questions need AI consent and course material)</>}. Every question is checked twice against the course material before it is used.</p>
+    <div className="practice-head"><p className="empty-hint">Week of {new Date(data.week).toLocaleDateString("en-IN", { day: "numeric", month: "long" })} · {data.course ? <>questions from <b>{data.course.replace(/\s+with\s+.*$/i, "")}</b>, chosen for {data.focus}</> : <>extreme reasoning questions (course questions need AI consent and course material)</>}. Every question is checked twice against the course material before it is used.</p>
       {!data.submitted && remaining !== null && <span className={`test-clock${remaining < 120 ? " urgent" : ""}`} aria-live="polite">{Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, "0")}</span>}</div>
     {data.items.map((item, index) => {
       const outcome = result?.questions.find((row) => row.id === item.id);

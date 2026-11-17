@@ -1,4 +1,6 @@
 import { AppShell } from "@/components/app-shell";
+import { selectedTerm } from "@/lib/term";
+import { TermScopeNote } from "@/components/term-scope-note";
 import { Cue } from "@/components/cue";
 import { AssessmentCompetencyTagger, AutoTagButton } from "@/components/assessment-competency-tagger";
 import { CompetencyWhy, type ClaimRow, type HistoryRow } from "@/components/competency-why";
@@ -32,6 +34,7 @@ export default async function CompetenciesPage() {
 
   return <AppShell demoMode={demoMode}><div className="section-page">
     <div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> EVIDENCE, NOT VERDICTS</div><h1>Competency map</h1><p className="page-subtitle">What your assessed work has demonstrated, what it has not, and what remains unknown.</p></div></div>
+    <TermScopeNote term={await selectedTerm().catch(() => "all" as const)} reason="skills build up across terms, so every piece of evidence counts." />
     <div className="info-callout"><span>Each competency is classified from the marks on the assessments mapped to it: the official mark where one is released, otherwise the blind AI grade of your submitted work (labelled, and kept at low confidence when it is the only evidence). A competency with nothing mapped and marked is <strong>unknown</strong>, not weak. Open <em>Why this conclusion?</em> on any row to see the evidence.</span></div>
     {data && data.mappings.some((row) => row.review_status === "suggested") && <p className="net-open"><b>{data.mappings.filter((row) => row.review_status === "suggested").length} suggested links</b> between {new Set(data.mappings.filter((row) => row.review_status === "suggested").map((row) => row.assessment_id)).size} assessments and competencies are waiting for your review below. Suggestions never count as evidence until you accept them.</p>}
     {!data ? <section className="content-panel"><p className="empty-hint">{demoMode ? "Preview mode has no competency evidence. Connect the private workspace to map real assessments." : "Connect Supabase to load competency evidence."}</p></section> : <>

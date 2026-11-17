@@ -1,12 +1,12 @@
 import type { SyncHealth } from "@/lib/lms/sync-health";
 
 export function SyncHealthNotice({ health, compact = false }: { health: SyncHealth; compact?: boolean }) {
-  const lastCompleted = health.lastCompletedAt ? new Date(health.lastCompletedAt).toLocaleString() : "never";
+  const lastCompleted = health.lastCompletedAt ? new Date(health.lastCompletedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" }) : "never";
   const latest = health.latest;
   const tone = health.level === "ok" ? "info-callout" : "info-callout data-quality-warning";
   return <div className={tone} role="status" data-sync-level={health.level}>
     <strong>Last successful LMS sync: {lastCompleted}</strong>
-    {!compact && latest && <span> · Latest run: {latest.status === "partial" && health.level === "ok" ? "succeeded" : latest.status} · {new Date(latest.finished_at ?? latest.started_at).toLocaleString()}{latest.message ? ` · ${latest.message}` : ""}</span>}
+    {!compact && latest && <span> · Latest run: {latest.status === "partial" && health.level === "ok" ? "succeeded" : latest.status} · {new Date(latest.finished_at ?? latest.started_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" })}{latest.message ? ` · ${latest.message}` : ""}</span>}
     {health.warnings.length > 0 && <ul className="data-quality-list">{health.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
     {health.notices.length > 0 && <ul className="sync-notices">{health.notices.map((notice) => <li key={notice}>{notice}</li>)}</ul>}
   </div>;

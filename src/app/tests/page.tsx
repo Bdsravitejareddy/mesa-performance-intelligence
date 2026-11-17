@@ -3,7 +3,7 @@ import { AppShell } from "@/components/app-shell";
 import { Cue } from "@/components/cue";
 import { ExternalAssessmentsForm } from "@/components/external-assessments";
 import { cliftonDomains, sixteenPToBigFive } from "@/lib/tests/external";
-import { NEO_TRAITS, neoOnDashboardScale, standoutFacets } from "@/lib/tests/ipip-neo";
+import { NEO_TRAITS, doubtfulFacet, neoOnDashboardScale, standoutFacets } from "@/lib/tests/ipip-neo";
 import { ContextReadingRefresh } from "@/components/context-reading-refresh";
 import { Radar } from "@/components/radar";
 import { SkillsRadar } from "@/components/skills-radar";
@@ -59,13 +59,13 @@ export default async function TestsPage() {
 
     {glance && <section className="content-panel" aria-label="Personality, two readings">
       <div className="panel-head"><h2>Personality, two readings</h2><ContextReadingRefresh hasReading={Boolean(glance.context)} /></div>
-      <p className="empty-hint">How you answered the questionnaire, beside a reading of what you have written about yourself — your note, your assistants&apos; profiles and the patterns seen in your coursework. {glance.context ? `Context read ${new Date(glance.context.date).toLocaleDateString()}.` : "No context reading yet."}</p>
+      <p className="empty-hint">How you answered the questionnaire, beside a reading of what you have written about yourself — your note, your assistants&apos; profiles and the patterns seen in your coursework. {glance.context ? `Context read ${new Date(glance.context.date).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric" })}.` : "No context reading yet."}</p>
       <div className={`trait-table${neo ? " has-neo" : ""}`} role="table">
         <div className="trait-head" role="row"><span>Trait</span><span>How you answered</span>{neo && <span>{neo.form}</span>}<span>From your context</span><span>What research links it to</span></div>
         {FACTORS.map((factor) => { const self = glance.self?.[factor]; const context = glance.context?.factors[factor]; return <div key={factor} className="trait-row" role="row">
           <span><strong><Cue label={factor === "neuroticism" ? "Emotional stability" : FACTOR_LABELS[factor].split(" ")[0].replace("Intellect", "Intellect")}>{FACTOR_LABELS[factor]}</Cue></strong><Why label="How to read this">{FACTOR_READINGS[factor]}</Why></span>
           <span className="trait-score">{self === undefined ? "—" : `${self.toFixed(1)}/5`}</span>
-          {neo && neoScale && <span className="trait-score">{neoScale[factor].toFixed(1)}/5<small>{neo.traits[NEO_OF[factor]].percentile !== null ? `higher than ${neo.traits[NEO_OF[factor]].percentile}% of ${neo.normGroup.toLowerCase() || "the comparison group"}` : ""}{factor === "intellect" ? " (Openness; the 1–5 figure uses its Intellect and Imagination facets)" : ""}</small></span>}
+          {neo && neoScale && <span className="trait-score">{neoScale[factor].toFixed(1)}/5<small>{neo.traits[NEO_OF[factor]].percentile !== null ? (factor === "neuroticism" ? `steadier than ${100 - neo.traits[NEO_OF[factor]].percentile!}% of ${neo.normGroup.toLowerCase() || "the comparison group"}` : `higher than ${neo.traits[NEO_OF[factor]].percentile}% of ${neo.normGroup.toLowerCase() || "the comparison group"}`) : ""}{factor === "intellect" ? " (Openness; the 1–5 figure uses its Intellect and Imagination facets)" : ""}</small></span>}
           <span className="trait-score">{context?.score === null || context?.score === undefined ? <small>not enough context</small> : <>{context.score.toFixed(1)}/5<small>{context.confidence} confidence</small></>}{context?.reason && context.score !== null && <Why label="Why"><p>{context.reason}</p>{context.quote && <q>{context.quote}</q>}</Why>}</span>
           <span><small>{FACTOR_RESEARCH[factor].strengths}</small><Why label="Caveat and sources"><p>{FACTOR_RESEARCH[factor].watch}</p><ul className="cite-list">{FACTOR_RESEARCH[factor].studies.map((key) => <li key={key}><Cite id={key} /></li>)}</ul></Why></span>
         </div>; })}
@@ -77,7 +77,7 @@ export default async function TestsPage() {
 
     {neo && <section className="content-panel neo-result" aria-label="Big Five facets">
       <h2>{neo.form}: your thirty facets</h2>
-      <p className="empty-hint">Taken {neo.takenOn ?? "on an unknown date"}{neo.durationSeconds ? ` in ${Math.round(neo.durationSeconds / 60)} minutes` : ""}. Self-report, like the questionnaire above, but {neo.form.replace("IPIP-NEO-", "")} statements long. Percentiles are the test site&apos;s own comparison with {neo.normGroup.toLowerCase() || "its sample"}{neo.normNote ? ` (${neo.normNote})` : ""}.</p>
+      <p className="empty-hint">Taken {neo.takenOn ? new Date(`${neo.takenOn}T12:00:00Z`).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "on an unknown date"}{neo.durationSeconds ? ` in ${Math.round(neo.durationSeconds / 60)} minutes` : ""}. Self-report, like the questionnaire above, but {neo.form.replace("IPIP-NEO-", "")} statements long. Percentiles are the test site&apos;s own comparison with {neo.normGroup.toLowerCase() || "its sample"}{neo.normNote ? ` (${neo.normNote})` : ""}.</p>
       {neo.anomalies.length > 0 && <ul className="neo-anomalies">{neo.anomalies.map((item) => <li key={item}>{item}</li>)}</ul>}
       <div className="neo-traits">{NEO_TRAITS.map((trait) => {
         const score = neo.traits[trait.key];
@@ -87,10 +87,10 @@ export default async function TestsPage() {
         const shown = (percentile: number | null) => (percentile === null ? null : steady ? 100 - percentile : percentile);
         return <div key={trait.key} className="neo-trait">
           <h3>{steady ? "Emotional stability" : trait.label} <small>{score.raw}/{score.max} {steady ? "neuroticism" : ""} · {steady ? `steadier than ${shown(score.percentile) ?? "—"}%` : `higher than ${score.percentile ?? "—"}%`}</small></h3>
-          <ul>{neo.facets.filter((facet) => facet.trait === trait.key).map((facet) => <li key={facet.name} className={standoutFacets(neo).some((item) => item.name === facet.name) ? "neo-standout" : ""}><span>{steady ? `Low ${facet.name.toLowerCase()}` : facet.name}</span><span className="report-bar report-bar-thin" aria-hidden><i style={{ width: `${Math.max(2, shown(facet.percentile) ?? 0)}%` }} /></span><span>{shown(facet.percentile) ?? "—"}%</span></li>)}</ul>
+          <ul>{neo.facets.filter((facet) => facet.trait === trait.key).map((facet) => <li key={facet.name} className={standoutFacets(neo).some((item) => item.name === facet.name) ? "neo-standout" : ""}><span>{steady ? `Low ${facet.name.toLowerCase()}` : facet.name}{doubtfulFacet(neo, facet.name) ? " *" : ""}</span><span className="report-bar report-bar-thin" aria-hidden><i style={{ width: `${Math.max(2, shown(facet.percentile) ?? 0)}%` }} /></span><span>{shown(facet.percentile) ?? "—"}%</span></li>)}</ul>
         </div>;
       })}</div>
-      <p className="scope-note">Bars show how many of the comparison group you score above; for emotional stability, how many you are steadier than.</p>
+      <p className="scope-note">Bars show how many of the comparison group you score above; for emotional stability, how many you are steadier than.{neo.facets.some((facet) => doubtfulFacet(neo, facet.name)) ? " * The report states this facet inconsistently (see above), so it is not used in any summary." : ""}</p>
       {standoutFacets(neo).length > 0 && <p className="scope-note"><b>Facets that break from their trait</b> (25+ percentile points): {standoutFacets(neo).map((facet) => `${facet.name} ${facet.percentile}% within ${NEO_TRAITS.find((trait) => trait.key === facet.trait)!.label} ${facet.traitPercentile}%`).join(" · ")}. Facets often say more than the trait average.</p>}
     </section>}
 
@@ -105,7 +105,7 @@ export default async function TestsPage() {
     </section>}
 
     <div className="section-two-column"><section className="content-panel"><h2>Reasoning test</h2><ReasoningTest />
-      {history.length > 0 && <><h3 className="role-stage">Your attempts</h3><ul className="test-history">{history.map((row) => <li key={row.id}><strong>{row.result.correct}/{row.result.total}</strong> <small>{row.result.level ?? "standard"}{row.result.ability ? ` · adjusted ${row.result.ability.scaled}` : ""} · {new Date(row.submitted_at).toLocaleString()} · {Object.entries(row.result.sections).map(([section, value]) => `${section} ${value.correct}/${value.total}`).join(" · ")}{row.result.overtime ? " · over time" : ""}</small></li>)}</ul></>}</section>
+      {history.length > 0 && <><h3 className="role-stage">Your attempts</h3><ul className="test-history">{history.map((row) => <li key={row.id}><strong>{row.result.correct}/{row.result.total}</strong> <small>{row.result.level ?? "standard"}{row.result.ability ? ` · adjusted ${row.result.ability.scaled}` : ""} · {new Date(row.submitted_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" })} · {Object.entries(row.result.sections).map(([section, value]) => `${section} ${value.correct}/${value.total}`).join(" · ")}{row.result.overtime ? " · over time" : ""}</small></li>)}</ul></>}</section>
       <aside className="content-panel"><h2>Personality questionnaire</h2><p className="scope-note">Statements are drawn at random from the 50 public-domain IPIP Big-Five Factor Markers (Goldberg, 1992) each time. It records how you describe yourself today, not how others see you. Saving it, with your note, refreshes the context reading and the behaviour analysis within about a minute.</p><PersonalityQuestionnaire /></aside></div>
 
     <section className="content-panel" aria-label="What this page rests on">

@@ -102,7 +102,7 @@ export default async function GradingPage() {
             <div><h3>Only the faculty raised</h3>{row.comparison?.facultyOnly.length ? <ul>{row.comparison.facultyOnly.map((item) => <li key={item}>{item}</li>)}</ul> : <p className="empty-hint">—</p>}</div>
             <div><h3>Only the AI raised</h3>{row.comparison?.aiOnly.length ? <ul>{row.comparison.aiOnly.slice(0, 6).map((item) => <li key={item}>{item}</li>)}</ul> : <p className="empty-hint">—</p>}</div>
           </div>
-          <p className="scope-note">{row.code_report?.method} {row.code_report?.adjustments?.join("; ")} The AI graded blind: it never saw the official mark or feedback. {row.ai_report?.label} Graded {new Date(row.created_at).toLocaleString()}{row.provider_model ? ` · ${row.provider_model}` : ""}.</p>
+          <p className="scope-note">{row.code_report?.method} {row.code_report?.adjustments?.join("; ")} The AI graded blind: it never saw the official mark or feedback. {row.ai_report?.label} Graded {new Date(row.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" })}{row.provider_model ? ` · ${row.provider_model}` : ""}.</p>
         </Why>
       </article>)}
     </section>}
@@ -153,7 +153,7 @@ function ScoreTrack({ official, ai, code }: { official: number | null; ai: numbe
 async function loadGrading(supabase: SupabaseClient, term: TermChoice) {
   const [gradings, submissions, assessments, courses, documents] = await Promise.all([
     supabase.from("submission_gradings").select("id, submission_id, assessment_id, standard_source, standard_label, code_score, code_report, ai_score, ai_report, ai_status, official_mark, comparison, provider_model, created_at").order("created_at", { ascending: false }),
-    supabase.from("submissions").select("id, assessment_id, official_feedback, page_capture"),
+    supabase.from("submissions").select("id, assessment_id, official_feedback, page_capture, official_mark"),
     supabase.from("assessments").select("id, course_id, title").order("title"),
     supabase.from("courses").select("id, title, term"),
     supabase.from("submission_documents").select("id, name, submission_id, extraction_status"),
@@ -179,12 +179,14 @@ async function loadGrading(supabase: SupabaseClient, term: TermChoice) {
   const gradedAssessments = new Set(rows.map((row) => row.assessment_id));
   const submissionsByAssessment = new Map<string, string[]>();
   for (const row of submissions.data ?? []) submissionsByAssessment.set(row.assessment_id as string, [...(submissionsByAssessment.get(row.assessment_id as string) ?? []), row.id as string]);
+  // "Mark recorded" only when a released mark really exists; a submission record alone is not a mark.
+  const markedAssessments = new Set((submissions.data ?? []).filter((row) => (row as { official_mark?: unknown }).official_mark !== null && (row as { official_mark?: unknown }).official_mark !== undefined).map((row) => row.assessment_id as string));
   const docStatus = new Map<string, string[]>();
   for (const row of documents.data ?? []) docStatus.set(row.submission_id as string, [...(docStatus.get(row.submission_id as string) ?? []), row.extraction_status as string]);
   const waiting: Waiting[] = (assessments.data ?? []).filter((row) => !gradedAssessments.has(row.id as string)).map((row) => {
     const subs = submissionsByAssessment.get(row.id as string) ?? [];
     const statuses = subs.flatMap((id) => docStatus.get(id) ?? []);
-    const reason = !statuses.length ? (subs.length ? "mark recorded, but no submitted file found yet" : "no submitted file found yet") : statuses.some((status) => status !== "complete") ? "submitted file still being read" : "ready — grades on the next run";
+    const reason = !statuses.length ? (markedAssessments.has(row.id as string) ? "official mark released, but no submitted file found to grade" : subs.length ? "no submitted file found yet — the work may be on Nexus only, or not yet submitted" : "no submitted file found yet") : statuses.some((status) => status !== "complete") ? "submitted file still being read" : "ready — grades on the next run";
     return { assessment: row.title as string, course: course.get(row.course_id as string) ?? "", reason };
   });
   rows.sort((a, b) => a.course.localeCompare(b.course) || a.assessment.localeCompare(b.assessment));

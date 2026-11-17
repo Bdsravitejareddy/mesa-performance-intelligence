@@ -33,7 +33,7 @@ export function CompetencyChallenge({ competencyId, currentState, stateLabel, ch
   return <div className="competency-challenge">
     <h3>Challenges</h3>
     {challenges.length ? <ul className="challenge-list">{challenges.map((item) => <li key={item.id} className={`challenge-${item.status}`}>
-      <span className="challenge-status">{item.status === "open" ? "Open" : item.status === "resolved" ? "Resolved" : "Withdrawn"} · {new Date(item.created_at).toLocaleDateString()}</span>
+      <span className="challenge-status">{item.status === "open" ? "Open" : item.status === "resolved" ? "Resolved" : "Withdrawn"} · {new Date(item.created_at).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric" })}</span>
       <p>{item.statement}</p>
       {item.counterevidence && <p className="challenge-counter">Counterevidence: {item.counterevidence}</p>}
       {item.resolution_note && <p className="challenge-counter">Outcome: {item.resolution_note}</p>}

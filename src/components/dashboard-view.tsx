@@ -75,7 +75,7 @@ export function DashboardView({ data, name = "there", glance = null, staleBrief 
       {brief && brief.focus.length > 0 && <section className="brief-focus this-week"><span className="eyebrow"><span className="eyebrow-line" /> Focus this week</span><ol>{brief.focus.map((item) => <li key={item}>{item}</li>)}</ol></section>}
 
       {brief && brief.insights.length > 0 && <Why label={`More insights (${brief.insights.length})`}><section className="brief-insights" aria-label="Insights">{brief.insights.map((item) => <article key={item.title} className={`brief-card kind-${item.kind}`}><span className="brief-kind">{item.kind}</span><h3>{item.title}</h3><p>{item.detail}</p></article>)}</section></Why>}
-      {brief && <small className="scope-note brief-source">AI-written from the figures on this page · {data.brief?.model} · {new Date(data.brief!.createdAt).toLocaleString()}</small>}
+      {brief && <small className="scope-note brief-source">AI-written from the figures on this page · {data.brief?.model} · {new Date(data.brief!.createdAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" })}</small>}
 
       {glance && <ProfileGlance glance={glance} />}
 
@@ -164,12 +164,14 @@ function Highlight({ label, value, unit, insight, ring, tone, href, children }: 
 }
 
 const VERDICT_LABEL = { sufficient: "enough", needs_work: "needs work", not_yet_evidenced: "not yet shown", awaiting_results: "results due" } as const;
-const shortRole = (role: string) => role.replace(/Senior Technical Product Manager/i, "Sr TPM").replace(/Forward Deployed Engineer/i, "FDE");
+// Role names are spelled out: abbreviations such as "Sr TPM" or "FDE" mean nothing to most readers.
+const shortRole = (role: string) => role.replace(/Senior Technical Product Manager/i, "Technical Product Manager");
+const RELEVANCE_LABEL: Record<string, string> = { core: "core course", supporting: "supporting course", peripheral: "minor course" };
 
 function StandingRow({ row }: { row: CourseStanding }) {
   return <div className="standing-row">
     <span className="standing-name"><strong>{row.title.replace(/\s+with\s+.*$/i, "")}</strong><small>{row.context?.assessedBy ? `assessed via ${row.context.assessedBy}${row.context.expected ? ` · due ${row.context.expected}` : ""}${row.context.scaleMax ? ` · cohort high ${row.context.scaleMax}` : ""}` : `official marks cover ${Math.round(row.officialShare * 100)}% of the course weight${row.demonstratedShare > row.officialShare ? ` · ${Math.round(row.demonstratedShare * 100)}% with AI grades` : ""}`}</small></span>
     <span className={`standing-value basis-${row.basis}`}>{row.standing === null ? "—" : row.standing}{row.basis === "ai" && <em>AI</em>}{row.basis === "mixed" && row.projected !== null && row.projected !== row.standing && <small className="standing-projected">with AI estimates {row.projected}</small>}</span>
-    <span className="standing-roles">{row.roles.map((role) => <span key={role.role} className={`role-chip verdict-${role.verdict}`} title={`${role.why} Dashboard benchmark for a ${role.relevance} course: ${role.threshold}/100 (an internal convention, not an employer requirement).`}>{shortRole(role.role)} · {role.relevance} · {VERDICT_LABEL[role.verdict]}</span>)}</span>
+    <span className="standing-roles">{row.roles.map((role) => <span key={role.role} className={`role-chip verdict-${role.verdict}`} title={`${role.why} Dashboard benchmark for a ${role.relevance} course: ${role.threshold}/100 (an internal convention, not an employer requirement).`}>{shortRole(role.role)} · {RELEVANCE_LABEL[role.relevance] ?? role.relevance} · {VERDICT_LABEL[role.verdict]}</span>)}</span>
   </div>;
 }

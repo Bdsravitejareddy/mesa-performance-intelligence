@@ -2,7 +2,7 @@ import { AppShell } from "@/components/app-shell";
 import { DashboardView } from "@/components/dashboard-view";
 import { getDashboardSnapshot } from "@/lib/dashboard-data";
 import { cachedRead } from "@/lib/data/cached";
-import { selectedTerm } from "@/lib/term";
+import { inTerm, selectedTerm } from "@/lib/term";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import Link from "next/link";
 import { workspaceSession } from "@/lib/data/cached";
@@ -28,7 +28,7 @@ export default async function HomePage() {
   }
   const glance = data.demoMode ? null : await cachedRead("tests:glance", loadGlance).catch(() => null);
   const steps = data.demoMode ? [] : await cachedRead("overview:steps", onboardingSteps).catch(() => []);
-  const quizTool = data.demoMode ? null : await cachedRead("overview:quiz-tool", async (client) => summariseQuizTool(((await client.from("quiz_tool_results").select("course, term, session, correct, total, shown, missed")).data ?? []) as QuizToolRow[])).catch(() => null);
+  const quizTool = data.demoMode ? null : await cachedRead(`overview:quiz-tool:${data.term}`, async (client) => summariseQuizTool((((await client.from("quiz_tool_results").select("course, term, session, correct, total, shown, missed")).data ?? []) as QuizToolRow[]).filter((row) => inTerm(data.term, (row as { term?: string | null }).term)))).catch(() => null);
   // A summary written under earlier rules, or before a newer personality result, behaviour analysis or skill view,
   // is replaced in the background on this visit (reused without an AI call if its inputs turn out unchanged).
   const newerInput = !data.demoMode && data.brief ? await cachedRead("overview:newest-input", newestProfileInput).catch(() => null) : null;

@@ -98,7 +98,7 @@ export async function getDashboardSnapshot(client?: SupabaseClient, term: TermCh
   const [courseResult, assessmentResult, submissionResult, competencyResult, syncResult] = await Promise.all([
     supabase.from("courses").select("id, code, title, term").order("created_at", { ascending: false }),
     supabase.from("assessments").select("id, course_id, title, assessment_format, due_at, official_max_mark, counts_toward_grade"),
-    supabase.from("submissions").select("id, assessment_id, official_mark, source_original_max_mark, submitted_at").not("official_mark", "is", null).order("submitted_at", { ascending: false }),
+    supabase.from("submissions").select("id, assessment_id, official_mark, source_original_max_mark, submitted_at, source_updated_at, created_at").not("official_mark", "is", null),
     supabase.from("topic_competencies").select("topic, state, score"),
     supabase.from("sync_runs").select("status, started_at, finished_at, message").eq("source_name", "Mesa Nexus MCP").order("started_at", { ascending: false }).limit(20),
   ]);
@@ -112,7 +112,10 @@ export async function getDashboardSnapshot(client?: SupabaseClient, term: TermCh
   const assessments = (assessmentResult.data ?? []).filter((assessment) => termCourseIds.has(assessment.course_id as string));
   const assessmentById = new Map(assessments.map((assessment) => [assessment.id, assessment]));
   const courseById = new Map(courses.map((course) => [course.id, course]));
-  const submissions = (submissionResult.data ?? []).filter((submission) => assessmentById.has(submission.assessment_id));
+  // Newest first by when the mark arrived (a mark can be released long after submission, or with no submission
+  // time on record), so "latest marks" really shows the latest.
+  const markedAt = (row: { source_updated_at?: string | null; submitted_at?: string | null; created_at?: string | null }) => String(row.source_updated_at ?? row.submitted_at ?? row.created_at ?? "");
+  const submissions = (submissionResult.data ?? []).filter((submission) => assessmentById.has(submission.assessment_id)).sort((a, b) => markedAt(b).localeCompare(markedAt(a)));
   const marks = submissions.map((submission) => {
     const assessment = assessmentById.get(submission.assessment_id);
     const course = assessment ? courseById.get(assessment.course_id) : undefined;

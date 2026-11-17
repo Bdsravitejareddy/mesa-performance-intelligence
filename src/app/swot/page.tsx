@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { selectedTerm } from "@/lib/term";
+import { TermScopeNote } from "@/components/term-scope-note";
 import { after } from "next/server";
 import { AppShell } from "@/components/app-shell";
 import { SwotForm } from "@/components/swot-form";
@@ -34,6 +36,7 @@ export default async function SwotPage() {
   const first = data ? startHere(data.findings) : null;
   return <AppShell demoMode={demoMode}><div className="section-page swot-story">
     <div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> SWOT</div><h1>Where you stand</h1><p className="page-subtitle">Read from your marks, AI estimates, CV and target roles. Each card keeps its evidence one click away.</p></div></div>
+    <TermScopeNote term={await selectedTerm().catch(() => "all" as const)} reason="strengths and gaps are judged from all your evidence, whichever term it came from." />
     {!data ? <p className="empty-hint">{demoMode ? "Preview mode has no evidence-based SWOT." : "Connect Supabase first."}</p> : <>
       <section className="story-lead" aria-labelledby="stands-out">
         <h2 id="stands-out">What stands out</h2>
@@ -117,7 +120,7 @@ async function computeStory(supabase: SupabaseClient) {
     readiness: buildLibrary().map((role) => roleReadiness(role, stateMap, claimRows)),
     claims: (profClaims.data ?? []).map((row) => ({ claim: row.claim as string, competencyId: (row.competency_id as string | null) ?? null, claimType: row.claim_type as string, status: row.status as string, fromKind: kinds.get(row.evidence_id as string) ?? "resume", supportedByKind: row.supporting_evidence_id ? kinds.get(row.supporting_evidence_id as string) ?? null : null })),
     criterionGaps,
-    coverage: { assessments: inputs.assessments.length, officialMarks: new Set(inputs.submissions.filter((row) => row.official_mark !== null).map((row) => row.assessment_id)).size },
+    coverage: { assessments: inputs.assessments.length, officialMarks: new Set(inputs.submissions.filter((row) => row.official_mark !== null).map((row) => row.assessment_id)).size, finishedTerms: ((await supabase.from("lms_report_cards").select("term")).data ?? []).map((row) => row.term as string) },
     dataQuality: { syncWarning: health.level === "ok" ? null : health.warnings[0] ?? null, heldAssignments: (held.data ?? []).length },
   });
   return { findings, entries: entries.data ?? [] };

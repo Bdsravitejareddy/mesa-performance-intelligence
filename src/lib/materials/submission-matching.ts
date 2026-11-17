@@ -21,6 +21,7 @@ export function titleScore(fileName: string, title: string): number {
 }
 
 export const SHORTLIST_THRESHOLD = 0.6;
+export const GIVEN_MATERIAL = /\b(guidelines?|brief|instructions?|rubric|template|question paper|problem statement|answer key|marking scheme)\b|_(guidelines?|brief|instructions?|rubric|template)\b/i;
 const SHORTLIST_MARGIN = 0.15;
 
 // The single best-matching assessment, only when it is clearly ahead of the next one.
@@ -82,6 +83,13 @@ export async function matchDriveSubmissions(client: SupabaseClient, budgetMs: nu
     const shortlist = shortlistAssessment(material.name, (assessments ?? []).filter((row) => row.course_id === courseId));
     const heldMatch = !shortlist ? shortlistAssessment(material.name, (held.data ?? []).map((row) => ({ id: row.id as string, title: row.title as string, record: row.record as MesaAssignmentRecord }))) : null;
     const base = { material_id: material.id, user_id: material.user_id, updated_at: new Date().toISOString() };
+    // A file named as the brief, guidelines, instructions, rubric or template is what the student was given, however
+    // closely its name matches the assessment ("AI x Ops Hackathon_Guidelines"): never their submission.
+    if (GIVEN_MATERIAL.test(material.name)) {
+      await client.from("material_submission_matches").upsert({ ...base, kind: "course_material", method: "title_only", confidence: "high", reason: "The file name says it is material given to students (brief, guidelines, instructions, rubric or template).", title_score: 0 }, { onConflict: "material_id" });
+      outcomes.push({ materialId: material.id, kind: "course_material", assessmentTitle: null, attached: false, note: "Given material, by its name" });
+      continue;
+    }
     if (!shortlist && !heldMatch) {
       // No assessment is named: ordinary course material.
       await client.from("material_submission_matches").upsert({ ...base, kind: "course_material", method: "title_only", confidence: "medium", reason: "The file name does not match any assessment in its course.", title_score: 0 }, { onConflict: "material_id" });

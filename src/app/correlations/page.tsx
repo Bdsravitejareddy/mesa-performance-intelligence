@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { selectedTerm } from "@/lib/term";
+import { TermScopeNote } from "@/components/term-scope-note";
 import { AppShell } from "@/components/app-shell";
 import { Why } from "@/components/why";
 import { cachedRead } from "@/lib/data/cached";
@@ -45,7 +47,8 @@ function patterns(points: Point[]): Pattern[] {
   const late = timed.filter((point) => point.late).map((point) => (point.official ?? point.ai)!);
   const onTime = timed.filter((point) => !point.late).map((point) => (point.official ?? point.ai)!);
   out.push({ key: "timing", title: "On time vs late", n: timed.length,
-    reading: late.length && onTime.length ? `Late work averages ${mean(late)} (${late.length}) against ${mean(onTime)} on time (${onTime.length}).` : late.length ? `Only late submissions have results so far (${late.length}).` : `${onTime.length} on-time submission${onTime.length === 1 ? " has" : "s have"} results; none was late.`,
+    // A comparison needs a few results on each side; with one or two, a difference says nothing.
+    reading: late.length >= 3 && onTime.length >= 3 ? `Late work averages ${mean(late)} (${late.length}) against ${mean(onTime)} on time (${onTime.length}).` : late.length && onTime.length ? `Too few late submissions to compare (${late.length} late, ${onTime.length} on time); a comparison needs at least 3 on each side.` : late.length ? `Only late submissions have results so far (${late.length}).` : `${onTime.length} on-time submission${onTime.length === 1 ? " has" : "s have"} results; none was late.`,
     detail: [{ label: "On time", value: mean(onTime)?.toString() ?? "—", n: onTime.length }, { label: "Late", value: mean(late)?.toString() ?? "—", n: late.length }], caution: "Uses the official mark where released, otherwise the AI grade. Late penalties, if any, are part of official marks." });
   // Like for like: the same blind grader, compared within each stakes tier, so individual practice tasks are
   // never set against group term exams.
@@ -86,6 +89,7 @@ export default async function PatternsPage() {
   const rows = patterns(points);
   return <AppShell demoMode={demoMode}><div className="section-page">
     <div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> Performance patterns</div><h1>Patterns</h1><p className="page-subtitle">What moves together in your results: descriptive patterns with their sample sizes, never causes.</p></div></div>
+    <TermScopeNote term={await selectedTerm().catch(() => "all" as const)} reason="patterns need as many results as possible, so every term is included." />
     <div className="pattern-grid">{rows.map((row) => <article key={row.key} className="content-panel pattern-card">
       <header><h2>{row.title}</h2><span className="panel-count">n = {row.n}</span></header>
       <p className="pattern-reading">{row.reading}</p>

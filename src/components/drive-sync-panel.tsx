@@ -20,7 +20,7 @@ function stateLabel(connection: DriveConnectionStatus) {
   if (connection.latestScan?.status === 'complete') return 'Completed';
   return 'Active';
 }
-function date(value: string | null) {return value ? new Date(value).toLocaleString() : 'Not yet recorded';}
+function date(value: string | null) {return value ? new Date(value).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" }) : 'Not yet recorded';}
 
 export function DriveSyncPanel({connections:initial,courses,configured}: {connections:DriveConnectionStatus[];courses:Course[];configured:boolean}) {
   const [connections,setConnections]=useState(initial),[available,setAvailable]=useState(configured);

@@ -52,7 +52,7 @@ describe("missing context scores", () => {
       context: { ...context, date: "2026-10-23" }, skills: [], aiViewDate: null, external: { sixteenP: null, clifton: [], neo },
       reasoning: [], behaviour: { observed: 0, total: 0, date: null, dimensions: [] },
     });
-    expect(summary.headline).toBe("On the IPIP-NEO-300, you describe yourself as very high in conscientiousness (99th percentile), unusually steady under stress (1st percentile for neuroticism), very high in openness to experience (98th percentile).");
+    expect(summary.headline).toBe("On the IPIP-NEO-300, your most distinctive traits: you describe yourself as very high in conscientiousness (99th percentile), unusually steady under stress (1st percentile for neuroticism), very high in openness to experience (98th percentile).");
     const facets = summary.points.find((point) => point.title === "What your facets say about agreeableness")?.text ?? "";
     expect(facets).toMatch(/high in Trust \(94%\), Sympathy \(94%\); around average in Cooperation \(48%\), Modesty \(50%\)/);
     expect(facets).toMatch(/Altruism left out/);

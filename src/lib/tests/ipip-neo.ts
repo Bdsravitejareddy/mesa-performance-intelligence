@@ -92,8 +92,9 @@ export function neoOnDashboardScale(result: IpipNeo): Record<Factor, number> {
 }
 
 // Facets that clearly break from their trait (25+ percentile points away): often more telling than the average.
+// A facet the report itself states inconsistently is left out, as everywhere else on the page.
 export function standoutFacets(result: IpipNeo): (IpipNeo["facets"][number] & { traitPercentile: number })[] {
-  return result.facets.filter((facet) => facet.percentile !== null && result.traits[facet.trait].percentile !== null && Math.abs(facet.percentile - result.traits[facet.trait].percentile!) >= 25)
+  return result.facets.filter((facet) => !doubtfulFacet(result, facet.name) && facet.percentile !== null && result.traits[facet.trait].percentile !== null && Math.abs(facet.percentile - result.traits[facet.trait].percentile!) >= 25)
     .map((facet) => ({ ...facet, traitPercentile: result.traits[facet.trait].percentile! }));
 }
 
@@ -104,3 +105,6 @@ export function neoSummaryText(result: IpipNeo): string {
   const standouts = standoutFacets(result).map((facet) => `${facet.name} ${facet.percentile}% (its trait ${facet.traitPercentile}%)`);
   return [`${result.form}, taken ${result.takenOn ?? "date unknown"}.`, ...traits, standouts.length ? `Facets that break from their trait: ${standouts.join("; ")}.` : "", result.anomalies.length ? `Report caveats: ${result.anomalies.join(" ")}` : ""].filter(Boolean).join("\n");
 }
+
+// A facet named in the report's own inconsistencies (e.g. "High" at the 48th percentile).
+export const doubtfulFacet = (result: IpipNeo, name: string) => result.anomalies.some((note) => note.startsWith(`${name} `));
