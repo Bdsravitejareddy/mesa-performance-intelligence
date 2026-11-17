@@ -7,7 +7,7 @@ import type { Finding } from "./swot-story";
 // The AI only rewords findings that were already ranked and built from evidence. Its output is kept only when
 // it passes deterministic checks; otherwise the built-in wording stands. The rules version is part of the key,
 // so changing these instructions invalidates every earlier write-up.
-export const SWOT_RULES_VERSION = "swot-story-v3-2026-10-24";
+export const SWOT_RULES_VERSION = "swot-story-v4-2026-11-17";
 
 export type CardText = { headline: string; body: string; action: string | null };
 export type SwotNarrative = { standsOut: string; cards: Record<string, CardText>; rulesVersion: string; sources: string[] };
@@ -51,7 +51,7 @@ export function checkCard(finding: Finding, raw: unknown): CardText | null {
   // ("no official mark yet" is fine; "your official mark" is not.)
   if (/\b(draft|tested different|because you)\b/i.test(all)) return null;
   if (/official/i.test(all.replace(/\b(?:no|not|without|isn't|aren't|never|before)\s+(?:an?\s+|any\s+)?official\b/gi, "")) && !classes.has("official")) return null;
-  if (finding.kind === "ai_signal" || (finding.kind === "conflict" && !classes.has("official"))) { if (!/\bAI\b|estimate/i.test(all)) return null; }
+  if (finding.aiOnly || finding.kind === "ai_signal" || (finding.kind === "conflict" && !classes.has("official"))) { if (!/\bAI\b|estimate/i.test(all)) return null; }
   if (finding.kind === "self_reported" && !/\bCV\b|résumé|resume|your own account|you describe|you say/i.test(all)) return null;
   return { headline, body, action };
 }

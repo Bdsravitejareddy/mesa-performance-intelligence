@@ -2,12 +2,20 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { STATE_LABELS } from "@/lib/competency/classify";
 
 type Recommendation = { competencyId: string; competency: string; state: string; confidence: string; importance: { weight: number; reasons: string[] }; gap: number; confidenceFactor: number; priority: number; activity: { title: string; why: string; effortHours: number; kind: string } };
 type PlanItem = { id: string; competency: string; activity: string; rationale: string; effort_hours: number; status: string; start_state: string; currentState: string | null; outcome: string | null; created_at: string; completed_at: string | null };
 
 const OUTCOMES: Record<string, string> = { improved: "Improved: the classification moved up on new evidence", unchanged: "New evidence, same classification", worse: "New evidence, classification moved down", no_new_evidence: "No new evidence yet — add the work this produced so it can be judged" };
-const STATES: Record<string, string> = { demonstrated_strength: "Demonstrated strength", emerging: "Emerging", meets_expectations: "Meets expectations", development_area: "Development area", conflicting: "Conflicting evidence", insufficient_evidence: "Insufficient evidence" };
+// The same state names as the Skills page, so a skill is described the same way on both.
+const STATES: Record<string, string> = STATE_LABELS;
+// Why an item ranks where it does, in words; the numbers stay in "How this is ranked".
+const STATE_REASON: Record<string, string> = { development_area: "low results in two or more assessments", conflicting: "your results disagree", insufficient_evidence: "not enough marked evidence yet", emerging: "one high result so far", meets_expectations: "mid-range results so far", demonstrated_strength: "already a strength" };
+const CONFIDENCE_REASON: Record<string, string> = { high: "", medium: "", low: "the evidence is thin, so this may change", insufficient: "nothing is counted yet, so this ranks slightly lower than a confirmed gap" };
+export function rankReason(item: Pick<Recommendation, "importance" | "state" | "confidence">): string {
+  return [item.importance.reasons.slice(0, 2).join("; "), STATE_REASON[item.state], CONFIDENCE_REASON[item.confidence]].filter(Boolean).join(" · ");
+}
 
 export function RoadmapRecommendations({ items }: { items: Recommendation[] }) {
   const router = useRouter();
@@ -27,7 +35,8 @@ export function RoadmapRecommendations({ items }: { items: Recommendation[] }) {
     <span className="roadmap-rank">{String(index + 1).padStart(2, "0")}</span>
     <div><strong>{item.activity.title}</strong><p>{item.activity.why}</p>
       <small>{item.competency} · {STATES[item.state]} · {item.confidence} confidence · ~{item.activity.effortHours} h (planning assumption)</small>
-      <small className="roadmap-formula">Priority {item.priority} = importance {item.importance.weight} ({item.importance.reasons.join("; ") || "general"}) × gap {item.gap} × confidence {item.confidenceFactor}</small></div>
+      <small className="roadmap-reason"><b>Why it ranks here:</b> {rankReason(item)}.</small>
+      <details className="roadmap-formula"><summary>How this is ranked</summary><small>Score {item.priority} = how much your target roles need it ({item.importance.weight}) × how far the evidence is from a strength ({item.gap}) × how sure the evidence is ({item.confidenceFactor}). A requirement of a primary role counts 3, a cross-compatible role half that, a preferred skill less; each further role asking for it adds 0.25 (up to 1.5), and being assessed in your courses adds 1.</small></details></div>
     <button className="button button-primary" type="button" disabled={Boolean(busy)} onClick={() => void add(item)}>{busy === item.competencyId ? "Adding…" : "Add to my plan"}</button>
   </article>)}</div>;
 }

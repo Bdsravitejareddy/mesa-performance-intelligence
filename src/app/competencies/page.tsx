@@ -12,6 +12,8 @@ import { loadCompetencyInputs } from "@/lib/competency/load";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cachedRead } from "@/lib/data/cached";
+import { projectContext, projectNote, skillAnchor, summariseSkills } from "@/lib/competency/standing";
+import { summarisePortfolio, type PortfolioRow } from "@/lib/portfolio/summary";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +33,10 @@ export default async function CompetenciesPage() {
   const counts = new Map<CompetencyState, number>();
   for (const item of all) counts.set(item.assessment.state, (counts.get(item.assessment.state) ?? 0) + 1);
   const mappedTotal = all.filter((item) => item.mappedAssessments > 0).length;
+  const summary = summariseSkills(all);
+  const languages = data ? summarisePortfolio(data.portfolio).languages : [];
+  const names = (items: { name: string; aiOnly?: boolean }[]) => items.map((item) => `${item.name}${item.aiOnly ? " (AI grading only)" : ""}`).join(", ");
+  const aiOnlyStrengths = summary.strengths.filter((item) => item.aiOnly).length;
 
   return <AppShell demoMode={demoMode}><div className="section-page">
     <div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> EVIDENCE, NOT VERDICTS</div><h1>Competency map</h1><p className="page-subtitle">What your assessed work has demonstrated, what it has not, and what remains unknown.</p></div></div>
@@ -38,6 +44,11 @@ export default async function CompetenciesPage() {
     <div className="info-callout"><span>Each competency is classified from the marks on the assessments mapped to it: the official mark where one is released, otherwise the blind AI grade of your submitted work (labelled, and kept at low confidence when it is the only evidence). A competency with nothing mapped and marked is <strong>unknown</strong>, not weak. Open <em>Why this conclusion?</em> on any row to see the evidence.</span></div>
     {data && data.mappings.some((row) => row.review_status === "suggested") && <p className="net-open"><b>{data.mappings.filter((row) => row.review_status === "suggested").length} suggested links</b> between {new Set(data.mappings.filter((row) => row.review_status === "suggested").map((row) => row.assessment_id)).size} assessments and competencies are waiting for your review below. Suggestions never count as evidence until you accept them.</p>}
     {!data ? <section className="content-panel"><p className="empty-hint">{demoMode ? "Preview mode has no competency evidence. Connect the private workspace to map real assessments." : "Connect Supabase to load competency evidence."}</p></section> : <>
+      <section className="skills-glance" aria-label="At a glance">
+        <p><b>Best-evidenced strengths:</b> {summary.strengths.length ? names(summary.strengths) : "none yet — a strength needs high results in two separate assessments"}.{aiOnlyStrengths > 0 && <em className="skills-glance-flag"> {aiOnlyStrengths === summary.strengths.length ? (aiOnlyStrengths === 1 ? "This rests" : "These rest") : `${aiOnlyStrengths} of these ${aiOnlyStrengths === 1 ? "rests" : "rest"}`} on AI grades only, not yet confirmed by an official mark.</em>}</p>
+        <p><b>Needs work:</b> {summary.gaps.length ? names(summary.gaps) : "no skill has low results in two separate assessments"}.{summary.mixed.length > 0 && <> Mixed results to settle: {names(summary.mixed)}.</>}</p>
+        <p><b>Not yet known:</b> {summary.unknown} of {summary.total} skills have too little marked evidence to say anything{summary.emerging.length > 0 && <>; {summary.emerging.length} more show one high result so far ({names(summary.emerging)})</>}.</p>
+      </section>
       <section className="competency-summary" aria-label="Summary by classification">
         {STATE_ORDER.map((state) => <div className={`competency-summary-item state-${state}`} key={state}><strong>{counts.get(state) ?? 0}</strong><span><Cue label={STATE_LABELS[state]} /></span></div>)}
       </section>
@@ -45,10 +56,10 @@ export default async function CompetenciesPage() {
       <p className="scope-note">{mappedTotal} of {all.length} competencies have at least one mapped assessment. Map more assessments below to widen evidence coverage.</p>
       {domains.map((domain) => <section className="content-panel competency-domain" key={domain.key}>
         <h2><Cue label={domain.name} /> <span className="panel-count">{domain.competencies.length}</span></h2>
-        <div className="competency-list">{domain.competencies.map((item) => <article className="competency-row" key={item.id}>
+        <div className="competency-list">{domain.competencies.map((item) => <article className="competency-row" id={skillAnchor(item.id)} key={item.id}>
           <div className="competency-row-head">
             <div><strong>{item.name}</strong><small>{item.description}</small></div>
-            <div className="competency-verdict"><span className={`competency-state state-${item.assessment.state}`}><Cue label={STATE_LABELS[item.assessment.state]} /></span><small>{item.assessment.headline} · {item.assessment.confidence === "insufficient" ? "no confidence rating" : `${item.assessment.confidence} confidence`}</small>{(challengesById.get(item.id) ?? []).some((row) => row.status === "open") && <small className="challenge-badge">Challenged · under review</small>}</div>
+            <div className="competency-verdict"><span className={`competency-state state-${item.assessment.state}`}><Cue label={STATE_LABELS[item.assessment.state]} /></span><small>{item.assessment.headline} · {item.assessment.confidence === "insufficient" ? "no confidence rating" : `${item.assessment.confidence} confidence`}</small>{(() => { const context = item.assessment.state === "insufficient_evidence" ? projectContext(item.id, languages) : null; return context && <small className="skill-context">No marked evidence yet; {projectNote(context)}.</small>; })()}{(challengesById.get(item.id) ?? []).some((row) => row.status === "open") && <small className="challenge-badge">Challenged · under review</small>}</div>
           </div>
           <CompetencyWhy assessment={item.assessment} history={historyById.get(item.id) ?? []} claims={claimsById.get(item.id) ?? []}>{(item.assessment.why.evidence.length > 0 || (challengesById.get(item.id) ?? []).length > 0) && <CompetencyChallenge competencyId={item.id} currentState={item.assessment.state} stateLabel={STATE_LABELS[item.assessment.state]} challenges={challengesById.get(item.id) ?? []} />}</CompetencyWhy>
         </article>)}</div>
@@ -57,7 +68,7 @@ export default async function CompetenciesPage() {
         const unreviewed = data.mappings.filter((row) => row.mapping_source === "ai_suggested" && row.review_status === "accepted");
         const marked = new Set(data.assessments.filter((assessment) => latestMark(data.submissions, assessment.id) !== null).map((assessment) => assessment.id));
         const decisive = unreviewed.filter((row) => marked.has(row.assessment_id)).length;
-        return unreviewed.length > 0 && <div className="info-callout data-quality-warning"><span><strong>{unreviewed.length} of {data.mappings.length} competency links were made by AI and not yet reviewed.</strong> Classifications rest on them, so check the {decisive} on assessments with a released mark first — they decide most results. Open an assessment below (tick “Only assessments with AI links to review”), adjust the ticks and press “Confirm and save”.</span></div>;
+        return unreviewed.length > 0 && <div className="info-callout data-quality-warning"><span><strong>{unreviewed.length} of {data.mappings.length} assessment-to-skill links were suggested by AI and not yet confirmed by you.</strong> Classifications rest on them, so check the {decisive} on assessments with a released mark first — they decide most results. Open an assessment below (tick “Only assessments with AI-suggested skills to confirm”), adjust the ticks and press “Confirm and save”.</span></div>;
       })()}
       <section className="content-panel"><h2>Map assessments to competencies <span className="panel-count">{data.assessments.length}</span></h2><AutoTagButton untagged={data.assessments.filter((assessment) => !data.mappings.some((row) => row.assessment_id === assessment.id)).length} /><p className="empty-hint">Tag each assessment with the competencies it actually tested. Tags are visible to both workspace members and are labelled as member-tagged in every explanation, not as official Mesa rubric criteria.</p>
         <AssessmentCompetencyTagger
@@ -84,14 +95,16 @@ async function loadData() {
 }
 
 async function loadDataWith(supabase: SupabaseClient) {
-  const [inputs, history, challenges, claims, evidence] = await Promise.all([
+  const [inputs, history, challenges, claims, evidence, portfolio] = await Promise.all([
     loadCompetencyInputs(supabase),
     supabase.from("competency_snapshots").select("competency_id, state, confidence, headline, reason, recorded_at").order("recorded_at", { ascending: false }).limit(1000),
     supabase.from("competency_challenges").select("id, competency_id, disputed_state, statement, counterevidence, status, resolution_note, created_at, resolved_at").order("created_at", { ascending: false }),
     supabase.from("professional_claims").select("competency_id, claim, status, evidence_id").not("competency_id", "is", null).neq("status", "withdrawn"),
     supabase.from("professional_evidence").select("id, title"),
+    // GitHub project languages are shown beside unassessed technical skills as context, never as a mark.
+    supabase.from("portfolio_items").select("source, account, external_id, name, url, data"),
   ]);
   const evidenceTitle = new Map((evidence.data ?? []).map((row) => [row.id as string, row.title as string]));
   if (history.error || challenges.error) throw new Error("Could not load competency history. Check that the history migration is applied.");
-  return { ...inputs, claims: (claims.data ?? []).map((row) => ({ competency_id: row.competency_id as string, claim: row.claim as string, status: row.status as string, source: evidenceTitle.get(row.evidence_id as string) ?? "Professional evidence" })), history: (history.data ?? []) as (HistoryRow & { competency_id: string })[], challenges: (challenges.data ?? []) as (ChallengeRow & { competency_id: string })[] };
+  return { ...inputs, portfolio: (portfolio.data ?? []) as PortfolioRow[], claims: (claims.data ?? []).map((row) => ({ competency_id: row.competency_id as string, claim: row.claim as string, status: row.status as string, source: evidenceTitle.get(row.evidence_id as string) ?? "Professional evidence" })), history: (history.data ?? []) as (HistoryRow & { competency_id: string })[], challenges: (challenges.data ?? []) as (ChallengeRow & { competency_id: string })[] };
 }
