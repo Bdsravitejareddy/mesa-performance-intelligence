@@ -11,6 +11,7 @@ import { CriterionBreakdown } from "@/components/criterion-breakdown";
 import { SyncHealthNotice } from "@/components/sync-health-notice";
 import { describeSyncHealth, type SyncRun } from "@/lib/lms/sync-health";
 import { NEEDS_BROWSER, type MessageLink } from "@/lib/lms/messages";
+import { ReportCards, type ReportCardRow } from "@/components/report-cards";
 import { EvaluationSummary, getSummaryReferences, isEvaluationSummaryData } from "@/components/evaluation-summary";
 
 export const dynamic = "force-dynamic";
@@ -20,8 +21,10 @@ export default async function MarksPage() {
   const items = demoMode ? demoData.assessments.map((item) => ({ id: item.id, title: item.title, course: item.course, mark: item.mark, feedback: "Illustrative evaluator note: connect the conclusion to the evidence and state key assumptions.", sourceMark: null as number | null, sourceMaximum: null as number | null })) : await loadMarks();
   const syncHealth = demoMode ? null : await loadSyncHealth();
   const messages = demoMode ? [] : await cachedRead("marks:nexus-messages", loadMessages).catch(() => []);
+  const reportCards = demoMode ? [] : await cachedRead("marks:report-cards", loadReportCards).catch(() => []);
   return <AppShell demoMode={demoMode}><div className="section-page"><div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> OFFICIAL RESULTS AND FEEDBACK</div><h1>Marks & feedback</h1><p className="page-subtitle">Official scores remain on their original 0–100 scale. AI comparisons require matching criterion evidence.</p></div>{!demoMode && <LmsSyncAction />}</div>
     {syncHealth && <SyncHealthNotice health={syncHealth} />}
+    <ReportCards cards={reportCards} />
     {messages.length > 0 && <section className="content-panel nexus-messages"><h2>Links from Nexus <span className="panel-count">{messages.length}</span></h2>
       <p>From your Nexus notifications and announcements. Pages behind your Google sign-in can’t be read by the daily sync; ask Claude to read them in your browser, and they are imported from there.</p>
       <ul>{messages.map((message) => <li key={message.id}><strong>{message.title || "Notification"}</strong><small>{message.kind === "announcement" ? "Announcement" : "Notification"}{message.course ? ` · ${message.course}` : ""}{message.posted_at ? ` · ${new Date(message.posted_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}` : ""}</small>
@@ -74,4 +77,10 @@ async function loadMarksWith(supabase: SupabaseClient) {
 async function loadMessages(client: SupabaseClient) {
   const { data } = await client.from("lms_messages").select("id, kind, title, course, posted_at, links").order("posted_at", { ascending: false, nullsFirst: false }).limit(40);
   return ((data ?? []) as { id: string; kind: string; title: string; course: string; posted_at: string | null; links: MessageLink[] }[]).filter((row) => row.links.length).slice(0, 12);
+}
+
+// Term report cards, newest term first.
+async function loadReportCards(client: SupabaseClient): Promise<ReportCardRow[]> {
+  const { data } = await client.from("lms_report_cards").select("term, program, overall_grade, gpa, cgpa, credits_earned, credits_attempted, attendance_pct, courses, fetched_at, breakdown, out_class, breakdown_generated_on, breakdown_imported_at").order("term", { ascending: false });
+  return (data ?? []) as ReportCardRow[];
 }

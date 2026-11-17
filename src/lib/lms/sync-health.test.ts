@@ -67,4 +67,9 @@ describe("sync health separates failures from data completeness", () => {
     expect(health.level).toBe("ok");
     expect(health.notices).toEqual(["Sync successful · 1 assignment needs a course mapping before it counts."]);
   });
+  it("warns when every read succeeded but released marks were not returned", () => {
+    const health = describeSyncHealth([at("Imported 49 assessment(s), 0 marks, and 0 feedback records. Nexus returned data in a shape the sync could not read (get_grades); marks may be missing until the reader is updated. No marks were read although 6 released LMS mark(s) are stored; stored marks were kept. 7 record(s) without a course are held for review; 0 read operation(s) failed.")], now);
+    expect(health.level).toBe("warning");
+    expect(health.warnings[0]).toContain("No marks were read although 6 released LMS mark(s) are stored");
+  });
 });

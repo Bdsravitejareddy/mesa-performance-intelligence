@@ -869,3 +869,21 @@ html[data-story-enter="from-below"] .main-content{animation:storyDrop .28s cubic
 .due-kind{font:700 11px Arial,'Helvetica Neue',Helvetica,sans-serif;letter-spacing:.5px;text-transform:uppercase;padding:3px 7px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
 .due-exam{color:var(--rose);border-color:var(--rose)}.due-quiz{color:var(--amber);border-color:var(--amber)}
 .due-today{border-left:4px solid var(--mint)}
+.report-card+.report-card{margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}.report-card h3{margin:10px 0 4px}.report-card h3 small{font-weight:400;color:var(--muted)}.report-card-summary{margin:0 0 6px;color:var(--ink-2)}
+.calendar-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:14px 0 10px}.calendar-nav h2{margin:0;font-size:18px}
+.calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--line);gap:1px}
+.calendar-weekday{background:var(--white);padding:6px 8px;font:600 11px Arial,'Helvetica Neue',Helvetica,sans-serif;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
+.calendar-day{background:var(--white);min-height:96px;padding:6px;display:flex;flex-direction:column;gap:4px;min-width:0}.calendar-outside{opacity:.45}.calendar-today{box-shadow:inset 0 0 0 2px var(--mint)}
+.calendar-date{font-size:12px;color:var(--muted)}.calendar-day ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.calendar-entry{position:relative;font-size:12px;line-height:1.3;padding:4px 18px 4px 6px;border-radius:6px;border-left:3px solid var(--line);background:rgba(18,20,18,.04);overflow-wrap:anywhere}
+.calendar-entry strong,.calendar-entry a{display:block;color:var(--ink);font-weight:600}.calendar-entry small{display:block;color:var(--muted)}
+.calendar-kind{font:700 9.5px Arial,'Helvetica Neue',Helvetica,sans-serif;letter-spacing:.5px;text-transform:uppercase;color:var(--muted)}
+.calendar-exam{border-left-color:var(--rose)}.calendar-quiz{border-left-color:var(--amber)}.calendar-hackathon,.calendar-competition{border-left-color:var(--mint)}.calendar-done strong{text-decoration:line-through;opacity:.7}
+.calendar-remove{position:absolute;top:3px;right:3px;border:0;background:none;color:var(--muted);cursor:pointer;padding:1px}
+.calendar-add{margin-top:16px}.calendar-event-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px}.calendar-event-form .button,.calendar-event-form .form-error{grid-column:1/-1;justify-self:start}
+@media(max-width:620px){.calendar-grid{grid-template-columns:1fr}.calendar-weekday,.calendar-outside{display:none}.calendar-day{min-height:0}.calendar-day:not(:has(li)):not(.calendar-today){display:none}.calendar-event-form{grid-template-columns:1fr}.calendar-nav .button{font-size:12px}}
+.report-course-list{display:flex;flex-direction:column;margin-top:6px}.report-course{border-top:1px solid var(--line)}
+.report-course summary{display:grid;grid-template-columns:minmax(0,1fr) 64px 34px 70px 44px;gap:10px;align-items:baseline;padding:8px 0;cursor:pointer;font-size:13.5px;color:var(--ink-2)}
+.report-course summary strong{color:var(--ink)}.report-course-name{min-width:0;overflow-wrap:anywhere}.report-course[open] summary{color:var(--ink)}
+.report-total td{font-weight:600;border-top:1px solid var(--line)}
+@media(max-width:620px){.report-course summary{grid-template-columns:minmax(0,1fr) 56px 30px}.report-course summary span:nth-child(4),.report-course summary span:nth-child(5){display:none}.report-cards .criteria-table{font-size:12px}}

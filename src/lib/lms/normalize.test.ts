@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { normalizeAssignmentRecords, unwrapToolResult } from "./normalize";
+import { normalizeAssignmentRecords, replyHasData, unwrapToolResult } from "./normalize";
+import { normalizeReportCards } from "./report-card";
 
 describe("Mesa MCP assignment normalization", () => {
   it("keeps an explicit earned score on the 0–100 scale and preserves feedback", () => {
@@ -66,4 +67,30 @@ describe("Mesa MCP assignment normalization", () => {
     expect(normalizeAssignmentRecords({ content: [{ type: "text", text: "92/100" }] })).toEqual([]);
   });
 
+
+  // The get_grades reply since 2026-11-13: term report cards come first, then the assignment marks. Taking the
+  // first non-empty list read the report cards, found no assignment ids, and dropped every mark.
+  const gradesReply = { structuredContent: {
+    reportCards: [{ term: "Term 1", program: "PGP Cohort IV", overallGrade: "A-", gpa: "3.455", cgpa: "3.455", creditsEarned: "22.00", creditsAttempted: "22.00", attendancePct: "96.5", failed: false,
+      courses: [{ course: "The Art of Selling with Prof. Rishabh Ladha", credits: "2", grade: "A+", gpa: "4", percentage: "94.6", failed: false }] }],
+    assignmentMarks: [{ assignmentId: "953d03e7-23ab-450a-bc8b-81c50a5aa1f9", assignment: "AI x Ops Hackathon", course: "Operations and Supply Chain with Achal Bassamboo", marks: "54.50", maxMarks: "80.00", feedback: "SCORE …", releasedAt: "2026-10-29T11:25:43.484Z" }],
+  } };
+
+  it("reads assignment marks even when report cards come first in the get_grades reply", () => {
+    expect(normalizeAssignmentRecords(gradesReply)).toEqual([expect.objectContaining({ assignmentId: "953d03e7-23ab-450a-bc8b-81c50a5aa1f9", title: "AI x Ops Hackathon", sourceScore: 54.5, sourceMaximumMark: 80, score: 68.13 })]);
+  });
+
+  it("does not take a list of non-assignment objects as assignment records", () => {
+    expect(normalizeAssignmentRecords({ reportCards: [{ term: "Term 1", gpa: "3.4" }] })).toEqual([]);
+    expect(replyHasData({ reportCards: [{ term: "Term 1" }] })).toBe(true);
+    expect(replyHasData({ assignmentMarks: [] })).toBe(false);
+    // A reply with only report cards (no marks released yet) is not an unreadable reply.
+    expect(replyHasData({ reportCards: [{ term: "Term 2" }], assignmentMarks: [] }, ["reportCards"])).toBe(false);
+  });
+
+  it("reads term report cards with numbers sent as strings", () => {
+    expect(normalizeReportCards(gradesReply)).toEqual([{ term: "Term 1", program: "PGP Cohort IV", overallGrade: "A-", gpa: 3.455, cgpa: 3.455, creditsEarned: 22, creditsAttempted: 22, attendancePct: 96.5, failed: false,
+      courses: [{ course: "The Art of Selling with Prof. Rishabh Ladha", credits: 2, grade: "A+", gpa: 4, percentage: 94.6, failed: false }] }]);
+    expect(normalizeReportCards({ assignmentMarks: [] })).toEqual([]);
+  });
 });

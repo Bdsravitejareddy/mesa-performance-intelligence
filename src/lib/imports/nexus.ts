@@ -19,6 +19,15 @@ export function submittedFileUrl(raw: string, assignmentId: string): URL | null 
   return url;
 }
 
+// A grade report is only fetched from Nexus's own signed storage path for report cards.
+export function reportCardUrl(raw: string): URL | null {
+  let url: URL;
+  try { url = new URL(raw); } catch { return null; }
+  if (url.protocol !== "https:" || url.hostname !== "storage.googleapis.com" || url.username || url.password || url.port) return null;
+  if (!/^\/mesa_tech_assets\/mesa-lms\/report-cards\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.pdf$/i.test(url.pathname)) return null;
+  return url;
+}
+
 // The object path identifies the file without the expiring signature, so it is safe to store.
 export const storedSourceId = (url: URL) => `gcs:${url.pathname}`;
 

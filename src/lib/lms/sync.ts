@@ -6,7 +6,8 @@ import { MesaMcpClient, getMesaMcpEndpoint, type McpTool } from "./mcp-client";
 import { matchingCourseId, suggestCourseForTitle, type CourseIdentity } from "./course-matching";
 import { recordCompetencySnapshots } from "@/lib/competency/history";
 import { mergeAssignmentRecords } from "./merge";
-import { normalizeAssignmentRecords, unwrapToolResult, type MesaAssignmentRecord } from "./normalize";
+import { normalizeAssignmentRecords, replyHasData, unwrapToolResult, type MesaAssignmentRecord } from "./normalize";
+import { normalizeReportCards, type ReportCard } from "./report-card";
 import { attachedMaterialFiles, briefFromAssignment } from "./brief";
 import { extractPdfPages, extractPptxSlides } from "@/lib/documents";
 import { extractDocxPages, extractXlsxSheets } from "@/lib/office-documents";
@@ -14,7 +15,7 @@ import { toAssessmentRow, toSubmissionRow } from "./records";
 import { assignmentDetailArguments, selectAssignmentReadTools, toolArgumentVariants } from "./tool-selection";
 import { messageArguments, normalizeMessages, selectMessageTools } from "./messages";
 
-type SyncResult = { status: "succeeded" | "partial"; runId: string; courses: number; assessments: number; submissions: number; marks: number; feedback: number; message: string; competencySnapshots?: number | null; briefs?: number; terms?: number; messages?: number | null };
+type SyncResult = { status: "succeeded" | "partial"; runId: string; courses: number; assessments: number; submissions: number; marks: number; feedback: number; message: string; competencySnapshots?: number | null; briefs?: number; terms?: number; messages?: number | null; reportCards?: number | null };
 
 async function workspaceMembers(client: SupabaseClient): Promise<string[]> {
   const emails = new Set(getAllowedEmails());
@@ -156,6 +157,8 @@ export async function syncMesaLms(): Promise<SyncResult> {
     const resultGroups: MesaAssignmentRecord[][] = [];
     let failedReads = 0;
     let completedReads = 0;
+    const unreadable = new Set<string>();
+    const reportCards: ReportCard[] = [];
     for (const tool of tools) {
       const variants = toolArgumentVariants(tool);
       if (!variants) continue;
@@ -164,6 +167,9 @@ export async function syncMesaLms(): Promise<SyncResult> {
           const result = unwrapToolResult(await mcp.callTool(tool.name, args));
           const normalized = normalizeAssignmentRecords(result);
           resultGroups.push(normalized);
+          reportCards.push(...normalizeReportCards(result));
+          // Data came back but none of it read as assignments: the reply's shape changed. Reported, never read as "no marks".
+          if (!normalized.length && replyHasData(result, ["reportCards"])) unreadable.add(tool.name);
           completedReads += 1;
         } catch {
           failedReads += 1;
@@ -196,11 +202,18 @@ export async function syncMesaLms(): Promise<SyncResult> {
       await client.from("sync_runs").update({ status: summary.status, finished_at: new Date().toISOString(), message: summary.message }).eq("id", run.id).eq("user_id", ownerId);
       return summary;
     }
+    // Released LMS marks already stored, read before this run writes, so a run that suddenly reads none is caught.
+    const { count: storedMarks } = await client.from("submissions").select("id", { count: "exact", head: true }).eq("official_mark_source", "Mesa LMS (Nexus MCP)").not("official_mark", "is", null);
     const counts = await persistRecords(client, ownerId, members, records);
-    // "partial" means the sync itself fell short (a read failed or nothing was imported). Assignments waiting for a
-    // course, or marks not yet released, are data completeness, reported in the message of a successful run.
-    const hasPartialData = failedReads > 0 || !counts.assessments;
-    const summary: SyncResult = { status: hasPartialData ? "partial" : "succeeded", runId: run.id, courses: counts.courses, assessments: counts.assessments, submissions: counts.submissions, marks: counts.marks, feedback: counts.feedback, message: hasPartialData ? `Imported ${counts.assessments} assessment(s), ${counts.marks} marks, and ${counts.feedback} feedback records. ${counts.resolvedUnassigned ? `${counts.resolvedUnassigned} course-less record(s) were filed by title or member confirmation; ` : ""}${counts.skipped} record(s) without a course are held for review; ${failedReads} read operation(s) failed.` : `Synced ${counts.assessments} assessments, ${counts.marks} marks, and ${counts.feedback} feedback records.${counts.skipped ? ` ${counts.skipped} assignment(s) need course mapping.` : ""} Scores are converted to the 0–100 scale, and original LMS marks are retained.` };
+    // "partial" means the sync itself fell short: a read failed, nothing was imported, a reply could not be read, or
+    // marks known to be released were not returned. Assignments waiting for a course are data completeness, reported
+    // in the message of a successful run.
+    const problems = [
+      ...(unreadable.size ? [`Nexus returned data in a shape the sync could not read (${[...unreadable].join(", ")}); marks may be missing until the reader is updated.`] : []),
+      ...(!counts.marks && (storedMarks ?? 0) > 0 ? [`No marks were read although ${storedMarks} released LMS mark(s) are stored; stored marks were kept.`] : []),
+    ];
+    const hasPartialData = failedReads > 0 || !counts.assessments || problems.length > 0;
+    const summary: SyncResult = { status: hasPartialData ? "partial" : "succeeded", runId: run.id, courses: counts.courses, assessments: counts.assessments, submissions: counts.submissions, marks: counts.marks, feedback: counts.feedback, message: hasPartialData ? `Imported ${counts.assessments} assessment(s), ${counts.marks} marks, and ${counts.feedback} feedback records. ${problems.join(" ")}${problems.length ? " " : ""}${counts.resolvedUnassigned ? `${counts.resolvedUnassigned} course-less record(s) were filed by title or member confirmation; ` : ""}${counts.skipped} record(s) without a course are held for review; ${failedReads} read operation(s) failed.` : `Synced ${counts.assessments} assessments, ${counts.marks} marks, and ${counts.feedback} feedback records.${counts.skipped ? ` ${counts.skipped} assignment(s) need course mapping.` : ""} Scores are converted to the 0–100 scale, and original LMS marks are retained.` };
     const { error } = await client.from("sync_runs").update({ status: summary.status, finished_at: new Date().toISOString(), message: summary.message }).eq("id", run.id).eq("user_id", ownerId);
     if (error) throw new Error("Sync status could not be saved.");
     // Terms (Pre-Term, Term 1, Term 2) and course dates from the read-only course list.
@@ -208,6 +221,8 @@ export async function syncMesaLms(): Promise<SyncResult> {
     if (courseListTool) {
       try { summary.terms = await refreshTerms(client, mcp, courseListTool); } catch { summary.terms = 0; }
     }
+    // Term report cards, kept apart from assessment marks.
+    try { summary.reportCards = await saveReportCards(client, ownerId, reportCards); } catch { summary.reportCards = null; }
     // Notifications and announcements, where links to other sources (e.g. Mesa's Feedback page) first appear.
     try { summary.messages = await refreshMessages(client, mcp, availableTools, ownerId); } catch { summary.messages = null; }
     // Briefs for assessments that have none yet (or are a week old), so grading can use the task's own requirements.
@@ -221,6 +236,24 @@ export async function syncMesaLms(): Promise<SyncResult> {
     await client.from("sync_runs").update({ status: "failed", finished_at: new Date().toISOString(), message: "LMS sync failed. Check connector configuration and try again." }).eq("id", run.id).eq("user_id", ownerId);
     throw error instanceof Error ? error : new Error("LMS sync failed.");
   }
+}
+
+// One row per term, refreshed each run; the first time a term was seen, and any breakdown imported from the grade
+// report PDF, are kept. A term row a member's PDF import started is updated rather than duplicated.
+async function saveReportCards(client: SupabaseClient, ownerId: string, cards: ReportCard[]): Promise<number> {
+  const byTerm = new Map(cards.map((card) => [card.term, card]));
+  if (!byTerm.size) return 0;
+  const { data: existing } = await client.from("lms_report_cards").select("id, term").in("term", [...byTerm.keys()]);
+  const idOf = new Map((existing ?? []).map((row) => [row.term as string, row.id as string]));
+  let saved = 0;
+  for (const card of byTerm.values()) {
+    const row = { term: card.term, program: card.program, overall_grade: card.overallGrade, gpa: card.gpa, cgpa: card.cgpa, credits_earned: card.creditsEarned, credits_attempted: card.creditsAttempted, attendance_pct: card.attendancePct, failed: card.failed, courses: card.courses, fetched_at: new Date().toISOString() };
+    const id = idOf.get(card.term);
+    const { error } = id ? await client.from("lms_report_cards").update(row).eq("id", id) : await client.from("lms_report_cards").insert({ user_id: ownerId, ...row });
+    if (error) throw new Error("Report cards could not be saved.");
+    saved += 1;
+  }
+  return saved;
 }
 
 async function refreshMessages(client: SupabaseClient, mcp: MesaMcpClient, tools: McpTool[], ownerId: string): Promise<number> {

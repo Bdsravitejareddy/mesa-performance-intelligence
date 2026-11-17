@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanCapture, detectFormat, driveFileId, storedSourceId, submittedFileUrl } from "./nexus";
+import { cleanCapture, detectFormat, driveFileId, reportCardUrl, storedSourceId, submittedFileUrl } from "./nexus";
 
 const assignment = "597e35e7-cb28-4735-a957-dc7e8e86816f";
 const zip = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0, 0]);
@@ -31,5 +31,11 @@ describe("Nexus page capture helpers", () => {
     const capture = cleanCapture({ status: "Submitted", isGroup: true, submittedBy: "Asmi Jain", members: ["A", 3, "B"], extra: "x" });
     expect(capture).toMatchObject({ status: "Submitted", isGroup: true, submittedBy: "Asmi Jain", members: ["A", "B"] });
     expect(capture).not.toHaveProperty("extra");
+  });
+
+  it("fetches a grade report only from Nexus's report-card storage path", () => {
+    const ok = "https://storage.googleapis.com/mesa_tech_assets/mesa-lms/report-cards/11111111-2222-3333-4444-555555555555/66666666-7777-8888-9999-000000000000.pdf?Expires=1&Signature=x";
+    expect(reportCardUrl(ok)?.pathname).toBe("/mesa_tech_assets/mesa-lms/report-cards/11111111-2222-3333-4444-555555555555/66666666-7777-8888-9999-000000000000.pdf");
+    for (const bad of [ok.replace("report-cards", "submissions"), ok.replace("storage.googleapis.com", "evil.example"), ok.replace("https:", "http:"), ok.replace(".pdf", ".pdf/../x.pdf"), "not a url"]) expect(reportCardUrl(bad)).toBeNull();
   });
 });

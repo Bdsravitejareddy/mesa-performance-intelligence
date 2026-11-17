@@ -38,6 +38,7 @@ export const groups: Act[] = [
         { href: "/feedback", label: "Feedback", blurb: "Every piece of feedback you received, by theme, with conflicting advice side by side." },
         { href: "/imports/quiz-tool", label: "Quiz Tool", blurb: "Cohort 4 in-class quiz results, summed separately from official marks." },
         { href: "/due", label: "Due", blurb: "What is due today, overdue and this week, including exams and quizzes." },
+        { href: "/calendar", label: "Calendar", blurb: "Nexus deadlines and the hackathons and events you add, month by month." },
         { href: "/evidence", label: "Evidence", blurb: "Every record the analysis uses, with its source." },
       ]),
     ],

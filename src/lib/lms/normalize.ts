@@ -52,21 +52,46 @@ function timestamp(...values: unknown[]): string | null {
   return new Date(value).toISOString();
 }
 
+// An object that names an assignment by id and title.
+function isAssignmentRecord(root: JsonObject): boolean {
+  const nested = object(root.assignment) ?? object(root.assessment) ?? {};
+  const hasAssignmentId = firstString(root.assignment_id, root.assignmentId, nested.id, nested.assignment_id, nested.assessment_id, root.id, root._id);
+  const hasAssignmentTitle = firstString(root.assignment_title, root.assignmentTitle, root.assignment_name, nested.title, nested.name, root.title, root.name, typeof root.assignment === "string" ? root.assignment : "");
+  return Boolean(hasAssignmentId && hasAssignmentTitle);
+}
+
+// Finds the assignment records in a reply. Replies carry other lists too (get_grades added term report cards ahead
+// of its marks on 2026-11-13), so an array is taken only when its items are assignment records; otherwise the
+// first non-empty list won and every mark was silently dropped.
 function extractRecords(value: unknown): JsonObject[] {
-  if (Array.isArray(value)) return value.map(object).filter((item): item is JsonObject => !!item);
+  if (Array.isArray(value)) {
+    const items = value.map(object).filter((item): item is JsonObject => !!item);
+    return items.some(isAssignmentRecord) ? items : [];
+  }
   const root = object(value);
   if (!root) return [];
-  for (const key of ["assignments", "assessments", "grades", "items", "results", "data", "records"]) {
-    if (Array.isArray(root[key])) return extractRecords(root[key]);
+  for (const key of ["assignments", "assessments", "assignmentMarks", "grades", "items", "results", "data", "records"]) {
+    if (Array.isArray(root[key])) {
+      const found = extractRecords(root[key]);
+      if (found.length) return found;
+    }
   }
-  const hasAssignmentId = firstString(root.assignment_id, root.assignmentId, object(root.assignment)?.id, root.id, root._id);
-  const hasAssignmentTitle = firstString(root.assignment_title, root.assignmentTitle, root.assignment_name, root.title, root.name, typeof root.assignment === "string" ? root.assignment : "");
-  if (hasAssignmentId && hasAssignmentTitle) return [root];
+  if (isAssignmentRecord(root)) return [root];
   for (const value of Object.values(root)) {
     const found = extractRecords(value);
     if (found.length) return found;
   }
   return [];
+}
+
+// Whether a reply holds any list at all, so a reply with data that yields no assignment records can be reported
+// as unrecognised rather than read as "nothing released".
+// Lists named in `readElsewhere` (such as report cards) are read by their own reader and do not count.
+export function replyHasData(value: unknown, readElsewhere: string[] = []): boolean {
+  const payload = unwrapToolResult(value);
+  if (Array.isArray(payload)) return payload.length > 0;
+  const root = object(payload);
+  return Boolean(root && Object.entries(root).some(([key, item]) => !readElsewhere.includes(key) && ((Array.isArray(item) && item.length > 0) || (object(item) && replyHasData(item, readElsewhere)))));
 }
 
 export function unwrapToolResult(value: unknown): unknown {

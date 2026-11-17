@@ -33,6 +33,11 @@ export function describeSyncHealth(runs: SyncRun[], now: Date = new Date()): Syn
     level = "warning";
     warnings.push("The most recent LMS sync was partial. Some LMS records were unreadable; see the sync message.");
   }
+  // Every read can succeed and still miss marks, when Nexus changes the shape of its reply (as on 2026-11-13).
+  if (latest.status === "partial" && /could not read|No marks were read although/.test(latest.message ?? "") && level !== "error") {
+    level = "warning";
+    warnings.push(`The most recent LMS sync may be missing marks: ${/No marks were read although[^.]*/.exec(latest.message ?? "")?.[0] ?? "Nexus returned data in a shape the sync could not read"}. Stored marks were kept.`);
+  }
   // Earlier runs were labelled partial when only course mapping was outstanding; every read succeeded in those.
   const notices: string[] = [];
   const needsMapping = Number(/(\d+) (?:assignment\(s\) need course mapping|record\(s\) without a course are held for review)/.exec(latest.message ?? "")?.[1] ?? 0);

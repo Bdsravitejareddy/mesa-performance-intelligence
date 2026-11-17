@@ -22,7 +22,16 @@ export function NexusImporter() {
 
   useEffect(() => {
     const onMessage = async (event: MessageEvent<Incoming>) => {
-      if (event.origin !== NEXUS_ORIGIN || event.data?.kind !== "mesa-nexus-capture") return;
+      if (event.origin !== NEXUS_ORIGIN) return;
+      // The term grade report: Nexus's signed link to the PDF, fetched by the server and never stored.
+      if (event.data?.kind === "mesa-nexus-report-card") {
+        const response = await fetch("/api/imports/nexus-report-card", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(event.data.payload ?? {}) });
+        const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as Record<string, unknown>;
+        setLog((lines) => [reportLine(response.status, body), ...lines].slice(0, 80));
+        (event.source as Window | null)?.postMessage({ kind: "mesa-nexus-capture-result", requestId: event.data.requestId, status: response.status, body }, event.origin);
+        return;
+      }
+      if (event.data?.kind !== "mesa-nexus-capture") return;
       const files = (event.data.files ?? []).slice(0, 10).filter((file) => file.buffer instanceof ArrayBuffer).map((file) => new File([file.buffer], String(file.name).slice(0, 200), { type: String(file.type) }));
       const result = await importPage(event.data.payload, files);
       const body = result.body as { assessment?: string; error?: string; files?: { name: string; status: string; note?: string }[]; links?: number };
@@ -55,6 +64,18 @@ export function NexusImporter() {
     } finally { setBusy(false); }
   };
 
+  const uploadReport = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    setBusy(true);
+    try {
+      const response = await fetch("/api/imports/nexus-report-card", { method: "POST", body: new FormData(formElement) });
+      const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as Record<string, unknown>;
+      setLog((lines) => [reportLine(response.status, body), ...lines]);
+      formElement.reset();
+    } finally { setBusy(false); }
+  };
+
   return <div className="nexus-importer-wrap">
     <section className="content-panel nexus-importer">
       <h2>Capture from Nexus</h2>
@@ -66,6 +87,16 @@ export function NexusImporter() {
       <label className="field"><span>Submitted files downloaded from the page</span><input type="file" name="file" multiple accept=".pdf,.pptx,.docx,.xlsx" /></label>
       <button className="button button-primary" type="submit" disabled={busy}>{busy ? "Importing…" : "Import"}</button>
     </form>
+    <form className="content-panel nexus-importer" onSubmit={uploadReport}>
+      <label className="field"><span>Term report card (the PDF from Attendance &amp; Grade → Grade → Report card)</span><input type="file" name="file" accept=".pdf,application/pdf" required /></label>
+      <button className="button button-primary" type="submit" disabled={busy}>{busy ? "Importing…" : "Import report card"}</button>
+    </form>
     {log.length > 0 && <pre className="import-result" aria-live="polite" data-import-log>{log.join("\n")}</pre>}
   </div>;
+}
+
+function reportLine(status: number, body: Record<string, unknown>): string {
+  if (body.error) return `${status} Report card: ${body.error}`;
+  const disagreements = Array.isArray(body.disagreements) ? body.disagreements as { course: string; printed: number; computed: number }[] : [];
+  return `${status} Report card ${body.term}: ${body.courses} courses, ${body.components} components${body.outClass ? `, ${body.outClass} out-of-class` : ""}${disagreements.length ? ` · totals that do not follow from their components: ${disagreements.map((item) => `${item.course} (printed ${item.printed}, computed ${item.computed})`).join("; ")}` : " · every course total matches its components"}`;
 }

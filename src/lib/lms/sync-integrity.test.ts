@@ -50,4 +50,32 @@ describe("Mesa LMS sync database safeguards", () => {
       await db.close();
     }
   });
+
+  it("keeps a mark's original scale when a refresh brings no mark", async () => {
+    const db = await createTestDatabase();
+    try {
+      await db.exec("reset role");
+      const assessment = (await db.query<{ id: string }>(
+        "insert into public.assessments(user_id,course_id,title,source_record_id) values($1,$2,'Hackathon','mesa-lms:assignment:h1') returning id",
+        [owner, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],
+      )).rows[0].id;
+      await db.query(
+        "insert into public.submissions(user_id,assessment_id,official_mark,source_original_mark,source_original_max_mark,official_mark_source,source_record_id) values($1,$2,68.13,54.5,80,'Mesa LMS (Nexus MCP)','mesa-lms:submission:h1')",
+        [owner, assessment],
+      );
+      // The 2026-11-13 failure: a refresh that read no mark wrote nulls into every mark column.
+      await db.query(
+        "insert into public.submissions(user_id,assessment_id,source_record_id,lms_submission_status) values($1,$2,'mesa-lms:submission:h1','submitted') on conflict(user_id,source_record_id) do update set official_mark=null,source_original_mark=null,source_original_max_mark=null,lms_submission_status=excluded.lms_submission_status",
+        [owner, assessment],
+      );
+      const kept = await db.query("select official_mark,source_original_mark,source_original_max_mark from public.submissions where source_record_id='mesa-lms:submission:h1'");
+      expect(kept.rows[0]).toEqual({ official_mark: "68.13", source_original_mark: "54.50", source_original_max_mark: "80.00" });
+      // A released mark still replaces the old one together with its scale.
+      await db.query("update public.submissions set official_mark=75,source_original_mark=60,source_original_max_mark=80 where source_record_id='mesa-lms:submission:h1'");
+      const updated = await db.query("select official_mark,source_original_mark,source_original_max_mark from public.submissions where source_record_id='mesa-lms:submission:h1'");
+      expect(updated.rows[0]).toEqual({ official_mark: "75.00", source_original_mark: "60.00", source_original_max_mark: "80.00" });
+    } finally {
+      await db.close();
+    }
+  });
 });

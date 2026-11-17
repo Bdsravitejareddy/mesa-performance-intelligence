@@ -21,7 +21,12 @@ describe("Mesa LMS database records", () => {
       official_mark: 92, source_original_mark: 92, source_original_max_mark: 100,
       official_feedback: "Strong application.", official_mark_source: "Mesa LMS (Nexus MCP)", lms_submission_status: "Released",
     });
-    expect(toSubmissionRow({ ...assignment, score: null }, "user-1", "assessment-row-1").official_mark).toBeNull();
+    // No score: the mark and its original scale are left out, so the stored values are kept.
+    const sparse = toSubmissionRow({ ...assignment, score: null, sourceScore: null, sourceMaximumMark: null }, "user-1", "assessment-row-1");
+    expect(sparse).not.toHaveProperty("official_mark");
+    expect(sparse).not.toHaveProperty("source_original_mark");
+    expect(sparse).not.toHaveProperty("source_original_max_mark");
+    expect(toAssessmentRow({ ...assignment, sourceMaximumMark: null }, "user-1", "course-row-1")).not.toHaveProperty("source_max_mark");
   });
 
   it("keeps normalized official marks alongside their original LMS scale", () => {
