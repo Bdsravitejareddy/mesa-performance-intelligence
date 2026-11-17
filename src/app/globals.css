@@ -907,3 +907,7 @@ html[data-story-enter="from-below"] .main-content{animation:storyDrop .28s cubic
 .feedback-course{margin-top:12px}.feedback-course>summary{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 14px;cursor:pointer;margin-bottom:8px}.feedback-course>summary span{font-size:12.5px;color:var(--muted)}
 .feedback-list-ai{border-left:3px dashed var(--line);padding-left:10px}.feedback-list li.is-addressed{opacity:.55;text-decoration:line-through}
 .due-session{color:var(--blue);border-color:var(--blue)}.calendar-session{border-left-color:var(--blue)}.calendar-deadline{border-left-color:var(--amber)}
+.neo-traits{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-top:10px}.neo-trait h3{font-size:14px;margin:0 0 6px}.neo-trait h3 small{font-weight:400;color:var(--muted)}
+.neo-trait ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px}.neo-trait li{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(50px,1fr) 38px;gap:8px;align-items:center;font-size:12.5px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.neo-standout span:first-child{font-weight:700;color:var(--ink)}.neo-anomalies{margin:6px 0;padding-left:18px;font-size:12.5px;color:var(--rose)}
+.has-neo .trait-head,.has-neo .trait-row{grid-template-columns:minmax(0,1.2fr) 100px 150px 140px minmax(0,1.8fr)}@media (max-width:720px){.has-neo .trait-row{grid-template-columns:1fr 1fr 1fr}}

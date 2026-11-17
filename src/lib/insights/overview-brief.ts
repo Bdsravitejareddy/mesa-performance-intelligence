@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { neoSummaryText, type IpipNeo } from "@/lib/tests/ipip-neo";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requestJsonFromProvider } from "@/lib/ai/provider";
 import { resolveProviderSettings } from "@/lib/ai/settings";
@@ -85,7 +86,7 @@ async function notSubmitted(client: SupabaseClient): Promise<string[]> {
 // AI skill view, observed thinking patterns, and records dated in the last 30 days against the 30 before.
 async function personContext(client: SupabaseClient) {
   const day = 86_400_000, now = Date.now();
-  const [personality, skills, behaviour, snapshots, profiles, gradings, submissions, tasks] = await Promise.all([
+  const [personality, skills, behaviour, snapshots, profiles, gradings, submissions, tasks, neoRow] = await Promise.all([
     client.from("test_attempts").select("result").eq("kind", "personality").not("submitted_at", "is", null).order("submitted_at", { ascending: false }).limit(1).maybeSingle(),
     client.from("ai_skill_views").select("domains").order("created_at", { ascending: false }).limit(1).maybeSingle(),
     client.from("behaviour_analyses").select("dimensions").order("created_at", { ascending: false }).limit(1).maybeSingle(),
@@ -94,6 +95,7 @@ async function personContext(client: SupabaseClient) {
     client.from("submission_gradings").select("submission_id, ai_score, created_at").order("created_at", { ascending: false }),
     client.from("submissions").select("id, submitted_at, page_capture, assessments(title, counts_toward_grade)"),
     client.from("weekly_tasks").select("week_start, done_at").gte("week_start", new Date(now - 30 * day).toISOString().slice(0, 10)),
+    client.from("external_assessments").select("result").eq("kind", "ipip_neo").order("created_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
   const factors = (personality.data?.result as { factors?: Record<string, { score: number }> } | null)?.factors ?? null;
   const skillView = Object.entries((skills.data?.domains ?? {}) as Record<string, { score: number | null; confidence: string }>).filter(([, value]) => value.score !== null).sort((a, b) => b[1].score! - a[1].score!);
@@ -116,7 +118,7 @@ async function personContext(client: SupabaseClient) {
   const stateWords: Record<string, string> = { demonstrated_strength: "a demonstrated strength", emerging: "emerging", meets_expectations: "meeting expectations", development_area: "a development area", conflicting: "conflicting", insufficient_evidence: "not enough evidence yet" };
   const changedCompetencies = [...new Set((snapshots.data ?? []).filter((row) => !/rules/i.test(String(row.reason ?? ""))).map((row) => `${(row.competencies as unknown as { name?: string } | null)?.name ?? "A skill"} became ${stateWords[row.state as string] ?? row.state}`))].slice(0, 12);
   return {
-    person: { personality: factors ? Object.fromEntries(Object.entries(factors).map(([factor, value]) => [factor, value.score])) : null, aiSkillView: { strongest: skillView.slice(0, 3).map(([domain, value]) => `${domain} ${value.score}`), weakest: skillView.slice(-2).map(([domain, value]) => `${domain} ${value.score}`) }, thinkingPatterns: observed.slice(0, 7) },
+    person: { personality: factors ? Object.fromEntries(Object.entries(factors).map(([factor, value]) => [factor, value.score])) : null, bigFiveWithFacets: neoRow.data?.result ? neoSummaryText(neoRow.data.result as IpipNeo) : null, aiSkillView: { strongest: skillView.slice(0, 3).map(([domain, value]) => `${domain} ${value.score}`), weakest: skillView.slice(-2).map(([domain, value]) => `${domain} ${value.score}`) }, thinkingPatterns: observed.slice(0, 7) },
     last30Days: {
       blindGradesOfWorkSubmitted: { last30: { mean: mean(recent), n: recent.length }, previous30: { mean: mean(before), n: before.length }, byStakes: Object.fromEntries(Object.entries(byStakes).map(([tier, value]) => [tier, { last30: { mean: mean(value.last30), n: value.last30.length }, previous30: { mean: mean(value.previous30), n: value.previous30.length } }])) },
       skillChanges: changedCompetencies,

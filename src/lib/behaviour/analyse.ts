@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { neoSummaryText, type IpipNeo } from "@/lib/tests/ipip-neo";
 import { summarisePortfolio, type PortfolioRow } from "@/lib/portfolio/summary";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requestJsonFromProvider } from "@/lib/ai/provider";
@@ -82,10 +83,12 @@ export async function gatherSources(supabase: SupabaseClient, options: { include
   for (const row of projectEvaluations ?? []) if (!evaluationOf.has(row.project_key as string)) evaluationOf.set(row.project_key as string, row.report as { summary?: string; overall?: number | null });
   portfolio.projects.slice(0, 12).forEach((project, index) => sources.push({ id: `G${index + 1}`, kind: "portfolio", label: `Self-directed project · ${project.name} (ungraded; code may be AI-assisted)`, text: [`Project: ${project.name}`, project.description && `Description: ${project.description}`, project.languages.length && `Languages: ${project.languages.join(", ")}`, project.aiPackages.length && `AI libraries: ${project.aiPackages.join(", ")}`, project.readme && `README opening: ${project.readme.slice(0, 900)}`, evaluationOf.get(project.key)?.summary && `Blind project evaluation (from documentation and structure; nothing was run): ${evaluationOf.get(project.key)!.summary}`].filter(Boolean).join("\n") }));
   // Results from other personality tools the member entered: self-reported context, like the questionnaire.
-  const { data: external } = await supabase.from("external_assessments").select("kind, result").order("created_at", { ascending: false }).limit(4);
+  const { data: external } = await supabase.from("external_assessments").select("kind, result").order("created_at", { ascending: false }).limit(12);
   const latestOf = (kind: string) => (external ?? []).find((row) => row.kind === kind)?.result as Record<string, unknown> | undefined;
   const sixteen = latestOf("16personalities"), clifton = latestOf("cliftonstrengths");
   if (sixteen) sources.push({ id: "X1", kind: "self_report", label: "16Personalities type (self-reported; proprietary, not a validated measure)", text: `Type: ${String(sixteen.type)}${Object.keys((sixteen.percents ?? {}) as object).length ? `; strengths ${JSON.stringify(sixteen.percents)}` : ""}` });
+  const neo = latestOf("ipip_neo");
+  if (neo) sources.push({ id: "X3", kind: "self_report", label: "IPIP-NEO Big Five with facets (self-reported preferences, not ability; percentiles are the test site's, not official norms)", text: neoSummaryText(neo as unknown as IpipNeo) });
   if (clifton) sources.push({ id: "X2", kind: "self_report", label: "CliftonStrengths top themes (self-reported talents, in order)", text: `Top themes: ${((clifton.themes ?? []) as string[]).join(", ")}` });
   // Written weekly-practice answers: the member's own words, ungraded practice.
   const { data: practice } = await supabase.from("weekly_practice").select("week_start, answers").not("submitted_at", "is", null).order("week_start", { ascending: false }).limit(4);

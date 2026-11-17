@@ -3,6 +3,7 @@ import { AppShell } from "@/components/app-shell";
 import { Cue } from "@/components/cue";
 import { ExternalAssessmentsForm } from "@/components/external-assessments";
 import { cliftonDomains, sixteenPToBigFive } from "@/lib/tests/external";
+import { NEO_TRAITS, neoOnDashboardScale, standoutFacets } from "@/lib/tests/ipip-neo";
 import { ContextReadingRefresh } from "@/components/context-reading-refresh";
 import { Radar } from "@/components/radar";
 import { SkillsRadar } from "@/components/skills-radar";
@@ -33,6 +34,9 @@ export default async function TestsPage() {
   const history = demoMode || !hasSupabaseConfig() ? [] : await cachedRead("tests:history", loadHistory);
   const summary = glance ? netSummary(glance) : null;
   const sixteen = glance?.external.sixteenP ? sixteenPToBigFive(glance.external.sixteenP) : null;
+  const neo = glance?.external.neo ?? null;
+  const neoScale = neo ? neoOnDashboardScale(neo) : null;
+  const NEO_OF: Record<string, keyof NonNullable<typeof neo>["traits"]> = { extraversion: "extraversion", agreeableness: "agreeableness", conscientiousness: "conscientiousness", neuroticism: "neuroticism", intellect: "openness" };
   return <AppShell demoMode={demoMode}><div className="section-page">
     <div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> Self-assessments</div><h1>Reasoning & personality</h1><p className="page-subtitle">{summary?.headline ?? "Inputs that add evidence where coursework has none."}</p></div></div>
 
@@ -45,7 +49,7 @@ export default async function TestsPage() {
 
     {glance && <section className="radar-grid" aria-label="Profile infographics">
       <Radar title="Personality" axes={FACTORS.map((factor) => SHORT[factor])} max={5} rings={5}
-        series={[{ label: "How you answered", tone: "rose", values: FACTORS.map((factor) => radial(factor, glance.self?.[factor])) }, { label: "From your written context", tone: "dusk", values: FACTORS.map((factor) => radial(factor, glance.context?.factors[factor]?.score)) }, ...(sixteen ? [{ label: "16Personalities (approx.)", tone: "gold" as const, values: FACTORS.map((factor) => radial(factor, sixteen[factor])) }] : [])]}
+        series={[{ label: "How you answered", tone: "rose", values: FACTORS.map((factor) => radial(factor, glance.self?.[factor])) }, ...(neoScale ? [{ label: `${neo!.form}`, tone: "gold" as const, values: FACTORS.map((factor) => radial(factor, neoScale[factor])) }] : []), { label: "From your written context", tone: "dusk", values: FACTORS.map((factor) => radial(factor, glance.context?.factors[factor]?.score)) }, ...(sixteen ? [{ label: "16Personalities (approx.)", tone: "gold" as const, values: FACTORS.map((factor) => radial(factor, sixteen[factor])) }] : [])]}
         caption="1–5 on the IPIP response scale; 3 is neutral. Emotional stability is neuroticism reversed." />
       <Radar title="Reasoning by section" axes={["Numerical", "Logical", "Verbal"]} max={100} rings={4}
         series={glance.reasoning.map((row, index) => ({ label: `${row.level[0].toUpperCase()}${row.level.slice(1)} · ${row.correct}/${row.total}`, tone: (["gold", "rose", "moss"] as const)[index % 3], values: [row.sections.numerical, row.sections.logical, row.sections.verbal] }))}
@@ -56,11 +60,12 @@ export default async function TestsPage() {
     {glance && <section className="content-panel" aria-label="Personality, two readings">
       <div className="panel-head"><h2>Personality, two readings</h2><ContextReadingRefresh hasReading={Boolean(glance.context)} /></div>
       <p className="empty-hint">How you answered the questionnaire, beside a reading of what you have written about yourself — your note, your assistants&apos; profiles and the patterns seen in your coursework. {glance.context ? `Context read ${new Date(glance.context.date).toLocaleDateString()}.` : "No context reading yet."}</p>
-      <div className="trait-table" role="table">
-        <div className="trait-head" role="row"><span>Trait</span><span>How you answered</span><span>From your context</span><span>What research links it to</span></div>
+      <div className={`trait-table${neo ? " has-neo" : ""}`} role="table">
+        <div className="trait-head" role="row"><span>Trait</span><span>How you answered</span>{neo && <span>{neo.form}</span>}<span>From your context</span><span>What research links it to</span></div>
         {FACTORS.map((factor) => { const self = glance.self?.[factor]; const context = glance.context?.factors[factor]; return <div key={factor} className="trait-row" role="row">
           <span><strong><Cue label={factor === "neuroticism" ? "Emotional stability" : FACTOR_LABELS[factor].split(" ")[0].replace("Intellect", "Intellect")}>{FACTOR_LABELS[factor]}</Cue></strong><Why label="How to read this">{FACTOR_READINGS[factor]}</Why></span>
           <span className="trait-score">{self === undefined ? "—" : `${self.toFixed(1)}/5`}</span>
+          {neo && neoScale && <span className="trait-score">{neoScale[factor].toFixed(1)}/5<small>{neo.traits[NEO_OF[factor]].percentile !== null ? `higher than ${neo.traits[NEO_OF[factor]].percentile}% of ${neo.normGroup.toLowerCase() || "the comparison group"}` : ""}{factor === "intellect" ? " (Openness; the 1–5 figure uses its Intellect and Imagination facets)" : ""}</small></span>}
           <span className="trait-score">{context?.score === null || context?.score === undefined ? <small>not enough context</small> : <>{context.score.toFixed(1)}/5<small>{context.confidence} confidence</small></>}{context?.reason && context.score !== null && <Why label="Why"><p>{context.reason}</p>{context.quote && <q>{context.quote}</q>}</Why>}</span>
           <span><small>{FACTOR_RESEARCH[factor].strengths}</small><Why label="Caveat and sources"><p>{FACTOR_RESEARCH[factor].watch}</p><ul className="cite-list">{FACTOR_RESEARCH[factor].studies.map((key) => <li key={key}><Cite id={key} /></li>)}</ul></Why></span>
         </div>; })}
@@ -68,6 +73,17 @@ export default async function TestsPage() {
       {glance.context?.summary && <p className="scope-note"><b>What your context adds:</b> {glance.context.summary}</p>}
       {glance.note && <p className="scope-note"><b>Your own note:</b> {glance.note}</p>}
       <Why label="Why the two readings can differ">{READING_CAVEAT}</Why>
+    </section>}
+
+    {neo && <section className="content-panel neo-result" aria-label="Big Five facets">
+      <h2>{neo.form}: your thirty facets</h2>
+      <p className="empty-hint">Taken {neo.takenOn ?? "on an unknown date"}{neo.durationSeconds ? ` in ${Math.round(neo.durationSeconds / 60)} minutes` : ""}. Self-report, like the questionnaire above, but {neo.form.replace("IPIP-NEO-", "")} statements long. Percentiles are the test site&apos;s own comparison with {neo.normGroup.toLowerCase() || "its sample"}{neo.normNote ? ` (${neo.normNote})` : ""}.</p>
+      {neo.anomalies.length > 0 && <ul className="neo-anomalies">{neo.anomalies.map((item) => <li key={item}>{item}</li>)}</ul>}
+      <div className="neo-traits">{NEO_TRAITS.map((trait) => { const score = neo.traits[trait.key]; return <div key={trait.key} className="neo-trait">
+        <h3>{trait.label} <small>{score.raw}/{score.max} · higher than {score.percentile ?? "—"}%</small></h3>
+        <ul>{neo.facets.filter((facet) => facet.trait === trait.key).map((facet) => <li key={facet.name} className={standoutFacets(neo).some((item) => item.name === facet.name) ? "neo-standout" : ""}><span>{facet.name}</span><span className="report-bar report-bar-thin" aria-hidden><i style={{ width: `${Math.max(2, facet.percentile ?? 0)}%` }} /></span><span>{facet.percentile ?? "—"}%</span></li>)}</ul>
+      </div>; })}</div>
+      {standoutFacets(neo).length > 0 && <p className="scope-note"><b>Facets that break from their trait</b> (25+ percentile points): {standoutFacets(neo).map((facet) => `${facet.name} ${facet.percentile}% within ${NEO_TRAITS.find((trait) => trait.key === facet.trait)!.label} ${facet.traitPercentile}%`).join(" · ")}. Facets often say more than the trait average.</p>}
     </section>}
 
     {glance && <section className="content-panel" aria-label="Other personality tools">

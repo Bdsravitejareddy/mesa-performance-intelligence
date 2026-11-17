@@ -3,7 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-// Enter results from 16Personalities and CliftonStrengths; they are kept as labelled self-reports.
+// Enter results from 16Personalities and CliftonStrengths, or import an IPIP-NEO result PDF; all are kept as
+// labelled self-reports.
 export function ExternalAssessmentsForm() {
   const router = useRouter();
   const [message, setMessage] = useState("");
@@ -26,6 +27,19 @@ export function ExternalAssessmentsForm() {
       <strong>CliftonStrengths</strong>
       <textarea name="themes" rows={2} placeholder="Your top themes in order, separated by commas — e.g. Strategic, Learner, Achiever, Analytical, Focus" className="field-input" required />
       <button type="submit" className="button button-secondary">Save themes</button>
+    </form>
+    <form onSubmit={async (event) => {
+      event.preventDefault();
+      setMessage("Reading the PDF…");
+      const response = await fetch("/api/external-assessments", { method: "POST", body: new FormData(event.currentTarget) });
+      const body = await response.json().catch(() => ({})) as { error?: string; form?: string; facets?: number; anomalies?: string[] };
+      setMessage(response.ok ? `Saved ${body.form}: 5 traits, ${body.facets} facets.${body.anomalies?.length ? ` Note: ${body.anomalies.join(" ")}` : ""}` : body.error ?? "Could not save.");
+      if (response.ok) router.refresh();
+    }}>
+      <strong>IPIP-NEO (Big Five with facets)</strong>
+      <input name="file" type="file" accept="application/pdf,.pdf" required className="field-input" />
+      <small className="empty-hint">The result PDF from an IPIP-NEO test (e.g. the 120- or 300-statement version). Traits, facets and the site&apos;s percentiles are read as printed.</small>
+      <button type="submit" className="button button-secondary">Import result</button>
     </form>
     {message && <small role="status">{message}</small>}
   </div>;
