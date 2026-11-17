@@ -6,6 +6,7 @@ import { CourseCreateForm } from "@/components/course-forms";
 import { CourseLinkReview } from "@/components/course-link-review";
 import { suggestCourseLinks } from "@/lib/courses/links";
 import { demoData } from "@/lib/demo-data";
+import { stakesOf } from "@/lib/assessments/stakes";
 import { hasSupabaseConfig } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
 
@@ -14,7 +15,7 @@ export const dynamic = "force-dynamic";
 export default async function CoursesPage() {
   const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
   const loaded = demoMode ? null : await loadCourses();
-  const courses = demoMode ? demoData.courses.map((course) => ({ ...course, term: "Illustrative term", material_count: course.materials, assessment_count: 0, linked_to: null as string | null })) : loaded!.courses;
+  const courses = demoMode ? demoData.courses.map((course) => ({ ...course, term: "Illustrative term", material_count: course.materials, assessment_count: 0, practice_count: 0, linked_to: null as string | null })) : loaded!.courses;
   const review = loaded?.review;
   // One card per course: a Drive folder linked to an LMS course is folded into it rather than listed again.
   const folded = courses.filter((course) => !course.linked_to);
@@ -30,7 +31,7 @@ export default async function CoursesPage() {
       <div className="course-grid">{list.map((course) => { const { name, by } = split(course.title); const drive = folders.get(course.title) ?? []; const materials = course.material_count + drive.reduce((sum, folder) => sum + folder.materials, 0); return <Link className="course-card" href={`/courses/${course.id}`} key={course.id}>
         <span className="course-card-icon"><BookOpen size={16} /></span>
         <span className="course-card-body"><strong>{name}</strong>{by && <small>{by}</small>}</span>
-        <span className="course-card-meta"><span><b>{course.assessment_count}</b> assessments</span><span><FileText size={12} /> <b>{materials}</b> materials{drive.length ? <small> · incl. Drive</small> : ""}</span></span>
+        <span className="course-card-meta"><span><b>{course.assessment_count}</b> graded assessment{course.assessment_count === 1 ? "" : "s"}{course.practice_count ? <small> · {course.practice_count} practice</small> : ""}</span><span><FileText size={12} /> <b>{materials}</b> materials{drive.length ? <small> · incl. Drive</small> : ""}</span></span>
       </Link>; })}</div>
     </section>; }) : <div className="content-panel empty-copy"><p>No courses yet. They arrive from the LMS sync, or add one below.</p></div>}
     {review && <section className="content-panel course-admin"><Why label={`Drive folders linked to courses (${review.links.length}${review.suggestions.length + review.unlinkedMaterial.length ? ` · ${review.unlinkedMaterial.length} not linked yet` : ""})`}><p className="empty-hint">Each Drive course folder is linked to its LMS course, so that course's assessments are graded against the folder's materials. Records are not moved or merged, and a link can be removed.</p><CourseLinkReview {...review} /></Why>
@@ -39,24 +40,31 @@ export default async function CoursesPage() {
   </div></AppShell>;
 }
 
+// Practice workbooks are counted apart, so a course with many weekly tasks does not look like 25 graded pieces.
+function assessmentCounts(value: unknown) {
+  const rows = Array.isArray(value) ? (value as { title: string; counts_toward_grade: boolean | null }[]) : [];
+  const practice = rows.filter((row) => stakesOf(row.title, row.counts_toward_grade) === "practice").length;
+  return { assessment_count: rows.length - practice, practice_count: practice };
+}
+
 async function loadCourses() {
   if (!hasSupabaseConfig()) return { courses: [], review: null };
   const supabase = await createClient();
   const [{ data, error }, { data: linkRows, error: linkError }] = await Promise.all([
-    supabase.from("courses").select("id, code, title, term, lms_course_id, course_materials(count), assessments(count)").order("created_at", { ascending: false }),
+    supabase.from("courses").select("id, code, title, term, lms_course_id, course_materials(count), assessments(title, counts_toward_grade)").order("created_at", { ascending: false }),
     supabase.from("course_links").select("assessment_course_id, material_course_id"),
   ]);
   if (error || linkError) throw new Error("Could not load courses. Check the database migration and workspace connection.");
   const count = (value: unknown) => Array.isArray(value) ? Number(value[0]?.count ?? 0) : 0;
-  const rows = (data ?? []).map((course) => ({ id: course.id, code: course.code, title: course.title, term: course.term, lmsId: course.lms_course_id as string | null, material_count: count(course.course_materials), assessment_count: count(course.assessments) }));
+  const rows = (data ?? []).map((course) => ({ id: course.id, code: course.code, title: course.title, term: course.term, lmsId: course.lms_course_id as string | null, material_count: count(course.course_materials), ...assessmentCounts(course.assessments) }));
   const byId = new Map(rows.map((row) => [row.id, row]));
   const links = linkRows ?? [];
   const linkedMaterial = new Map(links.map((link) => [link.material_course_id, link.assessment_course_id]));
-  const detail = (row: (typeof rows)[number]) => `${row.material_count} materials · ${row.assessment_count} assessments`;
+  const detail = (row: (typeof rows)[number]) => `${row.material_count} materials · ${row.assessment_count} graded assessments${row.practice_count ? ` · ${row.practice_count} practice` : ""}`;
   const asCourse = (row: (typeof rows)[number]) => ({ id: row.id, title: row.title, detail: detail(row) });
   // Assessment courses come from the LMS or hold assessments; material courses hold documents and no assessments.
-  const assessmentCourses = rows.filter((row) => row.lmsId || row.assessment_count > 0);
-  const unlinkedMaterial = rows.filter((row) => !row.lmsId && row.assessment_count === 0 && row.material_count > 0 && !linkedMaterial.has(row.id));
+  const assessmentCourses = rows.filter((row) => row.lmsId || row.assessment_count + row.practice_count > 0);
+  const unlinkedMaterial = rows.filter((row) => !row.lmsId && row.assessment_count + row.practice_count === 0 && row.material_count > 0 && !linkedMaterial.has(row.id));
   const suggestions = suggestCourseLinks(unlinkedMaterial, assessmentCourses).map((pair) => ({ material: asCourse(byId.get(pair.materialCourse.id)!), assessment: asCourse(byId.get(pair.assessmentCourse.id)!) }));
   const linkedPairs = links.flatMap((link) => { const material = byId.get(link.material_course_id); const assessment = byId.get(link.assessment_course_id); return material && assessment ? [{ material: asCourse(material), assessment: asCourse(assessment) }] : []; });
   return {

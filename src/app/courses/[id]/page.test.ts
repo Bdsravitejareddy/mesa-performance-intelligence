@@ -44,6 +44,22 @@ describe("course assessment submission origin notice", () => {
     expect(markup).not.toContain("Evidence-linked assessment summary");
   });
 
+  it("shows a maximum as “out of 100”, keeps editing tools behind one Edit disclosure, and summarises the course", async () => {
+    vi.stubEnv("NEXT_PUBLIC_DEMO_MODE", "false");
+    setup("user_entered");
+    records.assessments = [{ id: "assessment-1", title: "Mid-term", assessment_format: "Written", official_max_mark: 100 }, { id: "assessment-2", title: "Week 2 workbook", assessment_format: "Written", official_max_mark: 100 }];
+    records.lms_report_cards = [{ term: "Term 1", courses: [{ course: "Health  Strategy", percentage: 74, grade: "B+", credits: 3 }], breakdown: [] }];
+    const page = await CourseDetailPage({ params: Promise.resolve({ id: "course-1" }) });
+    const markup = renderToStaticMarkup(createElement(() => page));
+    expect(markup).toContain("official mark 82 out of 100");
+    expect(markup).toContain("Practice · Written · out of 100 · no mark released");
+    expect(markup).not.toMatch(/Written · 100\/100/);
+    expect(markup.match(/<summary>Edit<\/summary>/g)).toHaveLength(2);
+    expect(markup).toMatch(/<details class="assessment-edit"><summary>Edit<\/summary><div class="rubric-actions"/);
+    expect(markup).toContain("74%");
+    expect(markup).toContain("1 graded assessment and 1 practice task");
+  });
+
   it("keeps manual-origin submission controls collapsed without claiming LMS attachment failure", async () => {
     vi.stubEnv("NEXT_PUBLIC_DEMO_MODE", "false");
     setup("user_entered");
