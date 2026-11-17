@@ -79,16 +79,24 @@ export default async function TestsPage() {
       <h2>{neo.form}: your thirty facets</h2>
       <p className="empty-hint">Taken {neo.takenOn ?? "on an unknown date"}{neo.durationSeconds ? ` in ${Math.round(neo.durationSeconds / 60)} minutes` : ""}. Self-report, like the questionnaire above, but {neo.form.replace("IPIP-NEO-", "")} statements long. Percentiles are the test site&apos;s own comparison with {neo.normGroup.toLowerCase() || "its sample"}{neo.normNote ? ` (${neo.normNote})` : ""}.</p>
       {neo.anomalies.length > 0 && <ul className="neo-anomalies">{neo.anomalies.map((item) => <li key={item}>{item}</li>)}</ul>}
-      <div className="neo-traits">{NEO_TRAITS.map((trait) => { const score = neo.traits[trait.key]; return <div key={trait.key} className="neo-trait">
-        <h3>{trait.label} <small>{score.raw}/{score.max} · higher than {score.percentile ?? "—"}%</small></h3>
-        <ul>{neo.facets.filter((facet) => facet.trait === trait.key).map((facet) => <li key={facet.name} className={standoutFacets(neo).some((item) => item.name === facet.name) ? "neo-standout" : ""}><span>{facet.name}</span><span className="report-bar report-bar-thin" aria-hidden><i style={{ width: `${Math.max(2, facet.percentile ?? 0)}%` }} /></span><span>{facet.percentile ?? "—"}%</span></li>)}</ul>
-      </div>; })}</div>
+      <div className="neo-traits">{NEO_TRAITS.map((trait) => {
+        const score = neo.traits[trait.key];
+        // Neuroticism is drawn as its opposite pole, emotional stability, as elsewhere on this page, so a longer bar
+        // always reads as "more": a facet at the 1st percentile is steadier than 99% of the group.
+        const steady = trait.key === "neuroticism";
+        const shown = (percentile: number | null) => (percentile === null ? null : steady ? 100 - percentile : percentile);
+        return <div key={trait.key} className="neo-trait">
+          <h3>{steady ? "Emotional stability" : trait.label} <small>{score.raw}/{score.max} {steady ? "neuroticism" : ""} · {steady ? `steadier than ${shown(score.percentile) ?? "—"}%` : `higher than ${score.percentile ?? "—"}%`}</small></h3>
+          <ul>{neo.facets.filter((facet) => facet.trait === trait.key).map((facet) => <li key={facet.name} className={standoutFacets(neo).some((item) => item.name === facet.name) ? "neo-standout" : ""}><span>{steady ? `Low ${facet.name.toLowerCase()}` : facet.name}</span><span className="report-bar report-bar-thin" aria-hidden><i style={{ width: `${Math.max(2, shown(facet.percentile) ?? 0)}%` }} /></span><span>{shown(facet.percentile) ?? "—"}%</span></li>)}</ul>
+        </div>;
+      })}</div>
+      <p className="scope-note">Bars show how many of the comparison group you score above; for emotional stability, how many you are steadier than.</p>
       {standoutFacets(neo).length > 0 && <p className="scope-note"><b>Facets that break from their trait</b> (25+ percentile points): {standoutFacets(neo).map((facet) => `${facet.name} ${facet.percentile}% within ${NEO_TRAITS.find((trait) => trait.key === facet.trait)!.label} ${facet.traitPercentile}%`).join(" · ")}. Facets often say more than the trait average.</p>}
     </section>}
 
     {glance && <section className="content-panel" aria-label="Other personality tools">
       <h2>Other personality tools</h2>
-      <p className="empty-hint">Results you have from 16Personalities or CliftonStrengths. Both are proprietary, self-reported tools, so they are shown as context beside the IPIP questionnaire and feed the context reading and AI view as your own description — never as a measured score.</p>
+      <p className="empty-hint">Results you have from 16Personalities or CliftonStrengths. Both are proprietary, self-reported tools, so they are shown as context beside the IPIP questionnaire and feed the AI view and the behaviour analysis as your own description — never as a measured score, and never the reading of your written context, which stays independent of questionnaires.</p>
       <div className="external-results">
         <div><h3>16Personalities</h3>{glance.external.sixteenP ? <><p className="external-type">{glance.external.sixteenP.type}</p><small className="empty-hint">Lines up approximately with: {FACTORS.map((factor) => sixteen?.[factor] != null ? `${factor === "neuroticism" ? "emotional stability" : factor} ${(factor === "neuroticism" ? 6 - sixteen[factor]! : sixteen[factor]!).toFixed(1)}` : null).filter(Boolean).join(" · ")} (McCrae &amp; Costa, 1989).</small></> : <p className="empty-hint">Not added.</p>}</div>
         <div><h3>CliftonStrengths</h3>{glance.external.clifton.length ? <ul className="clifton-list">{cliftonDomains(glance.external.clifton).map((row) => <li key={row.domain}><strong>{row.domain}</strong><small>{row.themes.join(", ")}</small></li>)}</ul> : <p className="empty-hint">Not added.</p>}</div>

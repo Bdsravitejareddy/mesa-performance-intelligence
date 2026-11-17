@@ -39,6 +39,8 @@ export type DimensionAnalysis = {
   hypothesis: string;
   wouldConfirm: string;
   wouldChallenge: string;
+  // How the person describes themselves (a self_report source) against what the work shows, for this pattern.
+  selfReportCheck?: { sourceId: string; verdict: "consistent" | "differs"; note: string };
 };
 
 export async function gatherSources(supabase: SupabaseClient, options: { includeConversations: boolean }): Promise<Source[]> {
@@ -127,6 +129,7 @@ const SYSTEM = [
   "Sources of kind practice are the person's own written answers to weekly practice prompts (ungraded, everyday and short case tasks): usable for how they express and reason, weighted below graded work.",
   "Sources of kind graded_work hold verbatim quotes from the person's submitted work (lines starting 'From the work') and a blind grader's judgements (lines starting 'Grader'); prefer quoting the work itself, and treat grader lines as a model's opinion.",
   "Sources of kind ai_profile are an AI assistant's summary of the person. Use them as context and as hypotheses to test against the other sources; cite them only alongside another source; note where they agree or conflict with the coursework evidence, and use their dated 'change' entries when describing change over time.",
+  "Sources of kind self_report (questionnaires such as the IPIP and IPIP-NEO, 16Personalities, CliftonStrengths) say how the person sees themselves. They are never observations of behaviour: never cite them in observations. Instead, for each observed dimension where a self_report bears on it, return selfReportCheck {sourceId, verdict: consistent|differs, note: one plain sentence comparing what they say about themselves with what the work shows, e.g. 'You rate yourself as very cautious, and your decisions in the work do weigh risks before acting.'}; omit it otherwise.",
   "For each dimension also return overview (two or three plain sentences telling the person what the evidence shows, as a short narrative) and why (one sentence naming the main evidence behind it).",
   "For each dimension return: status (observed | not_observed), evidenceStrength (none|limited|moderate|substantial), observedBehaviour, observations (array of {sourceId, quote} with quotes copied exactly from that source), possibleExplanations (at least two different ones), context, consequences (only those shown in the sources), counterevidence, hypothesis (phrased as a tentative hypothesis), wouldConfirm, wouldChallenge.",
   "If a dimension has no supporting source, return status not_observed with empty fields. One source is at most 'limited' strength.",
@@ -150,8 +153,9 @@ export function validateAnalysis(raw: Record<string, unknown>, sources: Source[]
       const quote = clip(item.quote, 300);
       return { sourceId, quote, verified: Boolean(quote) && Boolean(byId.get(sourceId)?.includes(norm(quote))) };
     }).filter((item) => item.verified);
-    // An assistant's profile can add context, but an observation needs at least one source from the student's own work or feedback.
-    const independent = observations.filter((item) => kindById.get(item.sourceId) !== "ai_profile");
+    // An assistant's profile or a questionnaire can add context, but an observation needs at least one source from the
+    // student's own work or feedback: how someone describes themselves is not evidence of what they did.
+    const independent = observations.filter((item) => kindById.get(item.sourceId) !== "ai_profile" && kindById.get(item.sourceId) !== "self_report");
     const distinctSources = new Set(independent.map((item) => item.sourceId)).size;
     // Feedback adoption needs feedback a person actually received: faculty feedback. A grader's comments on a piece
     // of work, self-made retrospectives and assistant conversations are not feedback the person acted on.
@@ -167,8 +171,18 @@ export function validateAnalysis(raw: Record<string, unknown>, sources: Source[]
       dimension, status: "observed", evidenceStrength, overview: clip(row.overview, 600), why: clip(row.why, 300), observedBehaviour: clip(row.observedBehaviour, 600), observations,
       possibleExplanations: list(row.possibleExplanations), context: clip(row.context, 400), consequences: clip(row.consequences, 400), counterevidence: clip(row.counterevidence, 400),
       hypothesis: clip(row.hypothesis, 400), wouldConfirm: clip(row.wouldConfirm, 300), wouldChallenge: clip(row.wouldChallenge, 300),
+      ...selfReportCheckOf(row.selfReportCheck, kindById),
     } : { dimension, status: "not_observed", evidenceStrength: "none", observedBehaviour: "", observations: [], possibleExplanations: [], context: "", consequences: "", counterevidence: "", hypothesis: "", wouldConfirm: "", wouldChallenge: "" };
   });
+}
+
+// Kept only when it names a real self-report source and says something.
+function selfReportCheckOf(value: unknown, kindById: Map<string, Source["kind"]>): Pick<DimensionAnalysis, "selfReportCheck"> {
+  const check = value && typeof value === "object" ? value as Record<string, unknown> : null;
+  const sourceId = clip(check?.sourceId, 10);
+  const note = clip(check?.note, 300);
+  if (!check || kindById.get(sourceId) !== "self_report" || !note || !["consistent", "differs"].includes(String(check.verdict))) return {};
+  return { selfReportCheck: { sourceId, verdict: check.verdict as "consistent" | "differs", note } };
 }
 
 export async function analyseBehaviour(sources: Source[]): Promise<{ dimensions: DimensionAnalysis[]; inputHash: string }> {

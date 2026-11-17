@@ -1,10 +1,12 @@
 import type { Factor } from "@/lib/tests/personality";
 import type { Glance } from "./glance";
+import type { NeoTrait } from "@/lib/tests/ipip-neo";
 
-// Tips tied to your personality, shown only when they are well supported: the trait must be clearly high or low
-// in your answers AND your written context must agree, and the tip must rest on a replicated, peer-reviewed
-// trait–outcome link. Effects in this research are modest; the tips say so rather than overstate them.
-export type Tip = { trait: string; tip: string; finding: string; studies: string[] };
+// Tips tied to your personality, shown only when they are well supported, and resting on a replicated, peer-reviewed
+// trait–outcome link. The trait must be clearly high or low either on a long-form Big Five result with percentiles
+// (25th percentile or below, 75th or above), or in your short questionnaire answers AND your written context. The
+// short questionnaire alone is too brief to stand on its own. Effects in this research are modest; the tips say so.
+export type Tip = { trait: string; tip: string; finding: string; studies: string[]; basis: string };
 
 type Rule = { factor: Factor; pole: "high" | "low"; trait: string; tip: string; finding: string; studies: string[] };
 const RULES: Rule[] = [
@@ -17,11 +19,22 @@ const RULES: Rule[] = [
 
 const level = (score: number) => (score >= 4 ? "high" : score <= 2 ? "low" : "middle");
 
-export function personalityTips(glance: Pick<Glance, "self" | "context">): Tip[] {
-  if (!glance.self || !glance.context) return [];
-  return RULES.filter((rule) => {
-    const self = glance.self![rule.factor];
-    const context = glance.context!.factors[rule.factor]?.score;
-    return level(self) === rule.pole && context !== null && context !== undefined && level(context) === rule.pole;
-  }).map(({ trait, tip, finding, studies }) => ({ trait, tip, finding, studies }));
+const NEO_OF: Record<Factor, NeoTrait> = { extraversion: "extraversion", agreeableness: "agreeableness", conscientiousness: "conscientiousness", neuroticism: "neuroticism", intellect: "openness" };
+
+export function personalityTips(glance: Pick<Glance, "self" | "context"> & { external?: Pick<Glance["external"], "neo"> }): Tip[] {
+  const neo = glance.external?.neo ?? null;
+  return RULES.flatMap((rule) => {
+    const percentile = neo?.traits[NEO_OF[rule.factor]]?.percentile ?? null;
+    if (percentile !== null) {
+      const pole = percentile >= 75 ? "high" : percentile <= 25 ? "low" : "middle";
+      return pole === rule.pole ? [{ ...pick(rule), basis: `${neo!.form}: ${ordinal(percentile)} percentile` }] : [];
+    }
+    if (!glance.self || !glance.context) return [];
+    const self = glance.self[rule.factor];
+    const context = glance.context.factors[rule.factor]?.score;
+    return level(self) === rule.pole && context !== null && context !== undefined && level(context) === rule.pole ? [{ ...pick(rule), basis: "Your questionnaire answers and your written context agree" }] : [];
+  });
 }
+
+const ordinal = (value: number) => `${value}${value % 100 >= 11 && value % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][value % 10] ?? "th"}`;
+const pick = ({ trait, tip, finding, studies }: Rule) => ({ trait, tip, finding, studies });

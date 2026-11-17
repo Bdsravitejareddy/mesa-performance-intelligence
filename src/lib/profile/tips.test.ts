@@ -11,4 +11,15 @@ describe("personality tips", () => {
     expect(tips.map((tip) => tip.trait)).toEqual(["Highly conscientious", "High in intellect", "Emotionally steady"]);
     expect(personalityTips({ self: null, context: null })).toEqual([]);
   });
+
+  it("lets a long-form result with percentiles stand on its own, and says what each tip rests on", () => {
+    const trait = (percentile: number) => ({ raw: 200, max: 300, level: "high" as const, percentile, percentOfRange: 60 });
+    const neo = { form: "IPIP-NEO-300", takenOn: null, durationSeconds: null, normGroup: "", normNote: "", facets: [], consistent: true, anomalies: [],
+      traits: { openness: trait(98), conscientiousness: trait(99), extraversion: trait(97), agreeableness: trait(60), neuroticism: trait(1) } };
+    // No written context about extraversion or neuroticism: the long-form result still decides.
+    const tips = personalityTips({ self: null, context: null, external: { neo } });
+    expect(tips.map((tip) => tip.trait)).toEqual(["Highly conscientious", "High in intellect", "Emotionally steady", "Extraverted"]);
+    expect(tips[0].basis).toBe("IPIP-NEO-300: 99th percentile");
+    expect(tips[2].basis).toBe("IPIP-NEO-300: 1st percentile");
+  });
 });

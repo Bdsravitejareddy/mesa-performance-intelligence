@@ -56,6 +56,7 @@ export default async function ThinkingPage() {
             {item.context && <p><b>Context:</b> {item.context}</p>}
             {item.consequences && <p><b>What it led to:</b> {item.consequences}</p>}
             {item.counterevidence && <p><b>Evidence the other way:</b> {item.counterevidence}</p>}
+            {item.selfReportCheck && <p><b>{item.selfReportCheck.verdict === "differs" ? "Differs from how you describe yourself:" : "Matches how you describe yourself:"}</b> {item.selfReportCheck.note}</p>}
             {(item.wouldConfirm || item.wouldChallenge) && <p className="behaviour-test">{item.wouldConfirm && <><b>Would confirm:</b> {item.wouldConfirm} </>}{item.wouldChallenge && <><b>Would challenge:</b> {item.wouldChallenge}</>}</p>}
           </Why>
         </ExpandCard>;

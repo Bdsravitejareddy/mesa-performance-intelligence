@@ -12,7 +12,7 @@ export function ExternalAssessmentsForm() {
     setMessage("Saving…");
     const response = await fetch("/api/external-assessments", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
     const body = await response.json().catch(() => ({})) as { error?: string };
-    setMessage(response.ok ? "Saved. It feeds the context reading and AI view in the next refresh." : body.error ?? "Could not save.");
+    setMessage(response.ok ? "Saved. It feeds the AI view and behaviour analysis in the next refresh." : body.error ?? "Could not save.");
     if (response.ok) router.refresh();
   }
   return <div className="external-form">

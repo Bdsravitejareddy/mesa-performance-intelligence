@@ -38,4 +38,24 @@ describe("missing context scores", () => {
     const reading = validateReading({ factors: { extraversion: { score: null, confidence: "low", reason: "", quote: "I prefer objective decisions", sourceId: "N1" } } }, [{ id: "N1", label: "", text: "I prefer objective decisions, but I do feel for people in the room." }]);
     expect(reading.factors.extraversion.score).toBeNull();
   });
+
+  it("ranks traits by percentile on a long-form result and explains a self/context gap with its facets", () => {
+    const context = validateReading({ factors: { agreeableness: { score: 2.5, confidence: "medium", reason: "You put objectivity first.", quote: "I prefer objective decisions", sourceId: "N1" } } }, sources);
+    const trait = (percentile: number) => ({ raw: 200, max: 300, level: "high" as const, percentile, percentOfRange: 60 });
+    const facet = (name: string, percentile: number) => ({ name, trait: "agreeableness" as const, raw: 40, max: 50, level: "high" as const, percentile });
+    const neo = { form: "IPIP-NEO-300", takenOn: null, durationSeconds: null, normGroup: "", normNote: "", consistent: true,
+      anomalies: ["Altruism is reported as high (46/50) but higher than only 48% of the comparison group; one of the two is likely wrong."],
+      traits: { openness: trait(98), conscientiousness: trait(99), extraversion: trait(97), agreeableness: trait(88), neuroticism: trait(1) },
+      facets: [facet("Trust", 94), facet("Sympathy", 94), facet("Altruism", 48), facet("Cooperation", 48), facet("Modesty", 50)] };
+    const summary = netSummary({
+      self: { extraversion: 4.2, agreeableness: 4.3, conscientiousness: 4.8, neuroticism: 1.7, intellect: 5 }, selfDate: null, note: "",
+      context: { ...context, date: "2026-10-23" }, skills: [], aiViewDate: null, external: { sixteenP: null, clifton: [], neo },
+      reasoning: [], behaviour: { observed: 0, total: 0, date: null, dimensions: [] },
+    });
+    expect(summary.headline).toBe("On the IPIP-NEO-300, you describe yourself as very high in conscientiousness (99th percentile), unusually steady under stress (1st percentile for neuroticism), very high in openness to experience (98th percentile).");
+    const facets = summary.points.find((point) => point.title === "What your facets say about agreeableness")?.text ?? "";
+    expect(facets).toMatch(/high in Trust \(94%\), Sympathy \(94%\); around average in Cooperation \(48%\), Modesty \(50%\)/);
+    expect(facets).toMatch(/Altruism left out/);
+    expect(summary.open).toMatch(/trust or cooperation/);
+  });
 });

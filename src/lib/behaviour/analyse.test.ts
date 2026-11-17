@@ -41,3 +41,17 @@ describe("learning from feedback", () => {
     expect(result.status).toBe("observed");
   });
 });
+
+describe("self-reports in the behaviour analysis", () => {
+  it("never counts a questionnaire as observed behaviour, and keeps its comparison with the work apart", () => {
+    const withSelf: Source[] = [...sources, { id: "X3", kind: "self_report", label: "IPIP-NEO", text: "Cautiousness 47/50, higher than 96% of men aged 25–34." }];
+    const result = validateAnalysis({ dimensions: [
+      { dimension: DIMENSIONS[0], status: "observed", observations: [{ sourceId: "X3", quote: "Cautiousness 47/50" }] },
+      { dimension: DIMENSIONS[1], status: "observed", observations: [{ sourceId: "F1", quote: "no market size" }], selfReportCheck: { sourceId: "X3", verdict: "differs", note: "You rate yourself as very cautious, but the work skips sizing the market." } },
+      { dimension: DIMENSIONS[2], status: "observed", observations: [{ sourceId: "F2", quote: "Double-check your filter or formula" }], selfReportCheck: { sourceId: "F2", verdict: "consistent", note: "Not a self-report." } },
+    ] }, withSelf);
+    expect(result[0]).toMatchObject({ status: "not_observed" });
+    expect(result[1].selfReportCheck).toEqual({ sourceId: "X3", verdict: "differs", note: "You rate yourself as very cautious, but the work skips sizing the market." });
+    expect(result[2].selfReportCheck).toBeUndefined();
+  });
+});
