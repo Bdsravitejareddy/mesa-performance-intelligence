@@ -4,7 +4,7 @@ import { normalizeAssignmentRecords, unwrapToolResult } from "./normalize";
 describe("Mesa MCP assignment normalization", () => {
   it("keeps an explicit earned score on the 0–100 scale and preserves feedback", () => {
     const records = normalizeAssignmentRecords({ structuredContent: { assignments: [{ id: "a-1", title: "Mid-Term Assignment", course: { id: "c-1", title: "Art of Selling" }, max_marks: 100, submission: { id: "s-1", score: 92, feedback: "Strong application." } }] } });
-    expect(records).toEqual([{ assignmentId: "a-1", submissionId: "s-1", courseId: "c-1", courseTitle: "Art of Selling", title: "Mid-Term Assignment", maximumMark: 100, sourceMaximumMark: 100, sourceScore: 92, score: 92, feedback: "Strong application.", status: "", submittedAt: null, sourceUpdatedAt: null }]);
+    expect(records).toEqual([{ assignmentId: "a-1", submissionId: "s-1", courseId: "c-1", courseTitle: "Art of Selling", title: "Mid-Term Assignment", maximumMark: 100, sourceMaximumMark: 100, sourceScore: 92, score: 92, feedback: "Strong application.", status: "", submittedAt: null, sourceUpdatedAt: null, dueAt: null }]);
   });
 
   it("does not treat maximum marks or a pending score label as a student score", () => {

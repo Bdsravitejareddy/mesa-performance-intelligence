@@ -14,6 +14,8 @@ export type MesaAssignmentRecord = {
   status: string;
   submittedAt: string | null;
   sourceUpdatedAt: string | null;
+  // The deadline Nexus gives for the assignment, when its reply carries one (names vary, so several are tried).
+  dueAt?: string | null;
 };
 
 function object(value: unknown): JsonObject | null {
@@ -129,6 +131,7 @@ export function normalizeAssignmentRecords(value: unknown): MesaAssignmentRecord
       status: firstString(rawSubmission.status, record.status, record.submission_status, record.submissionStatus),
       submittedAt: timestamp(rawSubmission.submitted_at, rawSubmission.submittedAt, rawSubmission.submitted_on),
       sourceUpdatedAt: timestamp(rawSubmission.updated_at, rawSubmission.updatedAt, record.updated_at, record.updatedAt),
+      dueAt: timestamp(record.deadline, record.due_at, record.dueAt, record.due_date, record.dueDate, record.due_on, record.dueOn, record.deadline_at, record.deadlineAt, assignment.deadline, assignment.due_at, assignment.dueAt, assignment.due_date, assignment.dueDate, assignment.deadline_at, assignment.deadlineAt),
     }];
   });
 }

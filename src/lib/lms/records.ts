@@ -9,6 +9,8 @@ export function toAssessmentRow(record: MesaAssignmentRecord, userId: string, co
     official_max_mark: 100,
     source_max_mark: record.sourceMaximumMark,
     source_record_id: `mesa-lms:assignment:${record.assignmentId}`,
+    // Only written when Nexus gives a deadline, so a later sync without one keeps the stored date.
+    ...(record.dueAt ? { due_at: record.dueAt } : {}),
   };
 }
 
