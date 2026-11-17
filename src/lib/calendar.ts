@@ -1,4 +1,6 @@
 import { DUE_ZONE, dayOf, kindOf, type DueKind } from "./due";
+import { titleScore } from "./materials/submission-matching";
+import type { MessageEvent } from "./message-dates";
 
 // One calendar of what is due and what is on: Nexus deadlines (assignments, quizzes, exams) and events a member
 // added (hackathons, competitions, interviews). Days are India dates, as on the Due page.
@@ -6,7 +8,7 @@ export type EventKind = "hackathon" | "competition" | "exam" | "interview" | "de
 export const EVENT_KINDS: EventKind[] = ["hackathon", "competition", "exam", "interview", "deadline", "event"];
 export type CalendarEntry = {
   id: string; title: string; at: string; endsAt: string | null; detail: string;
-  source: "nexus" | "member" | "email"; kind: DueKind | EventKind; done: boolean; link: string | null;
+  source: "nexus" | "message" | "member" | "email"; kind: DueKind | EventKind | "session"; done: boolean; link: string | null; allDay?: boolean;
 };
 export type CalendarDay = { day: string; inMonth: boolean; isToday: boolean; entries: CalendarEntry[] };
 
@@ -57,4 +59,11 @@ export function buildMonth(month: string, entries: CalendarEntry[], now: Date = 
 // Nexus assessments with a deadline become calendar entries; work already submitted stays on the calendar, marked done.
 export function deadlineEntries(rows: { id: string; title: string; course: string; dueAt: string | null; submitted: boolean }[]): CalendarEntry[] {
   return rows.filter((row) => row.dueAt).map((row) => ({ id: `nexus:${row.id}`, title: row.title, at: row.dueAt!, endsAt: null, detail: row.course, source: "nexus", kind: kindOf(row.title), done: row.submitted, link: null }));
+}
+
+// Deadlines, exams and sessions named in Nexus notifications and announcements. One that repeats an assignment
+// already on the same day (by its distinctive words) is left out, so nothing appears twice.
+export function messageEntries(events: MessageEvent[], deadlines: CalendarEntry[]): CalendarEntry[] {
+  return events.filter((event) => !deadlines.some((entry) => dayOf(entry.at, DUE_ZONE) === dayOf(event.at, DUE_ZONE) && titleScore(event.title, entry.title) >= 0.5))
+    .map((event) => ({ id: event.id, title: event.title, at: event.at, endsAt: null, detail: event.course.replace(/\s+with\s+.*$/i, ""), source: "message" as const, kind: event.kind === "deadline" ? "deadline" as const : event.kind, done: false, link: null, allDay: event.allDay }));
 }

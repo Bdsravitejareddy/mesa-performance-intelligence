@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dayOf, groupDue, kindOf, type DueItem } from "./due";
+import { dayOf, groupDue, isSubmitted, kindOf, type DueItem } from "./due";
 import { normalizeAssignmentRecords } from "./lms/normalize";
 
 const item = (over: Partial<DueItem>): DueItem => ({ id: "x", title: "Assignment", course: "Course", dueAt: null, submitted: false, kind: "assignment", ...over });
@@ -37,5 +37,12 @@ describe("due dates", () => {
     expect(withDeadline.dueAt).toBe("2026-11-17T06:29:00.000Z");
     const [without] = normalizeAssignmentRecords({ assignments: [{ assignment_id: "a2", title: "Case", course_title: "Course" }] });
     expect(without.dueAt).toBeNull();
+  });
+
+  it("never reads Nexus's not_submitted status as submitted", () => {
+    expect(isSubmitted({ lms_submission_status: "not_submitted" })).toBe(false);
+    expect(isSubmitted({ lms_submission_status: "submitted" })).toBe(true);
+    expect(isSubmitted({ lms_submission_status: "late" })).toBe(true);
+    expect(isSubmitted({ lms_submission_status: "not_submitted", official_mark: 80 })).toBe(true);
   });
 });

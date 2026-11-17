@@ -1,7 +1,7 @@
 // What is due, from Nexus deadlines. Days are read in Mesa's time zone (India), so "today" means the Indian date.
 export const DUE_ZONE = "Asia/Kolkata";
-export type DueKind = "exam" | "quiz" | "assignment";
-export type DueItem = { id: string; title: string; course: string; dueAt: string | null; submitted: boolean; kind: DueKind };
+export type DueKind = "exam" | "quiz" | "assignment" | "session";
+export type DueItem = { id: string; title: string; course: string; dueAt: string | null; submitted: boolean; kind: DueKind; fromMessage?: boolean; allDay?: boolean };
 export type DueGroups = { overdue: DueItem[]; today: DueItem[]; thisWeek: DueItem[]; later: DueItem[]; unscheduled: DueItem[] };
 
 const EXAM = /\b(mid[- ]?term|end[- ]?term|final|exam|examination)\b/i;
@@ -42,6 +42,9 @@ export function groupDue(items: DueItem[], now: Date = new Date(), zone = DUE_ZO
 }
 
 // Submitted when Nexus has a submission time, a status that says so, or a released mark.
+// "not_submitted" contains "submit", so a negative status is checked first: it never counts as submitted.
 export function isSubmitted(row: { submitted_at?: string | null; lms_submission_status?: string | null; official_mark?: number | string | null }): boolean {
-  return Boolean(row.submitted_at) || /submit|graded|complete/i.test(String(row.lms_submission_status ?? "")) || (row.official_mark !== null && row.official_mark !== undefined);
+  const status = String(row.lms_submission_status ?? "");
+  if (/\b(not|un)[\s_-]?submitted\b|missing|pending|draft/i.test(status) && !row.submitted_at && (row.official_mark === null || row.official_mark === undefined)) return false;
+  return Boolean(row.submitted_at) || /submit|graded|complete|late/i.test(status) || (row.official_mark !== null && row.official_mark !== undefined);
 }

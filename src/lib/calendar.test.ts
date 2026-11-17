@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildMonth, deadlineEntries, monthOf, shiftMonth, type CalendarEntry } from "./calendar";
+import { buildMonth, deadlineEntries, messageEntries, monthOf, shiftMonth, type CalendarEntry } from "./calendar";
 
 const now = new Date("2026-11-17T06:00:00Z");
 
@@ -26,5 +26,14 @@ describe("calendar of deadlines and events", () => {
     expect(days.filter((day) => day.entries.some((entry) => entry.id === "e1")).map((day) => day.day)).toEqual(["2026-11-27", "2026-11-28"]);
     expect(days.find((day) => day.isToday)!.day).toBe("2026-11-17");
     expect(days.flatMap((day) => day.entries).some((entry) => entry.title === "Undated")).toBe(false);
+  });
+
+  it("adds announced deadlines and exams, leaving out one that repeats an assignment on the same day", () => {
+    const nexus = deadlineEntries([{ id: "a1", title: "Growth Assignment 1", course: "Growth", dueAt: "2026-11-20T18:29:00Z", submitted: false }]);
+    const entries = messageEntries([
+      { id: "message:1:2026-11-20", title: "Reminder: Growth Assignment 1 due", course: "Growth with Someone", at: "2026-11-20T18:29:00Z", allDay: false, kind: "deadline", sentence: "" },
+      { id: "message:2:2026-11-17", title: "Operations Mid-Term Written Examination", course: "", at: "2026-11-17T06:30:00Z", allDay: true, kind: "exam", sentence: "" },
+    ], nexus);
+    expect(entries.map((entry) => [entry.title, entry.kind, entry.source, entry.allDay])).toEqual([["Operations Mid-Term Written Examination", "exam", "message", true]]);
   });
 });
