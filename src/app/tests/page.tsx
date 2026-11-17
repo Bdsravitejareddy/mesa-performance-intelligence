@@ -70,7 +70,7 @@ export default async function TestsPage() {
           <span><small>{FACTOR_RESEARCH[factor].strengths}</small><Why label="Caveat and sources"><p>{FACTOR_RESEARCH[factor].watch}</p><ul className="cite-list">{FACTOR_RESEARCH[factor].studies.map((key) => <li key={key}><Cite id={key} /></li>)}</ul></Why></span>
         </div>; })}
       </div>
-      {glance.context?.summary && <p className="scope-note"><b>What your context adds:</b> {glance.context.summary}</p>}
+      {glance.context?.summary && <p className="scope-note"><b>What your writing shows:</b> {glance.context.summary}</p>}
       {glance.note && <p className="scope-note"><b>Your own note:</b> {glance.note}</p>}
       <Why label="Why the two readings can differ">{READING_CAVEAT}</Why>
     </section>}
