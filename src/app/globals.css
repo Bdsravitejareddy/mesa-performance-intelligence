@@ -912,3 +912,14 @@ html[data-story-enter="from-below"] .main-content{animation:storyDrop .28s cubic
 .neo-standout span:first-child{font-weight:700;color:var(--ink)}.neo-anomalies{margin:6px 0;padding-left:18px;font-size:12.5px;color:var(--rose)}
 .has-neo .trait-head,.has-neo .trait-row{grid-template-columns:minmax(0,1.2fr) 100px 150px 140px minmax(0,1.8fr)}@media (max-width:720px){.has-neo .trait-row{grid-template-columns:1fr 1fr 1fr}}
 .term-scope-note{margin:6px 0 12px;padding:8px 12px;border-radius:10px;border:1px dashed var(--line);font-size:13px;color:var(--ink-2);background:rgba(255,255,255,.4)}
+/* feedback and charts */
+.feedback-themes h2{margin:0 0 4px}.feedback-themes ol{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:12px}
+.feedback-theme-card{border-left:3px solid var(--rose);padding:4px 0 4px 12px;display:grid;gap:4px}.feedback-theme-card>small{font-size:12.5px;color:var(--muted)}
+.feedback-theme-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px}.feedback-theme-head strong{font-size:15px;color:var(--ink)}
+.feedback-theme-count{flex:none;font:700 12px Arial,'Helvetica Neue',Helvetica,sans-serif;color:var(--ink-2);background:var(--amber-pale);border-radius:10px;padding:2px 8px;font-variant-numeric:tabular-nums}
+.feedback-theme-card blockquote{margin:2px 0 0;font-size:13.5px;line-height:1.5;color:var(--ink-2)}.feedback-theme-card blockquote small{display:block;font-size:11.5px;color:var(--muted)}.feedback-theme-card blockquote.is-ai{font-style:italic}
+.feedback-more summary{cursor:pointer;font-size:12.5px;color:var(--mint);font-weight:700;margin-top:6px}.feedback-more ul{margin-top:6px}.feedback-list li small.feedback-also{color:var(--ink-2);font-style:italic}
+.radar-ring-label{font-size:10px;fill:var(--muted);font-variant-numeric:tabular-nums}
+.radar-values{width:100%;max-width:340px;border-collapse:collapse;font-size:12.5px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.radar-values th,.radar-values td{padding:3px 6px;border-bottom:1px solid var(--line);text-align:right;font-weight:400}.radar-values th[scope=row],.radar-values thead th:first-child{text-align:left;color:var(--ink)}
+.radar-values thead th{font-size:11.5px;color:var(--muted);white-space:nowrap}.radar-values thead th:first-child{font-weight:700}.radar-values i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px}

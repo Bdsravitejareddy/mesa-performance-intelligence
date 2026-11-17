@@ -7,7 +7,7 @@ import { requestJsonFromProvider } from "@/lib/ai/provider";
 import { resolveProviderSettings } from "@/lib/ai/settings";
 import { getDashboardSnapshot, type OverviewBrief } from "@/lib/dashboard-data";
 import { stakesOf } from "@/lib/assessments/stakes";
-import type { TermChoice } from "@/lib/term";
+import { inTerm, type TermChoice } from "@/lib/term";
 
 export const BRIEF_RULES_VERSION = "brief-v7-2026-11-17";
 const SYSTEM = [
@@ -45,7 +45,7 @@ export async function briefInput(client: SupabaseClient, term: TermChoice) {
     notSubmitted: await notSubmitted(client),
     dueThisWeek: await dueSoon(client),
     officialTermResults: (snapshot.official ?? []).map((row) => ({ term: row.term, gpa: row.gpa, grade: row.grade, courseAverage: row.average, courses: row.courses.map((course) => ({ course: course.course.replace(/\s+with\s+.*$/i, ""), percentage: course.percentage, grade: course.grade })) })),
-    ...(await personContext(client)),
+    ...(await personContext(client, term)),
   };
 }
 
@@ -140,7 +140,7 @@ async function dueSoon(client: SupabaseClient): Promise<{ what: string; kind: st
 
 // Who the person is and what changed recently, from stored figures only: personality and context readings, the
 // AI skill view, observed thinking patterns, and records dated in the last 30 days against the 30 before.
-async function personContext(client: SupabaseClient) {
+async function personContext(client: SupabaseClient, term: TermChoice) {
   const day = 86_400_000, now = Date.now();
   const [personality, skills, behaviour, snapshots, profiles, gradings, submissions, tasks, neoRow, officialMarks] = await Promise.all([
     client.from("test_attempts").select("result").eq("kind", "personality").not("submitted_at", "is", null).order("submitted_at", { ascending: false }).limit(1).maybeSingle(),
@@ -152,7 +152,7 @@ async function personContext(client: SupabaseClient) {
     client.from("submissions").select("id, submitted_at, page_capture, assessments(title, counts_toward_grade)"),
     client.from("weekly_tasks").select("week_start, done_at").gte("week_start", new Date(now - 30 * day).toISOString().slice(0, 10)),
     client.from("external_assessments").select("result").eq("kind", "ipip_neo").order("created_at", { ascending: false }).limit(1).maybeSingle(),
-    client.from("submissions").select("official_mark, source_updated_at, created_at").not("official_mark", "is", null),
+    client.from("submissions").select("official_mark, source_updated_at, created_at, assessments(courses(term))").not("official_mark", "is", null),
   ]);
   const factors = (personality.data?.result as { factors?: Record<string, { score: number }> } | null)?.factors ?? null;
   const skillView = Object.entries((skills.data?.domains ?? {}) as Record<string, { score: number | null; confidence: string }>).filter(([, value]) => value.score !== null).sort((a, b) => b[1].score! - a[1].score!);
@@ -176,7 +176,9 @@ async function personContext(client: SupabaseClient) {
   const officialRecent: number[] = []; const officialBefore: number[] = [];
   for (const row of officialMarks.data ?? []) {
     const at = Date.parse(String(row.source_updated_at ?? row.created_at ?? ""));
-    if (!Number.isFinite(at) || row.official_mark === null) continue;
+    // Under a selected term, only that term's courses: a Term 2 overview must not count Term 1 marks.
+    const courseTerm = (row.assessments as unknown as { courses?: { term?: string | null } | null } | null)?.courses?.term;
+    if (!Number.isFinite(at) || row.official_mark === null || !inTerm(term, courseTerm)) continue;
     (now - at <= 30 * day ? officialRecent : now - at <= 60 * day ? officialBefore : []).push(Number(row.official_mark));
   }
   const stateWords: Record<string, string> = { demonstrated_strength: "a demonstrated strength", emerging: "emerging", meets_expectations: "meeting expectations", development_area: "a development area", conflicting: "conflicting", insufficient_evidence: "not enough evidence yet" };

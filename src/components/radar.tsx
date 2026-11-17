@@ -16,8 +16,10 @@ export function Radar({ title, axes, series, max, rings = 5, caption }: { title:
   return <figure className="radar">
     <figcaption><strong>{title}</strong>{drawable.length > 1 && <span className="radar-legend">{drawable.map((item) => { const cue = cueFor(item.label); return <span key={item.label} className={cue ? "cue" : undefined} tabIndex={cue ? 0 : undefined}><i style={{ background: TONES[item.tone] }} />{item.label}{cue && <span className="cue-card" role="tooltip">{cue}</span>}</span>; })}</span>}</figcaption>
     <div className="radar-plot">
-      <svg viewBox={`0 0 ${SIZE} ${SIZE}`} role="img" aria-label={`${title}: ${axes.map((axis, index) => `${axis.replace(/-?\n/g, "")} ${drawable.map((item) => item.values[index] ?? "no evidence").join(" / ")}`).join("; ")}`}>
+      <svg viewBox={`0 0 ${SIZE} ${SIZE}`} role="img" aria-label={`${title}: ${axes.map((axis, index) => `${name(axis)} ${drawable.map((item) => { const value = item.values[index]; return value === null || value === undefined ? "no evidence" : format(value, max); }).join(" / ")}`).join("; ")}`}>
         {Array.from({ length: rings }, (_, index) => <polygon key={index} points={ring((index + 1) / rings)} className="radar-ring" />)}
+        {/* The scale, read up the first spoke, so a level can be read off the chart itself. */}
+        {Array.from({ length: rings }, (_, index) => <text key={index} x={CENTRE + 4} y={CENTRE - RADIUS * ((index + 1) / rings) + 11} className="radar-ring-label">{format(max * ((index + 1) / rings), max)}</text>)}
         {axes.map((_, index) => { const [x, y] = point(index, max); return <line key={index} x1={CENTRE} y1={CENTRE} x2={x} y2={y} className={`radar-spoke${empty[index] ? " is-empty" : ""}`} />; })}
         {drawable.map((item) => {
           const points = item.values.map((value, index) => (value === null || value === undefined ? null : point(index, Math.max(0, Math.min(max, value)))));
@@ -36,7 +38,7 @@ export function Radar({ title, axes, series, max, rings = 5, caption }: { title:
           return <g key={item.label}>
             {complete ? <polygon points={points.map((value) => value!.join(",")).join(" ")} fill={TONES[item.tone]} fillOpacity={0.12} stroke={TONES[item.tone]} strokeWidth={2.4} strokeLinejoin="round" />
               : runs.filter((run) => run.length > 1).map((run, index) => <polyline key={index} points={run.map((value) => value.join(",")).join(" ")} fill="none" stroke={TONES[item.tone]} strokeWidth={2.4} strokeLinejoin="round" strokeLinecap="round" />)}
-            {points.map((value, index) => value && <circle key={index} cx={value[0]} cy={value[1]} r={3.4} fill={TONES[item.tone]} />)}
+            {points.map((value, index) => value && <circle key={index} cx={value[0]} cy={value[1]} r={3.4} fill={TONES[item.tone]}><title>{`${item.label} · ${name(axes[index])}: ${format(item.values[index]!, max)} of ${max}`}</title></circle>)}
           </g>;
         })}
       </svg>
@@ -51,6 +53,15 @@ export function Radar({ title, axes, series, max, rings = 5, caption }: { title:
         </span>;
       })}
     </div>
+    {/* Every value in words, so the chart can be read exactly without hovering or opening anything. */}
+    {drawable.length > 0 && <table className="radar-values">
+      <thead><tr><th scope="col">{title}</th>{drawable.map((item) => <th key={item.label} scope="col"><i style={{ background: TONES[item.tone] }} />{item.label}</th>)}</tr></thead>
+      <tbody>{axes.map((axis, index) => <tr key={axis}><th scope="row">{name(axis)}</th>{drawable.map((item) => { const value = item.values[index]; return <td key={item.label}>{value === null || value === undefined ? "—" : format(value, max)}</td>; })}</tr>)}</tbody>
+    </table>}
     {caption && <small className="radar-caption">{caption}</small>}
   </figure>;
 }
+
+// "Conscientious-\nness" reads as one word; scales of 10 or less keep one decimal (3.4 of 5), larger ones whole numbers.
+const name = (axis: string) => axis.replace(/-\n/g, "").replace(/\n/g, " ");
+export const format = (value: number, max: number) => String(max <= 10 ? Math.round(value * 10) / 10 : Math.round(value));
