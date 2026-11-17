@@ -44,7 +44,7 @@ export function DashboardView({ data, name = "there", glance = null, staleBrief 
           <div className="eyebrow"><span className="eyebrow-line" /> Your summary</div>
           <h1>{headline}</h1>
           {brief?.summary && <p className="summary-text">{brief.summary}</p>}
-          {staleBrief && <p className="stale-note" role="status">This summary was written under earlier rules; a new one is being written now — reload in a minute.</p>}
+          {staleBrief && <p className="stale-note" role="status">This summary predates your latest results or rules; an updated one is being written now — reload in a minute.</p>}
           <p className="summary-line">{average === null ? "No marks yet" : <><b>{average}</b> weighted average</>} · <b>{markedCount}</b> of {data.assessmentCount} assessments marked{data.insights ? <> · <b>{data.insights.competenciesAssessed}</b> of {data.insights.competenciesTotal} competencies evidenced</> : null}</p>
           <div className="hero-actions"><a href="#breakdown" className="button button-light">The breakdown <ArrowDown size={15} /></a>{!data.demoMode && <BriefRefresh term={data.term} hasBrief={Boolean(brief)} />}{!data.demoMode && <RefreshEverything />}{data.syncHealth && data.syncHealth.level !== "ok" && <Link href="/marks" className="sync-chip">LMS sync {data.syncHealth.level === "warning" ? "partial" : "needs attention"} ·  details</Link>}</div>
         </div>

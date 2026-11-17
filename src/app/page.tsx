@@ -11,7 +11,7 @@ import { loadGlance } from "@/lib/profile/glance";
 import { onboardingSteps } from "@/lib/profile/onboarding";
 import { summariseQuizTool, type QuizToolRow } from "@/lib/imports/quiz-tool";
 import { after } from "next/server";
-import { BRIEF_RULES_VERSION, generateOverviewBrief } from "@/lib/insights/overview-brief";
+import { BRIEF_RULES_VERSION, generateOverviewBrief, newestProfileInput } from "@/lib/insights/overview-brief";
 
 export const dynamic = "force-dynamic";
 
@@ -29,10 +29,12 @@ export default async function HomePage() {
   const glance = data.demoMode ? null : await cachedRead("tests:glance", loadGlance).catch(() => null);
   const steps = data.demoMode ? [] : await cachedRead("overview:steps", onboardingSteps).catch(() => []);
   const quizTool = data.demoMode ? null : await cachedRead("overview:quiz-tool", async (client) => summariseQuizTool(((await client.from("quiz_tool_results").select("course, term, session, correct, total, shown, missed")).data ?? []) as QuizToolRow[])).catch(() => null);
-  // A summary written under earlier rules is replaced in the background on this visit.
-  const stale = !data.demoMode && data.brief && data.brief.brief.rulesVersion !== BRIEF_RULES_VERSION;
+  // A summary written under earlier rules, or before a newer personality result, behaviour analysis or skill view,
+  // is replaced in the background on this visit (reused without an AI call if its inputs turn out unchanged).
+  const newerInput = !data.demoMode && data.brief ? await cachedRead("overview:newest-input", newestProfileInput).catch(() => null) : null;
+  const stale = !data.demoMode && data.brief && (data.brief.brief.rulesVersion !== BRIEF_RULES_VERSION || Boolean(newerInput && newerInput > data.brief.createdAt));
   // A page's after() callback cannot read cookies, so the client and user are resolved during render.
-  if (stale) { const client = await createClient(); const { data: claims } = await client.auth.getClaims(); const userId = claims?.claims?.sub; if (typeof userId === "string") after(async () => { try { await generateOverviewBrief(client, userId, data.term); } catch { /* the next refresh writes it */ } }); }
+  if (stale) { const client = await createClient(); const { data: claims } = await client.auth.getClaims(); const userId = claims?.claims?.sub; if (typeof userId === "string") after(async () => { try { await generateOverviewBrief(client, userId, data.term, { notBefore: newerInput }); } catch { /* the next refresh writes it */ } }); }
   return <AppShell demoMode={data.demoMode}><DashboardView data={data} name={await firstName()} glance={glance} staleBrief={Boolean(stale)} steps={steps} quizTool={quizTool} /></AppShell>;
 }
 

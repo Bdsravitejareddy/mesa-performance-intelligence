@@ -55,14 +55,33 @@ function clean(raw: Record<string, unknown>): OverviewBrief | null {
     objectives: (Array.isArray(raw.objectives) ? raw.objectives as Record<string, unknown>[] : []).map((item) => ({ objective: text(item.objective, 120), status: (statuses.has(String(item.status)) ? item.status : "not_yet") as "met" | "on_track" | "not_yet", detail: text(item.detail, 240) })).filter((item) => item.objective).slice(0, 4) };
 }
 
+// When the inputs to "About you" last changed: the questionnaire, an imported personality result, the behaviour
+// analysis and the AI skill view. A summary older than this may not reflect them.
+export async function newestProfileInput(client: SupabaseClient): Promise<string | null> {
+  const latest = (rows: { at: unknown }[] | null) => rows?.[0]?.at as string | undefined;
+  const [tests, external, behaviour, skills] = await Promise.all([
+    client.from("test_attempts").select("at:submitted_at").eq("kind", "personality").not("submitted_at", "is", null).order("submitted_at", { ascending: false }).limit(1),
+    client.from("external_assessments").select("at:created_at").order("created_at", { ascending: false }).limit(1),
+    client.from("behaviour_analyses").select("at:created_at").order("created_at", { ascending: false }).limit(1),
+    client.from("ai_skill_views").select("at:created_at").order("created_at", { ascending: false }).limit(1),
+  ]);
+  const times = [tests.data, external.data, behaviour.data, skills.data].map((rows) => latest(rows as { at: unknown }[] | null)).filter((value): value is string => Boolean(value));
+  return times.length ? times.sort().at(-1)! : null;
+}
+
 // Generates (or reuses) the summary for a term; a new one is written only when the figures change.
-export async function generateOverviewBrief(client: SupabaseClient, userId: string, term: TermChoice): Promise<{ status: "reused" | "created"; brief: OverviewBrief } | null> {
+export async function generateOverviewBrief(client: SupabaseClient, userId: string, term: TermChoice, options: { notBefore?: string | null } = {}): Promise<{ status: "reused" | "created"; brief: OverviewBrief } | null> {
   const input = await briefInput(client, term);
   if (!input.courses.length) return null;
   // The rules version is part of the key: changing the instructions must produce a new summary, not reuse one.
   const inputHash = createHash("sha256").update(JSON.stringify({ input, rules: BRIEF_RULES_VERSION, prompt: SYSTEM })).digest("hex");
-  const { data: existing } = await client.from("overview_briefs").select("brief").eq("term", term).eq("input_hash", inputHash).limit(1).maybeSingle();
-  if (existing) return { status: "reused", brief: existing.brief as OverviewBrief };
+  const { data: existing } = await client.from("overview_briefs").select("brief, created_at, provider_model").eq("term", term).eq("input_hash", inputHash).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (existing) {
+    // Unchanged inputs: the same summary stands. If it predates the newest inputs, a copy is stored (no AI call) so
+    // the page knows it is current and stops offering to rewrite it.
+    if (options.notBefore && String(existing.created_at) < options.notBefore) await client.from("overview_briefs").insert({ user_id: userId, term, input_hash: inputHash, brief: existing.brief, provider_model: String(existing.provider_model ?? "") });
+    return { status: "reused", brief: existing.brief as OverviewBrief };
+  }
   const brief = clean(await requestJsonFromProvider(SYSTEM, JSON.stringify(input), { timeoutMs: 60_000 }));
   if (!brief) return null;
   await client.from("overview_briefs").insert({ user_id: userId, term, input_hash: inputHash, brief: { ...brief, rulesVersion: BRIEF_RULES_VERSION }, provider_model: resolveProviderSettings().model.slice(0, 120) });
