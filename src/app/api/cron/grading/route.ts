@@ -2,8 +2,6 @@ import { after, NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { gradeSubmissions } from "@/lib/grading/run";
 import { continueGrading, handOff, hasLeftover, MAX_PASSES } from "@/lib/grading/chain";
-import { generateOverviewBrief } from "@/lib/insights/overview-brief";
-import type { TermChoice } from "@/lib/term";
 
 export const maxDuration = 300;
 
@@ -17,16 +15,10 @@ async function runPass(pass: number) {
   try {
     const outcomes = await gradeSubmissions(client, 270_000);
     const chained = hasLeftover(outcomes) && continueGrading(pass + 1);
-    let briefs = 0;
-    if (!chained) {
-      const { data: owner } = await client.from("sync_runs").select("user_id").order("started_at", { ascending: false }).limit(1).maybeSingle();
-      for (const term of ["all", "Term 1", "Term 2"] as TermChoice[]) {
-        try { if (owner && await generateOverviewBrief(client, owner.user_id as string, term)) briefs += 1; } catch { /* a term without figures is skipped */ }
-      }
-      // Grading is complete: GitHub, project evaluations and the behaviour readings refresh next.
-      handOff("/api/cron/refresh");
-    }
-    return NextResponse.json({ pass, graded: outcomes.filter((row) => row.status === "graded").length, chained, briefs, outcomes });
+    // Grading is complete: feedback, the behaviour readings, projects, the AI skill view and finally the overview
+    // summaries refresh next, in that order (see the refresh route).
+    if (!chained) handOff("/api/cron/refresh");
+    return NextResponse.json({ pass, graded: outcomes.filter((row) => row.status === "graded").length, chained, outcomes });
   } catch {
     return NextResponse.json({ error: "Grading did not run." }, { status: 500 });
   }

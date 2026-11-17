@@ -33,3 +33,13 @@ export function handOff(path: string) {
   });
   return true;
 }
+
+// The same hand-off, made at once: for a stage that runs inside an after() callback and starts the next stage when
+// its own work is done, so the stages run in order rather than side by side.
+export async function handOffNow(path: string): Promise<boolean> {
+  const secret = process.env.CRON_SECRET;
+  const base = origin();
+  if (!secret || !base) return false;
+  await fetch(`${base}${path}`, { method: "POST", headers: { authorization: `Bearer ${secret}` }, signal: AbortSignal.timeout(8_000) }).catch(() => undefined);
+  return true;
+}

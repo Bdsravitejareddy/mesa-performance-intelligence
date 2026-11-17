@@ -36,8 +36,30 @@ export type DashboardSnapshot = {
   term: TermChoice;
   standings: CourseStanding[];
   brief: { brief: OverviewBrief; createdAt: string; model: string } | null;
+  // Official term results from the Nexus report card, for the terms in view: course percentages, credits, GPA.
+  official?: OfficialTerm[];
   insights: { markedAssessments: number; competenciesAssessed: number; competenciesTotal: number; strengths: number; gaps: number; readiness: { role: string; evidenced: number; total: number; demonstrated?: number; partial?: number; claimed?: number }[]; focus: { title: string; why: string; tag: string }[]; grading: { graded: number; compared: number; close: number; meanGap: number | null } | null } | null;
 };
+
+export type OfficialTerm = { term: string; gpa: number | null; grade: string; average: number | null; courses: { course: string; percentage: number; grade: string; credits: number | null }[] };
+
+// Credit-weighted average of the official course percentages (each course counts by its credits; 1 if unknown).
+export function officialAverage(courses: OfficialTerm["courses"]): number | null {
+  const weight = (course: OfficialTerm["courses"][number]) => (course.credits && course.credits > 0 ? course.credits : 1);
+  const total = courses.reduce((sum, course) => sum + weight(course), 0);
+  return total ? Math.round((courses.reduce((sum, course) => sum + course.percentage * weight(course), 0) / total) * 10) / 10 : null;
+}
+
+async function loadOfficialTerms(supabase: SupabaseClient, term: TermChoice): Promise<OfficialTerm[]> {
+  const { data } = await supabase.from("lms_report_cards").select("term, gpa, overall_grade, courses").order("term");
+  return ((data ?? []) as { term: string; gpa: number | null; overall_grade: string; courses: { course: string; percentage: number | null; grade: string; credits: number | null }[] }[])
+    .filter((row) => term === "all" || row.term === term)
+    .map((row) => {
+      const courses = (row.courses ?? []).filter((course) => course.percentage !== null).map((course) => ({ course: course.course, percentage: Number(course.percentage), grade: course.grade, credits: course.credits === null ? null : Number(course.credits) }));
+      return { term: row.term, gpa: row.gpa === null ? null : Number(row.gpa), grade: row.overall_grade, average: officialAverage(courses), courses };
+    })
+    .filter((row) => row.courses.length > 0);
+}
 
 const demoSnapshot: DashboardSnapshot = {
   demoMode: true,
@@ -136,7 +158,8 @@ export async function getDashboardSnapshot(client?: SupabaseClient, term: TermCh
     term,
     standings: await loadStandings(supabase, courses as { id: string; title: string; term: string | null }[], (assessments as { counts_toward_grade?: boolean }[]).filter((row) => row.counts_toward_grade !== false) as { id: string; course_id: string; official_max_mark: number | null; title: string }[]),
     brief: await latestBrief(supabase, term),
-    insights: await buildInsights(supabase, new Set(submissions.map((row) => row.assessment_id as string)).size),
+    official: await loadOfficialTerms(supabase, term).catch(() => []),
+    insights: await buildInsights(supabase, new Set(submissions.map((row) => row.assessment_id as string)).size, new Set(assessments.map((row) => row.id as string))),
   };
 }
 
@@ -164,7 +187,7 @@ export function weightedAverage(rows: { mark: number; weight: number }[]): numbe
 }
 
 // Competency coverage, Stage 1 readiness and the top roadmap actions, from the same evidence model as the other pages.
-async function buildInsights(supabase: SupabaseClient, markedAssessments: number): Promise<DashboardSnapshot["insights"]> {
+async function buildInsights(supabase: SupabaseClient, markedAssessments: number, inTerm: Set<string>): Promise<DashboardSnapshot["insights"]> {
   try {
     const inputs = await loadCompetencyInputs(supabase);
     const entries = buildCompetencyMap(inputs).flatMap((domain) => domain.competencies.map((entry) => ({ ...entry, domain: domain.name })));
@@ -184,7 +207,7 @@ async function buildInsights(supabase: SupabaseClient, markedAssessments: number
       gaps: entries.filter((entry) => entry.assessment.state === "development_area").length,
       readiness: readiness.map((item) => ({ role: item.role.name, evidenced: item.evidenced, total: item.skillRequirements, demonstrated: item.demonstrated, partial: item.partial, claimed: item.claimed })),
       focus,
-      grading: await gradingSummary(supabase),
+      grading: await gradingSummary(supabase, inTerm),
     };
   } catch {
     return null;
@@ -192,11 +215,12 @@ async function buildInsights(supabase: SupabaseClient, markedAssessments: number
 }
 
 // Latest grading per submission: how often the blind AI lands close to the official mark.
-async function gradingSummary(supabase: SupabaseClient): Promise<{ graded: number; compared: number; close: number; meanGap: number | null } | null> {
-  const { data, error } = await supabase.from("submission_gradings").select("submission_id, ai_score, official_mark, created_at, task_match:ai_report->>taskMatch").order("created_at", { ascending: false });
+// Only assessments in the selected term count, like every other figure on the page.
+async function gradingSummary(supabase: SupabaseClient, inTerm: Set<string>): Promise<{ graded: number; compared: number; close: number; meanGap: number | null } | null> {
+  const { data, error } = await supabase.from("submission_gradings").select("submission_id, assessment_id, ai_score, official_mark, created_at, task_match:ai_report->>taskMatch").order("created_at", { ascending: false });
   if (error) return null;
   const latest = new Map<string, { ai: number | null; official: number | null; taskMatch: unknown }>();
-  for (const row of data ?? []) if (!latest.has(row.submission_id as string)) latest.set(row.submission_id as string, { ai: row.ai_score === null ? null : Number(row.ai_score), official: row.official_mark === null ? null : Number(row.official_mark), taskMatch: (row as { task_match?: unknown }).task_match });
+  for (const row of data ?? []) if (inTerm.has(row.assessment_id as string) && !latest.has(row.submission_id as string)) latest.set(row.submission_id as string, { ai: row.ai_score === null ? null : Number(row.ai_score), official: row.official_mark === null ? null : Number(row.official_mark), taskMatch: (row as { task_match?: unknown }).task_match });
   // Grades the AI judged only a partial match (a draft or the wrong file) are not compared with faculty marks.
   const pairs = [...latest.values()].filter((row) => row.ai !== null && row.official !== null && comparableWithOfficial(row.taskMatch)).map((row) => Math.abs(row.ai! - row.official!));
   return { graded: latest.size, compared: pairs.length, close: pairs.filter((gap) => gap <= 7.5).length, meanGap: pairs.length ? Math.round((pairs.reduce((sum, gap) => sum + gap, 0) / pairs.length) * 10) / 10 : null };

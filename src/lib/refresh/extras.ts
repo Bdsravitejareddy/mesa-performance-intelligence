@@ -6,6 +6,8 @@ import { runContextReading } from "@/lib/tests/context-reading";
 import { isProviderConfigured } from "@/lib/ai/settings";
 import { runAiSkillView } from "@/lib/profile/skills";
 import { rebuildFeedbackItems } from "@/lib/feedback/repository";
+import { generateOverviewBrief } from "@/lib/insights/overview-brief";
+import type { TermChoice } from "@/lib/term";
 
 // The last stage of the daily (or manual) refresh, after the LMS sync and grading: re-read GitHub, evaluate
 // changed projects, then re-run the behaviour analysis and the context reading on everything now known.
@@ -40,4 +42,16 @@ export async function refreshProjects(admin: SupabaseClient) {
   const { data: owner } = await admin.from("sync_runs").select("user_id").order("started_at", { ascending: false }).limit(1).maybeSingle();
   if (!owner || !isProviderConfigured()) return { evaluated: 0, unchanged: 0, skipped: 0 };
   return evaluateProjects(admin, owner.user_id as string, 270_000);
+}
+
+// The overview summaries, written last: they read the grades, the behaviour analysis and the AI skill view, so they
+// come after all of those have been refreshed (reused without an AI call when nothing they use has changed).
+export async function refreshBriefs(admin: SupabaseClient): Promise<number> {
+  const { data: owner } = await admin.from("sync_runs").select("user_id").order("started_at", { ascending: false }).limit(1).maybeSingle();
+  if (!owner || !isProviderConfigured()) return 0;
+  let written = 0;
+  for (const term of ["all", "Term 1", "Term 2"] as TermChoice[]) {
+    try { if (await generateOverviewBrief(admin, owner.user_id as string, term)) written += 1; } catch { /* a term without figures is skipped */ }
+  }
+  return written;
 }

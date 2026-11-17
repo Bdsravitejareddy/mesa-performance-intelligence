@@ -22,6 +22,15 @@ const shortCourse = (name: string) => name.replace(/\s+with\s+.*$/i, "");
 // behind "Why?" so the page leads with what the evidence shows rather than how it was worked out.
 export function DashboardView({ data, name = "there", glance = null, staleBrief = false, steps = [], quizTool = null }: { data: DashboardSnapshot; name?: string; glance?: Glance | null; staleBrief?: boolean; steps?: Step[]; quizTool?: QuizToolSummary | null }) {
   const average = data.averageMark;
+  // The view's finished term, if its official report card is in: the latest one when several terms are in view.
+  const officialTerm = (data.official ?? []).at(-1) ?? null;
+  const officialSorted = officialTerm ? [...officialTerm.courses].sort((a, b) => b.percentage - a.percentage) : [];
+  const officialBest = officialSorted[0];
+  const officialWeakest = officialSorted.at(-1);
+  // With "all" in view, courses beyond the report card (a term still running) are named rather than mixed in.
+  const officialNames = new Set(officialSorted.map((course) => course.course.toLowerCase().replace(/\s+/g, "")));
+  const running = data.coursePerformance.filter((row) => row.weighted !== null && !officialNames.has(row.course.toLowerCase().replace(/\s+/g, "")));
+  const inProgress = data.term === "all" && running.length ? `Courses still running are not included: ${running.map((row) => `${shortCourse(row.course)} ${row.weighted} from ${row.marked} released mark${row.marked === 1 ? "" : "s"}`).join("; ")}.` : "";
   const marked = data.coursePerformance.filter((row) => row.weighted !== null).sort((a, b) => b.weighted! - a.weighted!);
   const best = marked[0];
   const weakest = marked.length > 1 ? marked[marked.length - 1] : undefined;
@@ -71,18 +80,32 @@ export function DashboardView({ data, name = "there", glance = null, staleBrief 
       {glance && <ProfileGlance glance={glance} />}
 
       <section className="highlight-grid" aria-label="Highlights">
+        {officialTerm ? <>
+          {/* A finished term reads from its official report card: course results, not the handful of assessment marks synced. */}
+          <Highlight label="Official course average" tone="mint" ring={officialTerm.average === null ? null : officialTerm.average / 100} value={officialTerm.average === null ? "—" : `${officialTerm.average}`} unit={officialTerm.average === null ? "" : "/100"}
+            insight={`${officialTerm.term} report card: GPA ${officialTerm.gpa ?? "—"}${officialTerm.grade ? ` (${officialTerm.grade})` : ""} across ${officialTerm.courses.length} courses.`}>
+            Your official course percentages from the {officialTerm.term} report card, each course counted by its credits.{inProgress ? ` ${inProgress}` : ""} Open Marks &amp; LMS sync to see every course&apos;s components.
+          </Highlight>
+          <Highlight label="Best course" tone="blue" ring={officialBest!.percentage / 100} value={`${officialBest!.percentage}`} unit="/100" insight={`${shortCourse(officialBest!.course)} · ${officialBest!.grade}`}>
+            Your highest official course result in {officialTerm.term}{officialBest!.credits ? `, a ${officialBest!.credits}-credit course` : ""}.
+          </Highlight>
+          <Highlight label="Course to watch" tone="amber" ring={officialWeakest!.percentage / 100} value={`${officialWeakest!.percentage}`} unit="/100" insight={`${shortCourse(officialWeakest!.course)} · ${officialWeakest!.grade}`}>
+            Your lowest official course result in {officialTerm.term}. Marks &amp; LMS sync shows which of its components cost the most points. One low course is a signal to look at, not a verdict on ability.
+          </Highlight>
+        </> : <>
         <Highlight label="Your average mark" tone="mint" ring={average === null ? null : average / 100} value={average === null ? "—" : `${average}`} unit={average === null ? "" : "/100"}
-          insight={average === null ? "Appears with your first released mark." : average >= 85 ? "Excellent across what has been marked." : average >= 65 ? "Solid, with room to push above 80." : "Below where you want it — see what needs attention."}>
-          Official marks only. Each is weighted by its maximum marks and by how much the work counted (term exams more than practice, set on Rubric &amp; weights).{data.unweightedAverage !== null && data.unweightedAverage !== average ? ` A simple average would be ${data.unweightedAverage}.` : ""} Based on {data.markCount} released mark{data.markCount === 1 ? "" : "s"}.
+          insight={average === null ? "Appears with your first released mark." : `${average >= 85 ? "Excellent" : average >= 65 ? "Solid" : "Below where you want it"} — from ${data.markCount} released mark${data.markCount === 1 ? "" : "s"} so far.`}>
+          Official marks only. Each is weighted by its maximum marks and by how much the work counted (term exams more than practice, set on Rubric &amp; weights).{data.unweightedAverage !== null && data.unweightedAverage !== average ? ` A simple average would be ${data.unweightedAverage}.` : ""} {data.markCount} of {data.assessmentCount} assessments in view have a released mark; the rest are not marked yet, which is not a weakness.
         </Highlight>
         <Highlight label="Best course" tone="blue" ring={best ? best.weighted! / 100 : null} value={best ? `${best.weighted}` : "—"} unit={best ? "/100" : ""}
-          insight={best ? shortCourse(best.course) : "Appears once a course has a mark."}>
+          insight={best ? `${shortCourse(best.course)}${marked.length === 1 ? " — the only course with a mark so far" : ""}` : "Appears once a course has a mark."}>
           {best ? `${best.marked} of ${best.total} assessments in this course have released marks, totalling ${best.maxMarks} marks. ${best.marked < best.total ? "More marks will confirm or adjust this." : ""}` : "No course has a released mark yet."}
         </Highlight>
         <Highlight label="Course to watch" tone="amber" ring={attention ? attention.weighted! / 100 : null} value={attention ? `${attention.weighted}` : "—"} unit={attention ? "/100" : ""}
-          insight={attention ? shortCourse(attention.course) : marked.length > 1 ? "No course stands out as weak." : "Needs at least two marked courses."}>
+          insight={attention ? shortCourse(attention.course) : marked.length > 1 ? "No course stands out as weak." : marked.length === 1 ? "Only one course has a mark so far; this compares courses once two do." : "Appears once courses have marks."}>
           {attention ? `This is your lowest-marked course (${attention.marked} of ${attention.total} assessments marked). One low result is a signal to look at, not a verdict on ability — the roadmap suggests a quick check.` : "A course is flagged when it sits below 65 or at least 10 points under your strongest."}
         </Highlight>
+        </>}
         <Highlight label="AI agrees with faculty" tone="violet" ring={grading?.compared ? grading.close / grading.compared : null} value={grading?.compared ? `${grading.close}` : grading?.graded ? `${grading.graded}` : "—"} unit={grading?.compared ? `of ${grading.compared}` : grading?.graded ? "graded" : ""}
           insight={grading?.compared ? `AI grades land within 7.5 points of your faculty${grading.meanGap !== null ? ` (typical gap ${grading.meanGap})` : ""}.` : grading?.graded ? "Graded; waiting for official marks to compare." : "Not graded yet."} href="/grading">
           Each submission is graded twice against your course material: by a completeness check (coverage of the rubric and course concepts) and by an AI that never sees the official mark. The three are shown side by side and never averaged.

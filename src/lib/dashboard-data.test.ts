@@ -85,3 +85,12 @@ describe("weighted average", () => {
     expect(weightedAverage([])).toBeNull();
   });
 });
+
+describe("official course average", () => {
+  it("weights each course by its credits, counting a course without credits once", async () => {
+    const { officialAverage } = await import("./dashboard-data");
+    expect(officialAverage([{ course: "A", percentage: 80, grade: "A", credits: 4 }, { course: "B", percentage: 60, grade: "B", credits: 2 }])).toBe(73.3);
+    expect(officialAverage([{ course: "A", percentage: 80, grade: "A", credits: null }, { course: "B", percentage: 60, grade: "B", credits: 1 }])).toBe(70);
+    expect(officialAverage([])).toBeNull();
+  });
+});
