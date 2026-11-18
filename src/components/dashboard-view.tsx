@@ -15,6 +15,7 @@ import { BriefRefresh } from "@/components/brief-refresh";
 import { RefreshEverything } from "@/components/refresh-everything";
 import { WeeklyQuest } from "@/components/weekly-quest";
 import type { CourseStanding } from "@/lib/insights/course-standing";
+import { MIN_PAIRS } from "@/lib/grading/calibration";
 
 const shortCourse = (name: string) => name.replace(/\s+with\s+.*$/i, "");
 
@@ -107,7 +108,7 @@ export function DashboardView({ data, name = "there", glance = null, staleBrief 
         </Highlight>
         </>}
         <Highlight label="AI agrees with faculty" tone="violet" ring={grading?.compared ? grading.close / grading.compared : null} value={grading?.compared ? `${grading.close}` : grading?.graded ? `${grading.graded}` : "—"} unit={grading?.compared ? `of ${grading.compared}` : grading?.graded ? "graded" : ""}
-          insight={grading?.compared ? `AI grades land within 7.5 points of your faculty${grading.meanGap !== null ? ` (typical gap ${grading.meanGap})` : ""}.` : grading?.graded ? "Graded; waiting for official marks to compare." : "Not graded yet."} href="/grading">
+          insight={grading?.compared ? `${grading.compared < MIN_PAIRS ? `Provisional · ${grading.compared} faculty comparison${grading.compared === 1 ? "" : "s"} so far (${MIN_PAIRS} needed). ` : ""}AI grades land within 7.5 points of your faculty${grading.meanGap !== null ? ` (typical gap ${grading.meanGap})` : ""}.` : grading?.graded ? "Graded; waiting for official marks to compare." : "Not graded yet."} href="/grading">
           Each submission is graded twice against your course material: by a completeness check (coverage of the rubric and course concepts) and by an AI that never sees the official mark. The three are shown side by side and never averaged.
         </Highlight>
       </section>
